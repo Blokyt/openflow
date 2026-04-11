@@ -15,12 +15,25 @@ export interface Category {
   children?: Category[];
 }
 
-export interface AppConfig {
-  entity_name: string;
+export interface EntityConfig {
+  name: string;
+  type: string;
   currency: string;
-  reference_date?: string;
-  reference_amount?: number;
-  modules: ModuleManifest[];
+  logo?: string;
+  address?: string;
+  siret?: string;
+  rna?: string;
+}
+
+export interface BalanceConfig {
+  date?: string;
+  amount?: number;
+}
+
+export interface AppConfig {
+  entity: EntityConfig;
+  balance: BalanceConfig;
+  modules: Record<string, boolean>;
 }
 
 export interface DashboardSummary {

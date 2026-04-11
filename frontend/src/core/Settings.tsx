@@ -4,24 +4,49 @@ import { AppConfig, ModuleManifest } from "../types";
 
 const CORE_MODULE_IDS = ["transactions", "categories", "dashboard"];
 
+interface DisplayModule {
+  id: string;
+  name: string;
+  description?: string;
+  active: boolean;
+  core: boolean;
+  icon?: string;
+  route?: string;
+}
+
 export default function Settings() {
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [modules, setModules] = useState<ModuleManifest[]>([]);
+  const [modules, setModules] = useState<DisplayModule[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api.getConfig(), api.getAllModules()])
-      .then(([cfg, mods]) => {
+      .then(([cfg, discoveredMods]: [AppConfig, ModuleManifest[]]) => {
         setConfig(cfg);
-        setModules(mods);
+        // Build full module list from config.modules (all known IDs)
+        // merging with manifest data where available
+        const manifestMap = new Map(discoveredMods.map((m: ModuleManifest) => [m.id, m]));
+        const allModules: DisplayModule[] = Object.entries(cfg.modules).map(([id, active]) => {
+          const manifest = manifestMap.get(id);
+          return {
+            id,
+            name: manifest?.name ?? id,
+            description: manifest?.description,
+            active: active as boolean,
+            core: manifest?.core ?? CORE_MODULE_IDS.includes(id),
+            icon: manifest?.icon,
+            route: manifest?.route,
+          };
+        });
+        setModules(allModules);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleToggle(mod: ModuleManifest) {
+  async function handleToggle(mod: DisplayModule) {
     if (CORE_MODULE_IDS.includes(mod.id)) return;
     setToggling(mod.id);
     try {
@@ -60,24 +85,24 @@ export default function Settings() {
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Nom</span>
-              <span className="font-medium text-gray-900">{config.entity_name}</span>
+              <span className="font-medium text-gray-900">{config.entity.name}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Devise</span>
-              <span className="font-medium text-gray-900">{config.currency}</span>
+              <span className="font-medium text-gray-900">{config.entity.currency}</span>
             </div>
-            {config.reference_date && (
+            {config.balance.date && (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Date de référence</span>
-                <span className="font-medium text-gray-900">{config.reference_date}</span>
+                <span className="font-medium text-gray-900">{config.balance.date}</span>
               </div>
             )}
-            {config.reference_amount !== undefined && (
+            {config.balance.amount !== undefined && (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Solde de référence</span>
                 <span className="font-medium text-gray-900">
-                  {new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(
-                    config.reference_amount
+                  {new Intl.NumberFormat("fr-FR", { style: "currency", currency: config.entity.currency || "EUR" }).format(
+                    config.balance.amount
                   )}
                 </span>
               </div>
