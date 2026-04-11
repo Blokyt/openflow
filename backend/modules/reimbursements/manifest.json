@@ -1,0 +1,13 @@
+{
+  "id": "reimbursements",
+  "name": "Remboursements",
+  "description": "Suivi des avances et remboursements",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Remboursements", "icon": "rotate-ccw", "position": 3},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "settings_schema": {}
+}

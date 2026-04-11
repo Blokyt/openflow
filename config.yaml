@@ -16,11 +16,11 @@ modules:
   categories: true
   dashboard: true
   invoices: false
-  reimbursements: false
-  budget: false
+  reimbursements: true
+  budget: true
   divisions: true
   tiers: true
-  attachments: false
+  attachments: true
   annotations: true
   export: false
   bank_reconciliation: false
