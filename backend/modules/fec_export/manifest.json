@@ -1,0 +1,14 @@
+{
+  "id": "fec_export",
+  "name": "Export FEC",
+  "description": "Génère le Fichier des Ecritures Comptables (FEC) au format officiel",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Export FEC", "icon": "file-spreadsheet", "position": 88},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}

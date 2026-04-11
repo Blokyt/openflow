@@ -1,0 +1,14 @@
+{
+  "id": "multi_users",
+  "name": "Multi-utilisateurs",
+  "description": "Gestion des utilisateurs et des rôles d'accès",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["audit"],
+  "menu": {"label": "Utilisateurs", "icon": "users-round", "position": 89},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}
