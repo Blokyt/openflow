@@ -1,0 +1,13 @@
+{
+  "id": "grants",
+  "name": "Suivi de subventions",
+  "description": "Suivi des subventions accordees et recues",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["transactions", "tiers"],
+  "menu": {"label": "Subventions", "icon": "hand-coins", "position": 87},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "settings_schema": {}
+}

@@ -29,7 +29,7 @@ modules:
   audit: true
   forecasting: true
   alerts: true
-  tax_receipts: false
-  grants: false
-  fec_export: false
-  multi_users: false
+  tax_receipts: true
+  grants: true
+  fec_export: true
+  multi_users: true
