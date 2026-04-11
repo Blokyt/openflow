@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "name", "description", "version", "origin", "category", "dependencies", "api_routes", "db_models"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z_]+$" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "origin": { "type": "string", "enum": ["builtin", "custom"] },
+    "category": { "type": "string", "enum": ["core", "standard", "advanced", "custom"] },
+    "dependencies": { "type": "array", "items": { "type": "string" } },
+    "menu": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "position": { "type": "integer" }
+      },
+      "required": ["label", "icon", "position"]
+    },
+    "api_routes": { "type": "array", "items": { "type": "string" } },
+    "db_models": { "type": "array", "items": { "type": "string" } },
+    "dashboard_widgets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "component", "default_visible", "size"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "component": { "type": "string" },
+          "default_visible": { "type": "boolean" },
+          "size": { "type": "string", "enum": ["quarter", "half", "full"] }
+        }
+      }
+    },
+    "settings_schema": { "type": "object" }
+  },
+  "additionalProperties": false
+}
