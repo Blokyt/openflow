@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Settings } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Repeat, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { to: "/categories", label: "Catégories", icon: Tags },
   { to: "/budget", label: "Budget", icon: PiggyBank },
+  { to: "/recurring", label: "Récurrences", icon: Repeat },
 ];
 
 export default function Sidebar() {
