@@ -1,0 +1,87 @@
+"""OpenFlow FastAPI application."""
+import importlib
+from dataclasses import asdict
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from backend.core.config import load_config, save_config
+from backend.core.module_loader import discover_modules, filter_active
+
+
+def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db") -> FastAPI:
+    app = FastAPI(title="OpenFlow", version="0.1.0")
+
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+    project_root = Path(__file__).parent.parent
+    config_file = project_root / config_path
+    config = load_config(str(config_file))
+
+    modules_dir = project_root / "backend" / "modules"
+    all_modules = discover_modules(str(modules_dir))
+    active_modules = filter_active(all_modules, config.modules)
+
+    for manifest in active_modules:
+        module_id = manifest["id"]
+        for route_file in manifest.get("api_routes", []):
+            route_path = modules_dir / module_id / route_file
+            if route_path.exists():
+                module_name = f"backend.modules.{module_id}.{route_file.replace('.py', '')}"
+                try:
+                    mod = importlib.import_module(module_name)
+                    if hasattr(mod, "router"):
+                        app.include_router(mod.router, prefix=f"/api/{module_id}", tags=[manifest["name"]])
+                except Exception as e:
+                    print(f"Warning: failed to load routes for {module_id}: {e}")
+
+    @app.get("/api/modules")
+    def get_modules():
+        return active_modules
+
+    @app.get("/api/modules/all")
+    def get_all_modules():
+        return all_modules
+
+    @app.get("/api/config")
+    def get_config():
+        return asdict(config)
+
+    @app.put("/api/config/entity")
+    def update_entity(entity: dict):
+        for key, value in entity.items():
+            if hasattr(config.entity, key):
+                setattr(config.entity, key, value)
+        save_config(config, str(config_file))
+        return asdict(config.entity)
+
+    @app.put("/api/config/modules/{module_id}")
+    def toggle_module(module_id: str, active: bool):
+        if module_id not in config.modules:
+            raise HTTPException(404, f"Module '{module_id}' not found")
+        if active:
+            module_manifest = next((m for m in all_modules if m["id"] == module_id), None)
+            if module_manifest:
+                for dep in module_manifest.get("dependencies", []):
+                    if not config.modules.get(dep, False):
+                        raise HTTPException(400, f"Cannot activate '{module_id}': dependency '{dep}' is not active")
+        config.modules[module_id] = active
+        save_config(config, str(config_file))
+        return {"module_id": module_id, "active": active}
+
+    @app.put("/api/config/balance")
+    def update_balance(balance: dict):
+        if "date" in balance:
+            config.balance.date = balance["date"]
+        if "amount" in balance:
+            config.balance.amount = balance["amount"]
+        save_config(config, str(config_file))
+        return asdict(config.balance)
+
+    build_dir = project_root / "frontend" / "dist"
+    if build_dir.exists():
+        app.mount("/", StaticFiles(directory=str(build_dir), html=True), name="frontend")
+
+    return app
