@@ -33,6 +33,19 @@ export const api = {
   getBudget: (id: number) => request<any>(`/budget/${id}`),
   updateBudget: (id: number, b: any) => request<any>(`/budget/${id}`, { method: "PUT", body: JSON.stringify(b) }),
   deleteBudget: (id: number) => request<any>(`/budget/${id}`, { method: "DELETE" }),
+  getBankStatements: (status?: string) => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request<any[]>(`/bank_reconciliation/${query}`);
+  },
+  importBankStatements: (entries: { date: string; label: string; amount: number }[]) =>
+    request<any[]>("/bank_reconciliation/import", { method: "POST", body: JSON.stringify({ entries }) }),
+  getBankSuggestions: (id: number) => request<any[]>(`/bank_reconciliation/suggestions/${id}`),
+  matchBankStatement: (statement_id: number, transaction_id: number) =>
+    request<any>("/bank_reconciliation/match", { method: "POST", body: JSON.stringify({ statement_id, transaction_id }) }),
+  unmatchBankStatement: (id: number) =>
+    request<any>(`/bank_reconciliation/unmatch/${id}`, { method: "POST" }),
+  deleteBankStatement: (id: number) =>
+    request<any>(`/bank_reconciliation/${id}`, { method: "DELETE" }),
   getSummary: () => request<any>("/dashboard/summary"),
   getWidgets: () => request<any[]>("/dashboard/widgets"),
   getLayout: () => request<any[]>("/dashboard/layout"),

@@ -27,7 +27,7 @@ modules:
   recurring: true
   multi_accounts: true
   audit: true
-  forecasting: false
+  forecasting: true
   alerts: true
   tax_receipts: false
   grants: false

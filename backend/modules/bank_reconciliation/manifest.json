@@ -1,0 +1,13 @@
+{
+  "id": "bank_reconciliation",
+  "name": "Rapprochement bancaire",
+  "description": "Importer et rapprocher les releves bancaires",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Rapprochement", "icon": "git-compare", "position": 85},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "settings_schema": {}
+}

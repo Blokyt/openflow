@@ -1,0 +1,14 @@
+{
+  "id": "forecasting",
+  "name": "Previsions de tresorerie",
+  "description": "Projection du cash-flow futur",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Previsions", "icon": "trending-up", "position": 84},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}

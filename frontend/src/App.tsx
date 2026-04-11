@@ -6,6 +6,8 @@ import TransactionList from "./modules/transactions/TransactionList";
 import CategoryManager from "./modules/categories/CategoryManager";
 import BudgetManager from "./modules/budget/BudgetManager";
 import RecurringManager from "./modules/recurring/RecurringManager";
+import ForecastingView from "./modules/forecasting/ForecastingView";
+import BankReconciliation from "./modules/bank_reconciliation/BankReconciliation";
 
 export default function App() {
   return (
@@ -20,6 +22,8 @@ export default function App() {
             <Route path="/categories" element={<CategoryManager />} />
             <Route path="/budget" element={<BudgetManager />} />
             <Route path="/recurring" element={<RecurringManager />} />
+            <Route path="/forecasting" element={<ForecastingView />} />
+            <Route path="/bank-reconciliation" element={<BankReconciliation />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
