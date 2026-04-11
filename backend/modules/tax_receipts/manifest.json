@@ -1,0 +1,13 @@
+{
+  "id": "tax_receipts",
+  "name": "Recus fiscaux",
+  "description": "Generation et suivi des recus fiscaux",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["tiers"],
+  "menu": {"label": "Recus fiscaux", "icon": "receipt", "position": 86},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "settings_schema": {}
+}

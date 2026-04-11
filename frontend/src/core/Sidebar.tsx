@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Repeat, TrendingUp, GitCompare, Settings } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Repeat, TrendingUp, GitCompare, Receipt, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -9,6 +9,7 @@ const navItems = [
   { to: "/recurring", label: "Récurrences", icon: Repeat },
   { to: "/forecasting", label: "Prévisions", icon: TrendingUp },
   { to: "/bank-reconciliation", label: "Rapprochement", icon: GitCompare },
+  { to: "/tax-receipts", label: "Recus fiscaux", icon: Receipt },
 ];
 
 export default function Sidebar() {
