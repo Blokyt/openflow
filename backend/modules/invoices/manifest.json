@@ -1,0 +1,14 @@
+{
+  "id": "invoices",
+  "name": "Factures & Devis",
+  "description": "Emission et suivi de factures et devis",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "tiers"],
+  "menu": {"label": "Factures", "icon": "file-text", "position": 7},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [{"id": "unpaid_invoices", "name": "Factures impayees", "component": "widgets/UnpaidInvoices.tsx", "default_visible": false, "size": "half"}],
+  "settings_schema": {}
+}
