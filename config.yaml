@@ -23,12 +23,12 @@ modules:
   attachments: true
   annotations: true
   export: true
-  bank_reconciliation: false
+  bank_reconciliation: true
   recurring: true
   multi_accounts: true
   audit: true
   forecasting: false
-  alerts: false
+  alerts: true
   tax_receipts: false
   grants: false
   fec_export: false

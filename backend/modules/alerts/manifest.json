@@ -1,0 +1,13 @@
+{
+  "id": "alerts",
+  "name": "Alertes",
+  "description": "Notifications de seuils et echeances",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Alertes", "icon": "bell", "position": 83},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "settings_schema": {}
+}
