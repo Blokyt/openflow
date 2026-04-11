@@ -1,0 +1,14 @@
+{
+  "id": "categories",
+  "name": "Categories",
+  "description": "Gestion des categories de transactions",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "core",
+  "dependencies": [],
+  "menu": {"label": "Categories", "icon": "tags", "position": 2},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [{"id": "category_breakdown", "name": "Repartition par categorie", "component": "widgets/CategoryBreakdown.tsx", "default_visible": true, "size": "half"}],
+  "settings_schema": {}
+}
