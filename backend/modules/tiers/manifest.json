@@ -1,0 +1,14 @@
+{
+  "id": "tiers",
+  "name": "Contacts & Tiers",
+  "description": "Gestion des clients, fournisseurs et membres",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Contacts", "icon": "users", "position": 5},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [{"id": "top_contacts", "name": "Principaux contacts", "component": "widgets/TopContacts.tsx", "default_visible": false, "size": "half"}],
+  "settings_schema": {}
+}

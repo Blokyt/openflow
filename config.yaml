@@ -18,10 +18,10 @@ modules:
   invoices: false
   reimbursements: false
   budget: false
-  divisions: false
-  tiers: false
+  divisions: true
+  tiers: true
   attachments: false
-  annotations: false
+  annotations: true
   export: false
   bank_reconciliation: false
   recurring: false
