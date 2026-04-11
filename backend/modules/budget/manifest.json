@@ -1,0 +1,14 @@
+{
+  "id": "budget",
+  "name": "Budget Previsionnel",
+  "description": "Enveloppes budgetaires par categorie",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "categories"],
+  "menu": {"label": "Budget", "icon": "piggy-bank", "position": 6},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [{"id": "budget_progress", "name": "Suivi budgetaire", "component": "widgets/BudgetProgress.tsx", "default_visible": false, "size": "half"}],
+  "settings_schema": {}
+}

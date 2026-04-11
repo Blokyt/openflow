@@ -24,6 +24,15 @@ export const api = {
   createCategory: (cat: any) => request<any>("/categories/", { method: "POST", body: JSON.stringify(cat) }),
   updateCategory: (id: number, cat: any) => request<any>(`/categories/${id}`, { method: "PUT", body: JSON.stringify(cat) }),
   deleteCategory: (id: number) => request<any>(`/categories/${id}`, { method: "DELETE" }),
+  getBudgets: (period?: string) => {
+    const query = period ? `?period=${encodeURIComponent(period)}` : "";
+    return request<any[]>(`/budget/${query}`);
+  },
+  createBudget: (b: any) => request<any>("/budget/", { method: "POST", body: JSON.stringify(b) }),
+  getBudgetStatus: () => request<any[]>("/budget/status"),
+  getBudget: (id: number) => request<any>(`/budget/${id}`),
+  updateBudget: (id: number, b: any) => request<any>(`/budget/${id}`, { method: "PUT", body: JSON.stringify(b) }),
+  deleteBudget: (id: number) => request<any>(`/budget/${id}`, { method: "DELETE" }),
   getSummary: () => request<any>("/dashboard/summary"),
   getWidgets: () => request<any[]>("/dashboard/widgets"),
   getLayout: () => request<any[]>("/dashboard/layout"),

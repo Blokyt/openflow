@@ -4,6 +4,7 @@ import Dashboard from "./core/Dashboard";
 import Settings from "./core/Settings";
 import TransactionList from "./modules/transactions/TransactionList";
 import CategoryManager from "./modules/categories/CategoryManager";
+import BudgetManager from "./modules/budget/BudgetManager";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/transactions" element={<TransactionList />} />
             <Route path="/categories" element={<CategoryManager />} />
+            <Route path="/budget" element={<BudgetManager />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
