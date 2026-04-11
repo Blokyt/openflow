@@ -24,9 +24,9 @@ modules:
   annotations: true
   export: true
   bank_reconciliation: false
-  recurring: false
-  multi_accounts: false
-  audit: false
+  recurring: true
+  multi_accounts: true
+  audit: true
   forecasting: false
   alerts: false
   tax_receipts: false

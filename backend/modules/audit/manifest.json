@@ -1,0 +1,13 @@
+{
+  "id": "audit",
+  "name": "Piste d'audit",
+  "description": "Journal immuable de toutes les modifications",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": [],
+  "menu": {"label": "Audit", "icon": "shield-check", "position": 80},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "settings_schema": {}
+}
