@@ -1,0 +1,14 @@
+{
+  "id": "annotations",
+  "name": "Annotations",
+  "description": "Notes et commentaires sur les transactions",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Annotations", "icon": "message-square", "position": 90},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}
