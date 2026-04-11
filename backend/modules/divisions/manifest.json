@@ -1,0 +1,14 @@
+{
+  "id": "divisions",
+  "name": "Poles & Divisions",
+  "description": "Decouper l'entite en sous-groupes",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Divisions", "icon": "building-2", "position": 4},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [{"id": "division_summary", "name": "Bilan par division", "component": "widgets/DivisionSummary.tsx", "default_visible": false, "size": "half"}],
+  "settings_schema": {}
+}
