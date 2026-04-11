@@ -59,7 +59,6 @@ const FREQUENCIES = [
   { value: "yearly", label: "Annuelle" },
 ];
 
-// O(1) lookup map built once at module level (js-index-maps)
 const FREQUENCY_LABEL_MAP = new Map(FREQUENCIES.map((f) => [f.value, f.label]));
 
 function frequencyLabel(freq: string): string {
@@ -116,45 +115,48 @@ function FormPanel({
     }
   }
 
+  const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
+  const labelClass = "block text-xs font-medium text-[#B0B0B0] mb-1.5";
+
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
-        <label className="block text-xs font-medium text-gray-700 mb-1">Libellé *</label>
+        <label className={labelClass}>Libellé *</label>
         <input
           type="text"
           value={form.label}
           onChange={(e) => set("label", e.target.value)}
           required
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         />
       </div>
       <div className="sm:col-span-2">
-        <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+        <label className={labelClass}>Description</label>
         <input
           type="text"
           value={form.description}
           onChange={(e) => set("description", e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Montant *</label>
+        <label className={labelClass}>Montant *</label>
         <input
           type="number"
           step="0.01"
           value={form.amount}
           onChange={(e) => set("amount", e.target.value)}
           required
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Fréquence *</label>
+        <label className={labelClass}>Fréquence *</label>
         <select
           value={form.frequency}
           onChange={(e) => set("frequency", e.target.value)}
           required
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         >
           {FREQUENCIES.map((f) => (
             <option key={f.value} value={f.value}>{f.label}</option>
@@ -162,47 +164,47 @@ function FormPanel({
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Date de début *</label>
+        <label className={labelClass}>Date de début *</label>
         <input
           type="date"
           value={form.start_date}
           onChange={(e) => set("start_date", e.target.value)}
           required
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Date de fin</label>
+        <label className={labelClass}>Date de fin</label>
         <input
           type="date"
           value={form.end_date}
           onChange={(e) => set("end_date", e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Statut</label>
+        <label className={labelClass}>Statut</label>
         <select
           value={form.active}
           onChange={(e) => set("active", e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={inputClass}
         >
           <option value="1">Actif</option>
           <option value="0">Inactif</option>
         </select>
       </div>
-      <div className="sm:col-span-2 flex justify-end gap-3 pt-1">
+      <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
         >
           Annuler
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+          className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-60 transition-colors"
         >
           {saving ? "Enregistrement..." : initial ? "Enregistrer" : "Créer"}
         </button>
@@ -286,45 +288,47 @@ export default function RecurringManager() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Récurrences</h1>
-          <p className="text-sm text-gray-500 mt-1">Automatiser les transactions répétitives</p>
+          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
+            Récurrences
+          </h1>
+          <p className="text-sm text-[#666] mt-1">Automatiser les transactions répétitives</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-60"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-60 transition-colors"
           >
-            {generating ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-            Générer les transactions
+            {generating ? <RefreshCw size={15} className="animate-spin" /> : <Play size={15} strokeWidth={1.5} />}
+            Générer
           </button>
           <button
             onClick={() => { setShowForm(true); setEditingRec(null); }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
           >
-            <Plus size={16} /> Nouvelle récurrence
+            <Plus size={15} /> Nouvelle récurrence
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)}><X size={16} /></button>
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={16} /></button>
         </div>
       )}
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#0a1a0a] border border-[#00C853]/30 text-[#00C853] rounded-2xl p-4 text-sm flex items-center justify-between">
           {success}
-          <button onClick={() => setSuccess(null)}><X size={16} /></button>
+          <button onClick={() => setSuccess(null)} className="text-[#00C853]/70 hover:text-[#00C853]"><X size={16} /></button>
         </div>
       )}
 
       {(showForm || editingRec) && (
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">
+        <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
+          <h2 className="text-base font-semibold text-white mb-5">
             {editingRec ? "Modifier la récurrence" : "Nouvelle récurrence"}
           </h2>
           <FormPanel
@@ -335,89 +339,89 @@ export default function RecurringManager() {
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
           </div>
         ) : recurrings.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">
+          <div className="text-center py-12 text-[#666] text-sm">
             Aucune récurrence définie. Créez votre première récurrence.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Libellé</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Fréquence</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Début</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Fin</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Dernière génération</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Montant</th>
-                <th className="px-4 py-3 text-center font-medium text-gray-600">Statut</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+            <thead>
+              <tr className="border-b border-[#1a1a1a]">
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Libellé</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Fréquence</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Début</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Fin</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Dernière génération</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
+                <th className="px-5 py-3.5 text-center text-xs font-medium text-[#666] uppercase tracking-wider">Statut</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {recurrings.map((rec) => (
-                <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">
+            <tbody>
+              {recurrings.map((rec, idx) => (
+                <tr key={rec.id} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
+                  <td className="px-5 py-3.5 font-medium text-white">
                     {rec.label}
                     {rec.description && (
-                      <p className="text-xs text-gray-400 font-normal">{rec.description}</p>
+                      <p className="text-xs text-[#666] font-normal mt-0.5">{rec.description}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{frequencyLabel(rec.frequency)}</td>
-                  <td className="px-4 py-3 text-gray-600">{rec.start_date}</td>
-                  <td className="px-4 py-3 text-gray-500">{rec.end_date ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-4 py-3 text-gray-500">{rec.last_generated ?? <span className="text-gray-300">jamais</span>}</td>
-                  <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${rec.amount >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{frequencyLabel(rec.frequency)}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{rec.start_date}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{rec.end_date ?? <span className="text-[#444]">—</span>}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{rec.last_generated ?? <span className="text-[#444]">jamais</span>}</td>
+                  <td className={`px-5 py-3.5 text-right font-semibold whitespace-nowrap ${rec.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>
                     {eurFormatter.format(rec.amount)}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-5 py-3.5 text-center">
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                         rec.active
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-500"
+                          ? "bg-[#00C853]/10 text-[#00C853] border border-[#00C853]/20"
+                          : "bg-[#1a1a1a] text-[#666] border border-[#222]"
                       }`}
                     >
                       {rec.active ? "Actif" : "Inactif"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     {confirmDelete === rec.id ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Supprimer ?</span>
+                        <span className="text-xs text-[#666]">Supprimer ?</span>
                         <button
                           onClick={() => handleDelete(rec.id)}
                           disabled={deletingId === rec.id}
-                          className="text-xs font-medium text-red-600 hover:text-red-800"
+                          className="text-xs font-medium text-[#FF5252] hover:text-red-400"
                         >
                           Oui
                         </button>
                         <button
                           onClick={() => setConfirmDelete(null)}
-                          className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                          className="text-xs font-medium text-[#666] hover:text-white"
                         >
                           Non
                         </button>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1">
                         <button
                           onClick={() => { setEditingRec(rec); setShowForm(false); }}
-                          className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                          className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                           title="Modifier"
                         >
-                          <Pencil size={15} />
+                          <Pencil size={14} strokeWidth={1.5} />
                         </button>
                         <button
                           onClick={() => setConfirmDelete(rec.id)}
-                          className="p-1 text-gray-400 hover:text-red-600 rounded"
+                          className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                           title="Supprimer"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} strokeWidth={1.5} />
                         </button>
                       </span>
                     )}

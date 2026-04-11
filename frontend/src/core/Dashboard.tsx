@@ -9,21 +9,21 @@ function SummaryCard({
   label,
   value,
   icon: Icon,
-  colorClass,
+  valueColor,
 }: {
   label: string;
   value: string;
   icon: React.ElementType;
-  colorClass: string;
+  valueColor: string;
 }) {
   return (
-    <div className={`rounded-xl p-5 shadow-sm flex items-center gap-4 ${colorClass}`}>
-      <div className="p-3 rounded-full bg-white bg-opacity-30">
-        <Icon size={22} />
+    <div className="bg-[#111] border border-[#222] rounded-2xl p-6 flex items-center gap-4">
+      <div className="p-3 rounded-xl bg-[#1a1a1a] border border-[#222]">
+        <Icon size={20} strokeWidth={1.5} className="text-[#B0B0B0]" />
       </div>
       <div>
-        <p className="text-sm font-medium opacity-80">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-1">{label}</p>
+        <p className={`text-xl font-bold ${valueColor}`}>{value}</p>
       </div>
     </div>
   );
@@ -45,7 +45,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
       </div>
     );
   }
@@ -53,52 +53,61 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="p-8">
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">{error}</div>
+        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4">{error}</div>
       </div>
     );
   }
 
   if (!summary) return null;
 
-  const balanceColor =
-    summary.balance >= 0 ? "bg-green-500 text-white" : "bg-red-500 text-white";
+  const balancePositive = summary.balance >= 0;
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Tableau de bord</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard
-          label="Solde actuel"
-          value={eurFormatter.format(summary.balance)}
-          icon={Wallet}
-          colorClass={balanceColor}
-        />
+      {/* Header with large balance */}
+      <div className="mb-10">
+        <p className="text-sm font-medium text-[#666] uppercase tracking-wider mb-2">Solde actuel</p>
+        <div className="relative inline-block">
+          <div className="absolute -inset-4 bg-[rgba(26,115,232,0.08)] rounded-3xl blur-xl pointer-events-none" />
+          <h1
+            className={`relative text-5xl font-bold tracking-tight ${
+              balancePositive ? "text-white" : "text-[#FF5252]"
+            }`}
+            style={{ letterSpacing: "-0.02em" }}
+          >
+            {eurFormatter.format(summary.balance)}
+          </h1>
+        </div>
+        {summary.reference_date && summary.reference_amount !== undefined && (
+          <p className="mt-3 text-sm text-[#666]">
+            Référence au{" "}
+            <span className="text-[#B0B0B0] font-medium">{summary.reference_date}</span>{" "}:{" "}
+            <span className="text-[#B0B0B0] font-medium">{eurFormatter.format(summary.reference_amount)}</span>
+          </p>
+        )}
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <SummaryCard
           label="Recettes"
           value={eurFormatter.format(summary.total_income)}
           icon={TrendingUp}
-          colorClass="bg-emerald-500 text-white"
+          valueColor="text-[#00C853]"
         />
         <SummaryCard
           label="Dépenses"
           value={eurFormatter.format(summary.total_expenses)}
           icon={TrendingDown}
-          colorClass="bg-orange-500 text-white"
+          valueColor="text-[#FF5252]"
         />
         <SummaryCard
           label="Transactions"
           value={String(summary.transaction_count)}
           icon={Hash}
-          colorClass="bg-indigo-500 text-white"
+          valueColor="text-white"
         />
       </div>
-      {summary.reference_date && summary.reference_amount !== undefined && (
-        <p className="mt-6 text-sm text-gray-500">
-          Solde de référence au{" "}
-          <span className="font-medium">{summary.reference_date}</span> :{" "}
-          <span className="font-medium">{eurFormatter.format(summary.reference_amount)}</span>
-        </p>
-      )}
     </div>
   );
 }

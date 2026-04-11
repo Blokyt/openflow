@@ -14,41 +14,58 @@ const navItems = [
 
 export default function Sidebar() {
   return (
-    <aside className="w-56 bg-white border-r border-gray-200 flex flex-col h-full shadow-sm">
-      <div className="px-5 py-5 border-b border-gray-200">
-        <span className="text-xl font-bold text-indigo-600 tracking-tight">OpenFlow</span>
+    <aside className="w-60 bg-[#080808] border-r border-[#222] flex flex-col h-full flex-shrink-0">
+      <div className="px-5 py-6 border-b border-[#222]">
+        <span className="text-xl font-bold tracking-tight">
+          <span className="text-white">Open</span>
+          <span className="text-[#F2C48D]">Flow</span>
+        </span>
       </div>
-      <nav className="flex-1 py-4 px-2 space-y-1">
+      <nav className="flex-1 py-4 px-3 space-y-0.5">
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
                 isActive
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  ? "text-white bg-[#111]"
+                  : "text-[#666] hover:bg-[#111] hover:text-white"
               }`
             }
           >
-            <Icon size={18} />
-            {label}
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
+                )}
+                <Icon size={17} strokeWidth={1.5} />
+                {label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
-      <div className="px-2 py-4 border-t border-gray-200">
+      <div className="px-3 py-4 border-t border-[#222]">
         <NavLink
           to="/settings"
           className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
               isActive
-                ? "bg-indigo-50 text-indigo-700"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                ? "text-white bg-[#111]"
+                : "text-[#666] hover:bg-[#111] hover:text-white"
             }`
           }
         >
-          <Settings size={18} />
-          Paramètres
+          {({ isActive }) => (
+            <>
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
+              )}
+              <Settings size={17} strokeWidth={1.5} />
+              Paramètres
+            </>
+          )}
         </NavLink>
       </div>
     </aside>

@@ -148,41 +148,46 @@ export default function BudgetManager() {
     }
   }
 
+  const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
+  const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
+
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Budget Previsionnel</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
+          Budget Prévisionnel
+        </h1>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
         >
-          <Plus size={16} /> Ajouter
+          <Plus size={15} /> Ajouter
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)}>
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
             <X size={16} />
           </button>
         </div>
       )}
 
       {/* Filter by year */}
-      <div className="mb-4 flex items-center gap-3">
-        <label className="text-sm text-gray-600">Filtrer par annee</label>
+      <div className="mb-5 flex items-center gap-3">
+        <label className="text-sm text-[#666]">Filtrer par année</label>
         <input
           type="text"
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
           placeholder="ex: 2026"
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-28"
+          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] w-28"
         />
         {period && (
           <button
             onClick={() => setPeriod("")}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
           >
             <X size={14} /> Effacer
           </button>
@@ -191,85 +196,85 @@ export default function BudgetManager() {
 
       {/* Form panel */}
       {showForm && (
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">
+        <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
+          <h2 className="text-base font-semibold text-white mb-5">
             {editingBudget ? "Modifier le budget" : "Nouveau budget"}
           </h2>
           <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Libelle</label>
+              <label className={labelClass}>Libellé</label>
               <input
                 type="text"
                 value={form.label}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Libelle du budget"
+                className={inputClass}
+                placeholder="Libellé du budget"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Montant (EUR)</label>
+              <label className={labelClass}>Montant (EUR)</label>
               <input
                 type="number"
                 step="0.01"
                 required
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
                 placeholder="0.00"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Debut de periode</label>
+              <label className={labelClass}>Début de période</label>
               <input
                 type="date"
                 required
                 value={form.period_start}
                 onChange={(e) => setForm({ ...form, period_start: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fin de periode</label>
+              <label className={labelClass}>Fin de période</label>
               <input
                 type="date"
                 required
                 value={form.period_end}
                 onChange={(e) => setForm({ ...form, period_end: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ID Categorie</label>
+              <label className={labelClass}>ID Catégorie</label>
               <input
                 type="number"
                 value={form.category_id}
                 onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
                 placeholder="(optionnel)"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ID Division</label>
+              <label className={labelClass}>ID Division</label>
               <input
                 type="number"
                 value={form.division_id}
                 onChange={(e) => setForm({ ...form, division_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
                 placeholder="(optionnel)"
               />
             </div>
-            <div className="sm:col-span-2 flex justify-end gap-3">
+            <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={cancelForm}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
               >
                 Annuler
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
               >
                 {saving ? "Enregistrement..." : "Enregistrer"}
               </button>
@@ -279,74 +284,74 @@ export default function BudgetManager() {
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
           </div>
         ) : budgets.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">
-            Aucune enveloppe budgetaire trouvee.
+          <div className="text-center py-12 text-[#666] text-sm">
+            Aucune enveloppe budgétaire trouvée.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Libelle</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Periode</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Categorie</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Montant</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+            <thead>
+              <tr className="border-b border-[#1a1a1a]">
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Libellé</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Période</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {budgets.map((b) => (
-                <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {b.label || <span className="text-gray-400">—</span>}
+            <tbody>
+              {budgets.map((b, idx) => (
+                <tr key={b.id} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
+                  <td className="px-5 py-3.5 font-medium text-white">
+                    {b.label || <span className="text-[#444]">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                  <td className="px-5 py-3.5 text-[#B0B0B0] whitespace-nowrap">
                     {b.period_start} &rarr; {b.period_end}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {b.category_id !== null ? `#${b.category_id}` : <span className="text-gray-300">—</span>}
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">
+                    {b.category_id !== null ? `#${b.category_id}` : <span className="text-[#444]">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-indigo-700 whitespace-nowrap">
+                  <td className="px-5 py-3.5 text-right font-semibold text-[#F2C48D] whitespace-nowrap">
                     {eurFormatter.format(b.amount)}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     {confirmDelete === b.id ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Supprimer ?</span>
+                        <span className="text-xs text-[#666]">Supprimer ?</span>
                         <button
                           onClick={() => handleDelete(b.id)}
                           disabled={deletingId === b.id}
-                          className="text-xs font-medium text-red-600 hover:text-red-800"
+                          className="text-xs font-medium text-[#FF5252] hover:text-red-400"
                         >
                           Oui
                         </button>
                         <button
                           onClick={() => setConfirmDelete(null)}
-                          className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                          className="text-xs font-medium text-[#666] hover:text-white"
                         >
                           Non
                         </button>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1">
                         <button
                           onClick={() => openEdit(b)}
-                          className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                          className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                           title="Modifier"
                         >
-                          <Pencil size={15} />
+                          <Pencil size={14} strokeWidth={1.5} />
                         </button>
                         <button
                           onClick={() => setConfirmDelete(b.id)}
-                          className="p-1 text-gray-400 hover:text-red-600 rounded"
+                          className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                           title="Supprimer"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} strokeWidth={1.5} />
                         </button>
                       </span>
                     )}

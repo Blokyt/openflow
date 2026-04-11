@@ -122,104 +122,109 @@ export default function TaxReceiptsView() {
     }
   };
 
+  const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
+  const labelClass = "block text-xs font-medium text-[#B0B0B0] mb-1.5";
+
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-8 max-w-5xl">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <Receipt size={24} className="text-indigo-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Recus fiscaux</h1>
+          <Receipt size={20} strokeWidth={1.5} className="text-[#666]" />
+          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
+            Recus fiscaux
+          </h1>
         </div>
         <button
           onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
         >
-          <Plus size={16} />
+          <Plus size={15} />
           Nouveau recu
         </button>
       </div>
 
       {/* Filter */}
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-3 mb-5">
         <input
           type="text"
-          placeholder="Filtrer par annee fiscale (ex: 2026)"
+          placeholder="Filtrer par année fiscale (ex: 2026)"
           value={fiscalYearFilter}
           onChange={(e) => setFiscalYearFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] w-64"
         />
       </div>
 
       {/* Form */}
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">
+        <div className="bg-[#111] border border-[#222] rounded-2xl p-6 mb-6">
+          <h2 className="text-base font-semibold text-white mb-5">
             {editingId !== null ? "Modifier le recu" : "Nouveau recu fiscal"}
           </h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Contact ID</label>
+              <label className={labelClass}>Contact ID</label>
               <input
                 type="number"
                 required
                 value={form.contact_id}
                 onChange={(e) => setForm({ ...form, contact_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Montant (EUR)</label>
+              <label className={labelClass}>Montant (EUR)</label>
               <input
                 type="number"
                 step="0.01"
                 required
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+              <label className={labelClass}>Date</label>
               <input
                 type="date"
                 required
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Annee fiscale</label>
+              <label className={labelClass}>Année fiscale</label>
               <input
                 type="text"
                 required
                 value={form.fiscal_year}
                 onChange={(e) => setForm({ ...form, fiscal_year: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className={inputClass}
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Objet / Motif</label>
+              <label className={labelClass}>Objet / Motif</label>
               <input
                 type="text"
                 value={form.purpose}
                 onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className={inputClass}
               />
             </div>
-            <div className="col-span-2 flex gap-2 justify-end">
+            <div className="col-span-2 flex gap-3 justify-end pt-2">
               <button
                 type="button"
                 onClick={() => { setShowForm(false); setEditingId(null); }}
-                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
               >
-                <X size={14} /> Annuler
+                Annuler
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-1 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
               >
-                <Check size={14} /> {saving ? "Enregistrement..." : "Enregistrer"}
+                <Check size={14} strokeWidth={1.5} /> {saving ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
           </form>
@@ -227,54 +232,57 @@ export default function TaxReceiptsView() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
+        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl px-5 py-4 mb-5 text-sm flex items-center justify-between">
           {error}
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={14} /></button>
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm">Chargement...</div>
+          <div className="p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D] mx-auto" />
+          </div>
         ) : receipts.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 text-sm">Aucun recu fiscal</div>
+          <div className="p-8 text-center text-[#666] text-sm">Aucun recu fiscal</div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Numero</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Contact</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Montant</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Annee fiscale</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Objet</th>
-                <th className="px-4 py-3"></th>
+            <thead>
+              <tr className="border-b border-[#1a1a1a]">
+                <th className="text-left px-5 py-3.5 text-xs font-medium text-[#666] uppercase tracking-wider">Numéro</th>
+                <th className="text-left px-5 py-3.5 text-xs font-medium text-[#666] uppercase tracking-wider">Contact</th>
+                <th className="text-left px-5 py-3.5 text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
+                <th className="text-left px-5 py-3.5 text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
+                <th className="text-left px-5 py-3.5 text-xs font-medium text-[#666] uppercase tracking-wider">Année fiscale</th>
+                <th className="text-left px-5 py-3.5 text-xs font-medium text-[#666] uppercase tracking-wider">Objet</th>
+                <th className="px-5 py-3.5"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {receipts.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-indigo-700">{r.number}</td>
-                  <td className="px-4 py-3 text-gray-700">{r.contact_id}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{eurFormatter.format(r.amount)}</td>
-                  <td className="px-4 py-3 text-gray-600">{r.date}</td>
-                  <td className="px-4 py-3 text-gray-600">{r.fiscal_year}</td>
-                  <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.purpose || "-"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2 justify-end">
+            <tbody>
+              {receipts.map((r, idx) => (
+                <tr key={r.id} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
+                  <td className="px-5 py-3.5 font-mono text-xs text-[#F2C48D]">{r.number}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{r.contact_id}</td>
+                  <td className="px-5 py-3.5 font-semibold text-white">{eurFormatter.format(r.amount)}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{r.date}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{r.fiscal_year}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0] max-w-xs truncate">{r.purpose || <span className="text-[#444]">—</span>}</td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex gap-1 justify-end">
                       <button
                         onClick={() => handleEdit(r)}
-                        className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                        className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                         title="Modifier"
                       >
-                        <Pencil size={15} />
+                        <Pencil size={14} strokeWidth={1.5} />
                       </button>
                       <button
                         onClick={() => handleDelete(r.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded"
+                        className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                         title="Supprimer"
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} strokeWidth={1.5} />
                       </button>
                     </div>
                   </td>

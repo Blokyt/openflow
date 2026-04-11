@@ -36,21 +36,21 @@ const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currenc
 function StatusBadge({ status }: { status: BankStatement["status"] }) {
   if (status === "matched") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-        <CheckCircle size={11} /> Rapproché
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#00C853]/10 text-[#00C853] border border-[#00C853]/20">
+        <CheckCircle size={10} /> Rapproché
       </span>
     );
   }
   if (status === "ignored") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-        <XCircle size={11} /> Ignoré
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#1a1a1a] text-[#666] border border-[#222]">
+        <XCircle size={10} /> Ignoré
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
-      <AlertCircle size={11} /> Non rapproché
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#F2C48D]/10 text-[#F2C48D] border border-[#F2C48D]/20">
+      <AlertCircle size={10} /> Non rapproché
     </span>
   );
 }
@@ -74,26 +74,26 @@ function SuggestionsModal({
   }, [statement.id]);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
+      <div className="bg-[#111] border border-[#222] rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[#1a1a1a]">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Suggestions de rapprochement</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h2 className="text-base font-semibold text-white">Suggestions de rapprochement</h2>
+            <p className="text-xs text-[#666] mt-0.5">
               {statement.date} — {statement.label} — {eurFormatter.format(statement.amount)}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[#666] hover:text-white transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="p-5">
+        <div className="p-6">
           {loading ? (
             <div className="flex justify-center py-6">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" />
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#F2C48D]" />
             </div>
           ) : suggestions.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-6">
+            <p className="text-sm text-[#666] text-center py-6">
               Aucune transaction correspondante trouvée (même montant, ±5 jours).
             </p>
           ) : (
@@ -101,25 +101,21 @@ function SuggestionsModal({
               {suggestions.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                  className="flex items-center justify-between p-4 border border-[#222] rounded-xl hover:border-[#F2C48D]/40 hover:bg-[#1a1a1a] transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{tx.label}</p>
-                    <p className="text-xs text-gray-500">{tx.date}</p>
+                    <p className="text-sm font-medium text-white">{tx.label}</p>
+                    <p className="text-xs text-[#666]">{tx.date}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span
-                      className={`text-sm font-semibold ${
-                        tx.amount >= 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
+                    <span className={`text-sm font-semibold ${tx.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>
                       {eurFormatter.format(tx.amount)}
                     </span>
                     <button
                       onClick={() => onMatch(tx.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
                     >
-                      <Link size={12} /> Associer
+                      <Link size={11} /> Associer
                     </button>
                   </div>
                 </div>
@@ -141,7 +137,6 @@ function ImportPanel({ onImported }: { onImported: () => void }) {
 
   function parseCSV(text: string): { date: string; label: string; amount: number }[] {
     const lines = text.trim().split("\n").filter((l) => l.trim());
-    // Skip header line if first column looks like "date" or "Date"
     const startIndex =
       lines[0] && lines[0].toLowerCase().startsWith("date") ? 1 : 0;
     return lines.slice(startIndex).map((line) => {
@@ -185,31 +180,31 @@ function ImportPanel({ onImported }: { onImported: () => void }) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
-      <h2 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
-        <Upload size={16} /> Importer un relevé bancaire (CSV)
+    <div className="bg-[#111] border border-[#222] rounded-2xl p-6 mb-6">
+      <h2 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
+        <Upload size={15} strokeWidth={1.5} className="text-[#666]" /> Importer un relevé bancaire (CSV)
       </h2>
-      <p className="text-xs text-gray-500 mb-3">
-        Format attendu: <code className="bg-gray-100 px-1 rounded">date,libelle,montant</code> (séparateur , ou ;)
+      <p className="text-xs text-[#666] mb-4">
+        Format attendu: <code className="bg-[#1a1a1a] border border-[#222] px-1.5 py-0.5 rounded text-[#B0B0B0]">date,libelle,montant</code> (séparateur , ou ;)
       </p>
 
       {error && (
-        <div className="mb-3 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-3 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)}><X size={14} /></button>
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={14} /></button>
         </div>
       )}
       {result && (
-        <div className="mb-3 bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-3 bg-[#0a1a0a] border border-[#00C853]/30 text-[#00C853] rounded-xl p-3 text-sm flex items-center justify-between">
           {result}
-          <button onClick={() => setResult(null)}><X size={14} /></button>
+          <button onClick={() => setResult(null)} className="text-[#00C853]/70 hover:text-[#00C853]"><X size={14} /></button>
         </div>
       )}
 
       <div className="flex gap-3 mb-3">
         <button
           onClick={() => fileRef.current?.click()}
-          className="text-sm text-indigo-600 border border-indigo-300 rounded-lg px-3 py-2 hover:bg-indigo-50"
+          className="text-sm text-white border border-[#333] rounded-full px-4 py-2 hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
         >
           Choisir un fichier…
         </button>
@@ -221,18 +216,18 @@ function ImportPanel({ onImported }: { onImported: () => void }) {
         onChange={(e) => setCsvText(e.target.value)}
         placeholder={"2026-01-10,Virement recu,1500.00\n2026-01-12,Paiement fournisseur,-320.50"}
         rows={5}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+        className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-[#F2C48D] transition-colors resize-y placeholder-[#444]"
       />
 
       <button
         onClick={handleImport}
         disabled={loading || !csvText.trim()}
-        className="mt-3 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="mt-3 flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {loading ? (
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black" />
         ) : (
-          <Upload size={15} />
+          <Upload size={14} strokeWidth={1.5} />
         )}
         Importer
       </button>
@@ -302,41 +297,43 @@ export default function BankReconciliation() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <GitCompare size={22} className="text-indigo-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Rapprochement bancaire</h1>
+          <GitCompare size={20} strokeWidth={1.5} className="text-[#666]" />
+          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
+            Rapprochement bancaire
+          </h1>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-600">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-50 border border-yellow-200 rounded-full text-yellow-700 font-medium">
-            <AlertCircle size={13} /> {totalUnmatched} non rapprochés
+        <div className="flex items-center gap-3 text-sm">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F2C48D]/10 border border-[#F2C48D]/20 rounded-full text-[#F2C48D] font-medium">
+            <AlertCircle size={12} /> {totalUnmatched} non rapprochés
           </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 font-medium">
-            <CheckCircle size={13} /> {totalMatched} rapprochés
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00C853]/10 border border-[#00C853]/20 rounded-full text-[#00C853] font-medium">
+            <CheckCircle size={12} /> {totalMatched} rapprochés
           </span>
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)}><X size={16} /></button>
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={16} /></button>
         </div>
       )}
 
       <ImportPanel onImported={fetchStatements} />
 
       {/* Filters */}
-      <div className="mb-4 flex items-center gap-3">
-        <label className="text-sm text-gray-600 font-medium">Filtrer :</label>
+      <div className="mb-5 flex items-center gap-2 flex-wrap">
+        <label className="text-sm text-[#666] font-medium mr-1">Filtrer :</label>
         {(["", "unmatched", "matched", "ignored"] as const).map((s) => (
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
-            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+            className={`px-4 py-2 text-sm rounded-full border transition-colors font-medium ${
               filterStatus === s
-                ? "bg-indigo-600 text-white border-indigo-600"
-                : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"
+                ? "bg-[#F2C48D] text-black border-[#F2C48D]"
+                : "bg-transparent text-[#666] border-[#222] hover:border-[#333] hover:text-white"
             }`}
           >
             {s === "" ? "Tous" : s === "unmatched" ? "Non rapprochés" : s === "matched" ? "Rapprochés" : "Ignorés"}
@@ -345,85 +342,81 @@ export default function BankReconciliation() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
           </div>
         ) : statements.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">
+          <div className="text-center py-12 text-[#666] text-sm">
             Aucun relevé bancaire importé.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Date</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Libellé</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Montant</th>
-                <th className="px-4 py-3 text-center font-medium text-gray-600">Statut</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+            <thead>
+              <tr className="border-b border-[#1a1a1a]">
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Libellé</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
+                <th className="px-5 py-3.5 text-center text-xs font-medium text-[#666] uppercase tracking-wider">Statut</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {statements.map((stmt) => (
-                <tr key={stmt.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{stmt.date}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{stmt.label}</td>
-                  <td
-                    className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${
-                      stmt.amount >= 0 ? "text-green-600" : "text-red-600"
-                    }`}
-                  >
+            <tbody>
+              {statements.map((stmt, idx) => (
+                <tr key={stmt.id} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
+                  <td className="px-5 py-3.5 text-[#B0B0B0] whitespace-nowrap">{stmt.date}</td>
+                  <td className="px-5 py-3.5 font-medium text-white">{stmt.label}</td>
+                  <td className={`px-5 py-3.5 text-right font-semibold whitespace-nowrap ${stmt.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>
                     {eurFormatter.format(stmt.amount)}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-5 py-3.5 text-center">
                     <StatusBadge status={stmt.status} />
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     {confirmDelete === stmt.id ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Supprimer ?</span>
+                        <span className="text-xs text-[#666]">Supprimer ?</span>
                         <button
                           onClick={() => handleDelete(stmt.id)}
                           disabled={deletingId === stmt.id}
-                          className="text-xs font-medium text-red-600 hover:text-red-800"
+                          className="text-xs font-medium text-[#FF5252] hover:text-red-400"
                         >
                           Oui
                         </button>
                         <button
                           onClick={() => setConfirmDelete(null)}
-                          className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                          className="text-xs font-medium text-[#666] hover:text-white"
                         >
                           Non
                         </button>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1">
                         {stmt.status === "unmatched" && (
                           <button
                             onClick={() => setSuggestFor(stmt)}
-                            className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                            className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                             title="Rapprocher manuellement"
                           >
-                            <Link size={15} />
+                            <Link size={14} strokeWidth={1.5} />
                           </button>
                         )}
                         {stmt.status === "matched" && (
                           <button
                             onClick={() => handleUnmatch(stmt.id)}
-                            className="p-1 text-gray-400 hover:text-yellow-600 rounded"
+                            className="p-1.5 text-[#666] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
                             title="Annuler le rapprochement"
                           >
-                            <Unlink size={15} />
+                            <Unlink size={14} strokeWidth={1.5} />
                           </button>
                         )}
                         <button
                           onClick={() => setConfirmDelete(stmt.id)}
-                          className="p-1 text-gray-400 hover:text-red-600 rounded"
+                          className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                           title="Supprimer"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} strokeWidth={1.5} />
                         </button>
                       </span>
                     )}

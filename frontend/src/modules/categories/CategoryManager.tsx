@@ -20,37 +20,37 @@ function CategoryNode({
 
   return (
     <div className="select-none">
-      <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-50 group">
+      <div className="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-[#1a1a1a] group transition-colors">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="w-5 h-5 flex items-center justify-center text-gray-400"
+          className="w-5 h-5 flex items-center justify-center text-[#444]"
         >
           {hasChildren ? (
-            open ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+            open ? <ChevronDown size={13} strokeWidth={1.5} /> : <ChevronRight size={13} strokeWidth={1.5} />
           ) : (
             <span className="w-3" />
           )}
         </button>
-        <span className="flex-1 text-sm text-gray-800 font-medium">{cat.name}</span>
+        <span className="flex-1 text-sm text-white font-medium">{cat.name}</span>
         <span className="hidden group-hover:inline-flex items-center gap-1">
           <button
             onClick={() => onEdit(cat)}
-            className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+            className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
             title="Modifier"
           >
-            <Pencil size={13} />
+            <Pencil size={12} strokeWidth={1.5} />
           </button>
           <button
             onClick={() => onDelete(cat.id)}
-            className="p-1 text-gray-400 hover:text-red-600 rounded"
+            className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
             title="Supprimer"
           >
-            <Trash2 size={13} />
+            <Trash2 size={12} strokeWidth={1.5} />
           </button>
         </span>
       </div>
       {hasChildren && open && (
-        <div className="ml-6 border-l border-gray-200 pl-2">
+        <div className="ml-6 border-l border-[#222] pl-2">
           {cat.children!.map((child) => (
             <CategoryNode
               key={child.id}
@@ -83,22 +83,21 @@ function EditRow({
     cat.parent_id !== undefined ? String(cat.parent_id) : ""
   );
 
-  // filter out self + descendants to avoid cycles
   const eligible = allCategories.filter((c) => c.id !== cat.id);
 
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2 bg-indigo-50 rounded-lg">
+    <div className="flex items-center gap-2 py-2 px-2 bg-[#1a1a1a] rounded-lg border border-[#F2C48D]/30">
       <span className="w-5" />
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="flex-1 border border-indigo-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="flex-1 bg-[#0a0a0a] border border-[#222] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
       />
       <select
         value={parentId}
         onChange={(e) => setParentId(e.target.value)}
-        className="border border-indigo-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="bg-[#0a0a0a] border border-[#222] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
       >
         <option value="">— Racine —</option>
         {eligible.map((c) => (
@@ -109,12 +108,12 @@ function EditRow({
       </select>
       <button
         onClick={() => onSave(cat.id, name, parentId ? parseInt(parentId) : undefined)}
-        className="p-1 text-green-600 hover:text-green-800"
+        className="p-1.5 text-[#00C853] hover:text-green-400 rounded-lg hover:bg-[#222] transition-colors"
       >
-        <Check size={15} />
+        <Check size={14} strokeWidth={1.5} />
       </button>
-      <button onClick={onCancel} className="p-1 text-gray-400 hover:text-gray-600">
-        <X size={15} />
+      <button onClick={onCancel} className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors">
+        <X size={14} strokeWidth={1.5} />
       </button>
     </div>
   );
@@ -129,7 +128,6 @@ export default function CategoryManager() {
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
-  // New category form
   const [newName, setNewName] = useState("");
   const [newParentId, setNewParentId] = useState("");
   const [creating, setCreating] = useState(false);
@@ -203,19 +201,19 @@ export default function CategoryManager() {
       }
       if (confirmDelete === cat.id) {
         return (
-          <div key={cat.id} className="flex items-center gap-2 py-1.5 px-2 bg-red-50 rounded-lg">
+          <div key={cat.id} className="flex items-center gap-2 py-2 px-2 bg-[#1a0a0a] border border-[#FF5252]/20 rounded-lg">
             <span className="w-5" />
-            <span className="flex-1 text-sm text-red-700 font-medium">{cat.name}</span>
-            <span className="text-xs text-red-600">Supprimer ?</span>
+            <span className="flex-1 text-sm text-[#FF5252] font-medium">{cat.name}</span>
+            <span className="text-xs text-[#FF5252]/70">Supprimer ?</span>
             <button
               onClick={() => handleDelete(cat.id)}
-              className="text-xs font-medium text-red-600 hover:text-red-800"
+              className="text-xs font-medium text-[#FF5252] hover:text-red-400"
             >
               Oui
             </button>
             <button
               onClick={() => setConfirmDelete(null)}
-              className="text-xs font-medium text-gray-500 hover:text-gray-700"
+              className="text-xs font-medium text-[#666] hover:text-white"
             >
               Non
             </button>
@@ -236,18 +234,22 @@ export default function CategoryManager() {
 
   return (
     <div className="p-8 max-w-2xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Catégories</h1>
+      <h1 className="text-3xl font-bold text-white mb-8" style={{ letterSpacing: "-0.02em" }}>
+        Catégories
+      </h1>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)}><X size={16} /></button>
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
+            <X size={16} />
+          </button>
         </div>
       )}
 
       {/* Create form */}
-      <form onSubmit={handleCreate} className="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Nouvelle catégorie</h2>
+      <form onSubmit={handleCreate} className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
+        <h2 className="text-sm font-semibold text-white mb-4">Nouvelle catégorie</h2>
         <div className="flex gap-3 flex-wrap">
           <input
             type="text"
@@ -255,12 +257,12 @@ export default function CategoryManager() {
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Nom de la catégorie"
             required
-            className="flex-1 min-w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 min-w-40 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]"
           />
           <select
             value={newParentId}
             onChange={(e) => setNewParentId(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
           >
             <option value="">— Racine —</option>
             {flatList.map((cat) => (
@@ -272,21 +274,21 @@ export default function CategoryManager() {
           <button
             type="submit"
             disabled={creating}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
           >
-            <Plus size={15} /> Créer
+            <Plus size={14} /> Créer
           </button>
         </div>
       </form>
 
       {/* Tree */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <div className="bg-[#111] border border-[#222] rounded-2xl p-4">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
           </div>
         ) : tree.length === 0 ? (
-          <p className="text-center text-gray-500 text-sm py-8">
+          <p className="text-center text-[#666] text-sm py-8">
             Aucune catégorie. Créez-en une ci-dessus.
           </p>
         ) : (

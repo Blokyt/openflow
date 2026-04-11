@@ -13,9 +13,9 @@ import TaxReceiptsView from "./modules/tax_receipts/TaxReceiptsView";
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="flex h-screen bg-gray-50">
+      <div className="flex h-screen bg-black">
         <Sidebar />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-black">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
