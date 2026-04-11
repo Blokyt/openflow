@@ -1,0 +1,14 @@
+{
+  "id": "multi_accounts",
+  "name": "Multi-comptes",
+  "description": "Gerer plusieurs comptes bancaires et caisse",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "advanced",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Comptes", "icon": "wallet", "position": 82},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}
