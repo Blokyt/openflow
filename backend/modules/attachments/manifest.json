@@ -1,0 +1,14 @@
+{
+  "id": "attachments",
+  "name": "Pieces jointes",
+  "description": "Attacher des fichiers aux transactions",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Pieces jointes", "icon": "paperclip", "position": 91},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}
