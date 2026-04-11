@@ -1,0 +1,14 @@
+{
+  "id": "export",
+  "name": "Export",
+  "description": "Exporter les donnees en CSV et JSON",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions"],
+  "menu": {"label": "Export", "icon": "download", "position": 8},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}

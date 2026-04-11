@@ -15,14 +15,14 @@ modules:
   transactions: true
   categories: true
   dashboard: true
-  invoices: false
+  invoices: true
   reimbursements: true
   budget: true
   divisions: true
   tiers: true
   attachments: true
   annotations: true
-  export: false
+  export: true
   bank_reconciliation: false
   recurring: false
   multi_accounts: false
