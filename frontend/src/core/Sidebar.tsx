@@ -5,9 +5,10 @@ import {
   TrendingUp, GitCompare, Receipt, Settings, FileText, RotateCcw,
   Building2, Users, Paperclip, MessageSquare, Download, Wallet,
   ShieldCheck, Bell, HandCoins, FileSpreadsheet, UsersRound,
-  ChevronDown, GitBranch, Check,
+  ChevronDown, GitBranch, Check, LogOut,
 } from "lucide-react";
 import { useEntity } from "./EntityContext";
+import { useAuth } from "./AuthContext";
 import { Entity } from "../types";
 
 const ICON_MAP: Record<string, any> = {
@@ -184,6 +185,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeModuleIds }: SidebarProps) {
+  const { user, logout } = useAuth();
+
   const navItems = [
     // Dashboard always first
     { to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -216,6 +219,10 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
       icon,
     });
   }
+
+  // Show Users link only to admins when multi_users is active
+  const isAdmin = user?.role === "admin";
+  const multiUsersActive = activeModuleIds.includes("multi_users");
 
   const allItems = [...navItems, ...moduleNavItems];
 
@@ -255,7 +262,29 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
           </NavLink>
         ))}
       </nav>
-      <div className="px-3 py-4 border-t border-[#222]">
+      <div className="px-3 pb-3 space-y-0.5 border-t border-[#222] pt-3">
+        {isAdmin && multiUsersActive && (
+          <NavLink
+            to="/multi-users"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
+                isActive
+                  ? "text-white bg-[#111]"
+                  : "text-[#666] hover:bg-[#111] hover:text-white"
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
+                )}
+                <Users size={17} strokeWidth={1.5} />
+                Utilisateurs
+              </>
+            )}
+          </NavLink>
+        )}
         <NavLink
           to="/settings"
           className={({ isActive }) =>
@@ -276,6 +305,26 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
             </>
           )}
         </NavLink>
+
+        {user && (
+          <div className="mt-2 pt-2 border-t border-[#1a1a1a]">
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a]">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-white truncate">
+                  {user.display_name || user.username}
+                </p>
+                <p className="text-[10px] text-[#555] capitalize">{user.role}</p>
+              </div>
+              <button
+                onClick={logout}
+                className="text-[#555] hover:text-[#FF5252] transition-colors p-1 flex-shrink-0"
+                title="Se déconnecter"
+              >
+                <LogOut size={14} strokeWidth={1.5} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

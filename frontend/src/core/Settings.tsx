@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info } from "lucide-react";
+import { useAuth } from "./AuthContext";
 
 const CORE_MODULE_IDS = ["transactions", "categories", "dashboard"];
 
@@ -117,6 +118,94 @@ function EditableField({
         </button>
       </div>
     </div>
+  );
+}
+
+function PasswordSection() {
+  const { user } = useAuth();
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!user) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSuccess(false);
+    if (newPassword !== confirmPassword) {
+      setError("Les mots de passe ne correspondent pas");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Le mot de passe doit faire au moins 6 caractères");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.changePassword(oldPassword, newPassword);
+      setSuccess(true);
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setError(err.message || "Erreur lors du changement de mot de passe");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-white mb-3">Mon compte</h2>
+      <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-[#666] text-sm">Identifiant</span>
+          <span className="font-medium text-white text-sm">{user.username}</span>
+        </div>
+        <div className="border-t border-[#1a1a1a] pt-4">
+          <p className="text-xs text-[#666] mb-3">Changer le mot de passe</p>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              placeholder="Mot de passe actuel"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder:text-[#444]"
+              required
+            />
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Nouveau mot de passe"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder:text-[#444]"
+              required
+            />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirmer le nouveau mot de passe"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder:text-[#444]"
+              required
+            />
+            {error && <p className="text-[#FF5252] text-xs">{error}</p>}
+            {success && <p className="text-[#00C853] text-xs">Mot de passe modifié avec succès.</p>}
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-[#F2C48D] text-black font-medium rounded-lg px-4 py-2.5 text-sm hover:bg-[#e5b87e] transition-colors disabled:opacity-50"
+            >
+              {saving ? "Enregistrement..." : "Enregistrer"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -304,6 +393,8 @@ export default function Settings() {
           </div>
         </section>
       )}
+
+      <PasswordSection />
 
       <section className="space-y-6">
         <h2 className="text-base font-semibold text-white">Modules</h2>

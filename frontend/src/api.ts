@@ -68,4 +68,20 @@ export const api = {
   getWidgets: () => request<any[]>("/dashboard/widgets"),
   getLayout: () => request<any[]>("/dashboard/layout"),
   saveLayout: (layout: any[]) => request<any>("/dashboard/layout", { method: "PUT", body: JSON.stringify(layout) }),
+  // Auth
+  login: (username: string, password: string) =>
+    request<any>("/multi_users/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  logout: () => request<any>("/multi_users/logout", { method: "POST" }),
+  getMe: () => request<any>("/multi_users/me"),
+  changePassword: (old_password: string, new_password: string) =>
+    request<any>("/multi_users/me/password", { method: "PUT", body: JSON.stringify({ old_password, new_password }) }),
+  // User management (admin)
+  getUsers: () => request<any[]>("/multi_users/"),
+  createUser: (user: any) => request<any>("/multi_users/", { method: "POST", body: JSON.stringify(user) }),
+  deleteUser: (id: number) => request<any>(`/multi_users/${id}`, { method: "DELETE" }),
+  getUserEntities: (userId: number) => request<any[]>(`/multi_users/${userId}/entities`),
+  assignUserEntity: (userId: number, data: any) =>
+    request<any>(`/multi_users/${userId}/entities`, { method: "POST", body: JSON.stringify(data) }),
+  removeUserEntity: (userId: number, entityId: number) =>
+    request<any>(`/multi_users/${userId}/entities/${entityId}`, { method: "DELETE" }),
 };

@@ -4,6 +4,8 @@ import { api } from "./api";
 import Sidebar from "./core/Sidebar";
 import Dashboard from "./core/Dashboard";
 import Settings from "./core/Settings";
+import Login from "./core/Login";
+import { AuthProvider, useAuth } from "./core/AuthContext";
 import { EntityProvider } from "./core/EntityContext";
 import EntityTree from "./modules/entities/EntityTree";
 import TransactionList from "./modules/transactions/TransactionList";
@@ -13,6 +15,7 @@ import RecurringManager from "./modules/recurring/RecurringManager";
 import ForecastingView from "./modules/forecasting/ForecastingView";
 import BankReconciliation from "./modules/bank_reconciliation/BankReconciliation";
 import TaxReceiptsView from "./modules/tax_receipts/TaxReceiptsView";
+import UserManager from "./modules/multi_users/UserManager";
 
 const MODULE_ROUTES: Record<string, { path: string; element: React.ReactNode }> = {
   transactions: { path: "/transactions", element: <TransactionList /> },
@@ -23,9 +26,19 @@ const MODULE_ROUTES: Record<string, { path: string; element: React.ReactNode }> 
   bank_reconciliation: { path: "/bank-reconciliation", element: <BankReconciliation /> },
   tax_receipts: { path: "/tax-receipts", element: <TaxReceiptsView /> },
   entities: { path: "/entities", element: <EntityTree /> },
+  multi_users: { path: "/multi-users", element: <UserManager /> },
 };
 
-export default function App() {
+function Spinner() {
+  return (
+    <div className="flex items-center justify-center h-screen bg-black">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
+    </div>
+  );
+}
+
+function AppContent() {
+  const { user, loading: authLoading } = useAuth();
   const [activeModuleIds, setActiveModuleIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,13 +49,11 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-      </div>
-    );
-  }
+  if (loading || authLoading) return <Spinner />;
+
+  // If multi_users module is active and user is not logged in, show login page
+  const authRequired = activeModuleIds.includes("multi_users");
+  if (authRequired && !user) return <Login />;
 
   return (
     <BrowserRouter>
@@ -65,5 +76,13 @@ export default function App() {
         </div>
       </EntityProvider>
     </BrowserRouter>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
