@@ -30,6 +30,8 @@ class TransactionCreate(BaseModel):
     division_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: str = ""
+    from_entity_id: Optional[int] = None
+    to_entity_id: Optional[int] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -41,6 +43,8 @@ class TransactionUpdate(BaseModel):
     division_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: Optional[str] = None
+    from_entity_id: Optional[int] = None
+    to_entity_id: Optional[int] = None
 
 
 @router.get("/")
@@ -49,6 +53,8 @@ def list_transactions(
     date_to: Optional[str] = None,
     category_id: Optional[int] = None,
     search: Optional[str] = None,
+    entity_id: Optional[int] = None,
+    include_children: bool = False,
 ):
     conn = get_conn()
     try:
@@ -66,6 +72,27 @@ def list_transactions(
         if search:
             query += " AND (label LIKE ? OR description LIKE ?)"
             params.extend([f"%{search}%", f"%{search}%"])
+        if entity_id is not None:
+            if include_children:
+                # Recursive CTE to get all descendant entity IDs
+                rows = conn.execute(
+                    """WITH RECURSIVE subtree(id) AS (
+                           SELECT ? AS id
+                           UNION ALL
+                           SELECT e.id FROM entities e
+                           INNER JOIN subtree s ON e.parent_id = s.id
+                       )
+                       SELECT id FROM subtree""",
+                    (entity_id,),
+                ).fetchall()
+                entity_ids = [r[0] for r in rows]
+                placeholders = ",".join("?" * len(entity_ids))
+                query += f" AND (from_entity_id IN ({placeholders}) OR to_entity_id IN ({placeholders}))"
+                params.extend(entity_ids)
+                params.extend(entity_ids)
+            else:
+                query += " AND (from_entity_id = ? OR to_entity_id = ?)"
+                params.extend([entity_id, entity_id])
         query += " ORDER BY date DESC, id DESC"
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]
@@ -80,8 +107,9 @@ def create_transaction(tx: TransactionCreate):
     try:
         cur = conn.execute(
             """INSERT INTO transactions
-               (date, label, description, amount, category_id, division_id, contact_id, created_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (date, label, description, amount, category_id, division_id, contact_id, created_by,
+                from_entity_id, to_entity_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 tx.date,
                 tx.label,
@@ -91,6 +119,8 @@ def create_transaction(tx: TransactionCreate):
                 tx.division_id,
                 tx.contact_id,
                 tx.created_by,
+                tx.from_entity_id,
+                tx.to_entity_id,
                 now,
                 now,
             ),

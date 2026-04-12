@@ -14,4 +14,8 @@ migrations = {
             updated_at TEXT NOT NULL
         )""",
     ],
+    "1.1.0": [
+        "ALTER TABLE transactions ADD COLUMN from_entity_id INTEGER",
+        "ALTER TABLE transactions ADD COLUMN to_entity_id INTEGER",
+    ],
 }
