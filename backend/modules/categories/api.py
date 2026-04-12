@@ -1,20 +1,13 @@
 """Categories CRUD API."""
 import sqlite3
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
+from backend.core.database import get_conn
+
 router = APIRouter()
-
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "openflow.db"
-
-
-def get_conn():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def row_to_dict(row):

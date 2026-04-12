@@ -8,20 +8,14 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from backend.core.config import load_config
+from backend.core.database import get_conn
 
 router = APIRouter()
 
 # Project root is 3 levels up from this file: backend/modules/dashboard/api.py
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "openflow.db"
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 MODULES_DIR = PROJECT_ROOT / "backend" / "modules"
-
-
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def row_to_dict(row: sqlite3.Row) -> dict:

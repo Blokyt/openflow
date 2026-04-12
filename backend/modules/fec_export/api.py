@@ -5,18 +5,14 @@ accounting export format required by tax authorities.
 """
 import csv
 import io
-import sqlite3
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-router = APIRouter()
+from backend.core.database import get_conn
 
-# Project root is 3 levels up from this file: backend/modules/fec_export/api.py
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "openflow.db"
+router = APIRouter()
 
 FEC_HEADERS = [
     "JournalCode",
@@ -38,12 +34,6 @@ FEC_HEADERS = [
     "MontantDevise",
     "Idevise",
 ]
-
-
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def _format_date(date_str: str) -> str:

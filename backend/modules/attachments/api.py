@@ -7,22 +7,15 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
+from backend.core.database import get_conn
+
 router = APIRouter()
 
-# Project root is 3 levels up from this file: backend/modules/attachments/api.py
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "openflow.db"
-ATTACHMENTS_DIR = PROJECT_ROOT / "data" / "attachments"
+ATTACHMENTS_DIR = Path(__file__).parent.parent.parent.parent / "data" / "attachments"
 
 
 def ensure_attachments_dir():
     ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def row_to_dict(row: sqlite3.Row) -> dict:

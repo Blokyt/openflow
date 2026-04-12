@@ -1,25 +1,16 @@
 """Forecasting API module for OpenFlow."""
-import sqlite3
 from datetime import date
-from dateutil.relativedelta import relativedelta
 from pathlib import Path
+from dateutil.relativedelta import relativedelta
 
 from fastapi import APIRouter
 
 from backend.core.config import load_config
+from backend.core.database import get_conn
 
 router = APIRouter()
 
-# Project root is 3 levels up from this file: backend/modules/forecasting/api.py
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "openflow.db"
-CONFIG_PATH = PROJECT_ROOT / "config.yaml"
-
-
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "config.yaml"
 
 
 @router.get("/projection")

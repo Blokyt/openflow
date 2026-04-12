@@ -2,25 +2,16 @@
 import sqlite3
 from datetime import datetime, date, timezone
 from dateutil.relativedelta import relativedelta
-from pathlib import Path
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from backend.core.database import get_conn
+
 router = APIRouter()
 
-# Project root is 3 levels up from this file: backend/modules/recurring/api.py
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "openflow.db"
-
 VALID_FREQUENCIES = {"weekly", "monthly", "quarterly", "yearly"}
-
-
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def row_to_dict(row: sqlite3.Row) -> dict:

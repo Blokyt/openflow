@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.core.config import load_config, save_config
+from backend.core.database import set_db_path
 from backend.core.module_loader import discover_modules, filter_active
 
 
@@ -25,7 +26,7 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
     all_modules = discover_modules(str(modules_dir))
     active_modules = filter_active(all_modules, config.modules)
 
-    abs_db_path = project_root / db_path
+    set_db_path(project_root / db_path)
 
     for manifest in active_modules:
         module_id = manifest["id"]
@@ -35,8 +36,6 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
                 module_name = f"backend.modules.{module_id}.{route_file.replace('.py', '')}"
                 try:
                     mod = importlib.import_module(module_name)
-                    if hasattr(mod, "DB_PATH"):
-                        mod.DB_PATH = abs_db_path
                     if hasattr(mod, "router"):
                         app.include_router(mod.router, prefix=f"/api/{module_id}", tags=[manifest["name"]])
                 except Exception as e:
