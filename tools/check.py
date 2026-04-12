@@ -19,12 +19,20 @@ def main():
     warnings = []
     modules_found = []
 
+    # Check config files
+    config_example_path = project / "config.example.yaml"
+    if not config_example_path.exists():
+        errors.append("config.example.yaml not found at project root")
+    config_path = project / "config.yaml"
+    if not config_path.exists():
+        warnings.append("config.yaml not found — run 'python setup.py' or copy config.example.yaml")
+
     if not schema_path.exists():
         errors.append(f"Manifest schema not found: {schema_path}")
         print_report(errors, warnings, modules_found)
         sys.exit(1)
 
-    with open(schema_path) as f:
+    with open(schema_path, encoding="utf-8") as f:
         schema = json.load(f)
 
     import jsonschema
@@ -42,7 +50,7 @@ def main():
             errors.append(f"Module '{mod_dir.name}': missing manifest.json")
             continue
 
-        with open(manifest_path) as f:
+        with open(manifest_path, encoding="utf-8") as f:
             try:
                 manifest = json.load(f)
             except json.JSONDecodeError as e:
@@ -72,7 +80,7 @@ def main():
         manifest_path = mod_dir / "manifest.json"
         if not manifest_path.exists() or not mod_dir.is_dir():
             continue
-        with open(manifest_path) as f:
+        with open(manifest_path, encoding="utf-8") as f:
             try:
                 manifest = json.load(f)
             except json.JSONDecodeError:

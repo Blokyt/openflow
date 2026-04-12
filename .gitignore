@@ -1,3 +1,4 @@
+# Dependencies
 frontend/node_modules/
 __pycache__/
 *.pyc
@@ -5,8 +6,18 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
-dist/
-build/
+
+# Build (reconstruit par start.py)
+frontend/dist/
+
+# Data utilisateur (chaque instance a sa propre DB)
+data/openflow.db
+data/openflow.db.backup.*
+data/attachments/*
+!data/attachments/.gitkeep
+
+# Environment
 .env
-*.db
-*.sqlite
+
+# Config utilisateur (chaque instance a sa propre config)
+config.yaml

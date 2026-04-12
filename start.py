@@ -28,6 +28,18 @@ def run_migrations():
 def main():
     port = 8000
     host = "127.0.0.1"
+
+    config_file = PROJECT_ROOT / "config.yaml"
+    if not config_file.exists():
+        config_example = PROJECT_ROOT / "config.example.yaml"
+        if config_example.exists():
+            import shutil
+            shutil.copy2(str(config_example), str(config_file))
+            print("config.yaml cree depuis config.example.yaml")
+        else:
+            print("ERREUR: config.yaml introuvable. Lancez: python setup.py")
+            sys.exit(1)
+
     run_migrations()
     check_frontend_build()
 

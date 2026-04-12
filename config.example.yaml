@@ -1,0 +1,35 @@
+entity:
+  name: Mon Entite
+  type: association
+  currency: EUR
+  logo: ''
+  address: ''
+  siret: ''
+  rna: ''
+
+balance:
+  amount: 0.0
+  date: '2025-01-01'
+
+modules:
+  transactions: true
+  categories: true
+  dashboard: true
+  alerts: false
+  annotations: false
+  attachments: false
+  audit: false
+  bank_reconciliation: false
+  budget: false
+  divisions: false
+  export: false
+  fec_export: false
+  forecasting: false
+  grants: false
+  invoices: false
+  multi_accounts: false
+  multi_users: false
+  recurring: false
+  reimbursements: false
+  tax_receipts: false
+  tiers: false
