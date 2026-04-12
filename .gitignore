@@ -40,7 +40,6 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
-config.test.yaml
 
 # Plans d'implementation internes (pas utiles aux utilisateurs)
 docs/superpowers/plans/
