@@ -9,7 +9,7 @@ def discover_modules(modules_dir: str) -> list[dict]:
     for child in sorted(base.iterdir()):
         manifest_path = child / "manifest.json"
         if child.is_dir() and manifest_path.exists():
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
             modules.append(manifest)
     return modules

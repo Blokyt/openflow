@@ -6,15 +6,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
-from fastapi.testclient import TestClient
-
-from backend.main import create_app
-
-
-@pytest.fixture
-def client():
-    app = create_app(config_path="config.yaml", db_path="data/openflow.db")
-    return TestClient(app)
 
 
 # ---------------------------------------------------------------------------
@@ -90,19 +81,17 @@ def test_create_user_duplicate_username_returns_400(client):
     assert resp.status_code == 400
 
 
-def test_password_is_hashed_in_database(client):
+def test_password_is_hashed_in_database(client_and_db):
     """Verify that SHA-256 hash of the password is stored, not plaintext."""
     import sqlite3
-    from pathlib import Path
-    project_root = Path(__file__).parent.parent.parent
-    db_path = project_root / "data" / "openflow.db"
+    client, db_file = client_and_db
 
     password = "mysecretpassword"
     expected_hash = hashlib.sha256(password.encode()).hexdigest()
 
     user = make_user(client, username="hash_check_user", password=password)
 
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_file))
     row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
     conn.close()
 
@@ -197,12 +186,10 @@ def test_update_user_password_not_returned(client):
     assert "password" not in data
 
 
-def test_update_user_password_rehashed(client):
+def test_update_user_password_rehashed(client_and_db):
     """After updating password, new hash should be stored."""
     import sqlite3
-    from pathlib import Path
-    project_root = Path(__file__).parent.parent.parent
-    db_path = project_root / "data" / "openflow.db"
+    client, db_file = client_and_db
 
     user = make_user(client, username="rehash_user", password="oldpass")
     new_password = "newpass"
@@ -210,7 +197,7 @@ def test_update_user_password_rehashed(client):
 
     client.put(f"/api/multi_users/{user['id']}", json={"password": new_password})
 
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_file))
     row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
     conn.close()
 

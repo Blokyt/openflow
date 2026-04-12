@@ -5,7 +5,7 @@ import jsonschema
 SCHEMA_PATH = Path(__file__).parent.parent.parent / "tools" / "schemas" / "manifest.schema.json"
 
 def _load_schema() -> dict:
-    with open(SCHEMA_PATH) as f:
+    with open(SCHEMA_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 def validate_manifest(manifest: dict) -> list[str]:
@@ -14,7 +14,7 @@ def validate_manifest(manifest: dict) -> list[str]:
     return [e.message for e in validator.iter_errors(manifest)]
 
 def validate_manifest_file(path: str) -> list[str]:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         manifest = json.load(f)
     return validate_manifest(manifest)
 

@@ -37,7 +37,7 @@ def load_config(path: str) -> AppConfig:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
-    with open(p) as f:
+    with open(p, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     entity = EntityConfig(**raw.get("entity", {}))
     balance = BalanceConfig(**raw.get("balance", {}))
@@ -51,5 +51,5 @@ def save_config(config: AppConfig, path: str) -> None:
         "balance": asdict(config.balance),
         "modules": config.modules,
     }
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)

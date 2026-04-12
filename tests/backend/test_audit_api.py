@@ -3,29 +3,13 @@ import sys
 import sqlite3
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from fastapi.testclient import TestClient
-from backend.main import create_app
 import pytest
-
-
-@pytest.fixture
-def client():
-    app = create_app(config_path="config.yaml", db_path="data/openflow.db")
-    return TestClient(app)
-
-
-@pytest.fixture
-def db_path():
-    """Return the path to the test database."""
-    from pathlib import Path
-    project_root = Path(__file__).parent.parent.parent
-    return str(project_root / "data" / "openflow.db")
 
 
 @pytest.fixture
 def audit_entry(db_path):
     """Insert a test audit log entry directly via sqlite3 and return its id."""
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path))
     try:
         cur = conn.execute(
             """INSERT INTO audit_log (timestamp, user_name, action, table_name, record_id, old_value, new_value)
@@ -44,7 +28,7 @@ def audit_entry(db_path):
 def cleanup_audit_entries(db_path):
     """Remove all audit_log rows created during tests."""
     yield
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path))
     try:
         conn.execute("DELETE FROM audit_log WHERE user_name = 'test_user'")
         conn.commit()
@@ -102,7 +86,7 @@ def test_filter_action_no_crash(client):
 def test_filter_limit(client, audit_entry, db_path):
     """The limit param should restrict the number of results."""
     # Insert a second entry to ensure there's more than one
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
             """INSERT INTO audit_log (timestamp, user_name, action, table_name, record_id, old_value, new_value)

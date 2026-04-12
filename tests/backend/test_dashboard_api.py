@@ -1,13 +1,6 @@
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from fastapi.testclient import TestClient
-from backend.main import create_app
 import pytest
-
-@pytest.fixture
-def client():
-    app = create_app(config_path="config.yaml", db_path="data/openflow.db")
-    return TestClient(app)
 
 def test_get_available_widgets(client):
     response = client.get("/api/dashboard/widgets")

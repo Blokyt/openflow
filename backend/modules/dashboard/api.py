@@ -48,7 +48,7 @@ def get_available_widgets():
         if not mod_dir.is_dir() or not manifest_path.exists():
             continue
         try:
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
         except (json.JSONDecodeError, OSError):
             continue

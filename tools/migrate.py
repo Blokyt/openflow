@@ -156,7 +156,7 @@ def main():
                 print(f"  Skipping '{mod_dir.name}': no manifest.json")
                 continue
 
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 try:
                     manifest = json.load(f)
                 except json.JSONDecodeError as e:

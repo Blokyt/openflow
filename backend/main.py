@@ -3,8 +3,9 @@ import importlib
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.core.config import load_config, save_config
@@ -24,6 +25,8 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
     all_modules = discover_modules(str(modules_dir))
     active_modules = filter_active(all_modules, config.modules)
 
+    abs_db_path = project_root / db_path
+
     for manifest in active_modules:
         module_id = manifest["id"]
         for route_file in manifest.get("api_routes", []):
@@ -32,6 +35,8 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
                 module_name = f"backend.modules.{module_id}.{route_file.replace('.py', '')}"
                 try:
                     mod = importlib.import_module(module_name)
+                    if hasattr(mod, "DB_PATH"):
+                        mod.DB_PATH = abs_db_path
                     if hasattr(mod, "router"):
                         app.include_router(mod.router, prefix=f"/api/{module_id}", tags=[manifest["name"]])
                 except Exception as e:
@@ -82,6 +87,15 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
 
     build_dir = project_root / "frontend" / "dist"
     if build_dir.exists():
-        app.mount("/", StaticFiles(directory=str(build_dir), html=True), name="frontend")
+        # Serve static assets (JS, CSS, images)
+        app.mount("/assets", StaticFiles(directory=str(build_dir / "assets")), name="assets")
+
+        # SPA fallback: any non-API route serves index.html
+        @app.get("/{path:path}")
+        async def spa_fallback(path: str):
+            file_path = build_dir / path
+            if file_path.is_file():
+                return FileResponse(str(file_path))
+            return FileResponse(str(build_dir / "index.html"))
 
     return app

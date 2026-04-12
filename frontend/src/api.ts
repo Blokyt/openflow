@@ -11,6 +11,8 @@ export const api = {
   getModules: () => request<any[]>("/modules"),
   getAllModules: () => request<any[]>("/modules/all"),
   getConfig: () => request<any>("/config"),
+  updateEntity: (entity: any) => request<any>("/config/entity", { method: "PUT", body: JSON.stringify(entity) }),
+  updateBalance: (balance: any) => request<any>("/config/balance", { method: "PUT", body: JSON.stringify(balance) }),
   toggleModule: (id: string, active: boolean) => request<any>(`/config/modules/${id}?active=${active}`, { method: "PUT" }),
   getTransactions: (params?: Record<string, string>) => {
     const query = params ? "?" + new URLSearchParams(params).toString() : "";

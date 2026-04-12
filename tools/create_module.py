@@ -88,13 +88,13 @@ def main():
     }
     manifest["menu"] = {**manifest["menu"], "label": args.name}
 
-    with open(backend_dir / "manifest.json", "w") as f:
+    with open(backend_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
-    with open(backend_dir / "api.py", "w") as f:
+    with open(backend_dir / "api.py", "w", encoding="utf-8") as f:
         f.write(API_TEMPLATE.format(name=args.name, id=args.module_id))
 
-    with open(backend_dir / "models.py", "w") as f:
+    with open(backend_dir / "models.py", "w", encoding="utf-8") as f:
         f.write(MODELS_TEMPLATE.format(name=args.name))
 
     # Create frontend files
@@ -104,7 +104,7 @@ def main():
 
     component_name = "".join(word.capitalize() for word in args.module_id.split("_"))
 
-    with open(frontend_dir / "index.tsx", "w") as f:
+    with open(frontend_dir / "index.tsx", "w", encoding="utf-8") as f:
         f.write(
             INDEX_TSX_TEMPLATE.format(
                 component_name=component_name,

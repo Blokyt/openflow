@@ -6,15 +6,6 @@ from datetime import date, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
-from fastapi.testclient import TestClient
-
-from backend.main import create_app
-
-
-@pytest.fixture
-def client():
-    app = create_app(config_path="config.yaml", db_path="data/openflow.db")
-    return TestClient(app)
 
 
 # ---------------------------------------------------------------------------

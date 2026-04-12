@@ -4,14 +4,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from fastapi.testclient import TestClient
 from backend.main import create_app
-
-
-@pytest.fixture
-def client():
-    app = create_app(config_path="config.yaml", db_path="data/openflow.db")
-    return TestClient(app)
 
 
 def test_app_serves_modules_endpoint(client):
