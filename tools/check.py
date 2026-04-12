@@ -13,29 +13,21 @@ def main():
 
     project = Path(args.project_dir)
     modules_dir = project / "backend" / "modules"
-    schema_path = project / "tools" / "schemas" / "manifest.schema.json"
 
     errors = []
     warnings = []
     modules_found = []
 
     # Check config files
-    config_example_path = project / "config.example.yaml"
-    if not config_example_path.exists():
+    if not (project / "config.example.yaml").exists():
         warnings.append("config.example.yaml not found at project root")
-    config_path = project / "config.yaml"
-    if not config_path.exists():
+    if not (project / "config.yaml").exists():
         warnings.append("config.yaml not found — run 'python setup.py' or copy config.example.yaml")
 
-    if not schema_path.exists():
-        errors.append(f"Manifest schema not found: {schema_path}")
-        print_report(errors, warnings, modules_found)
-        sys.exit(1)
-
-    with open(schema_path, encoding="utf-8") as f:
-        schema = json.load(f)
-
-    import jsonschema
+    # Import validator from the real OpenFlow installation (not from --project-dir)
+    real_root = Path(__file__).parent.parent
+    sys.path.insert(0, str(real_root))
+    from backend.core.validator import validate_manifest, check_module_files
 
     if not modules_dir.exists():
         warnings.append("No backend/modules directory found")
@@ -57,17 +49,15 @@ def main():
                 errors.append(f"Module '{mod_dir.name}': invalid JSON: {e}")
                 continue
 
-        validator = jsonschema.Draft202012Validator(schema)
-        for error in validator.iter_errors(manifest):
-            errors.append(f"Module '{mod_dir.name}': {error.message}")
+        # Schema validation (delegated to validator)
+        for err in validate_manifest(manifest):
+            errors.append(f"Module '{mod_dir.name}': {err}")
 
-        for route_file in manifest.get("api_routes", []):
-            if not (mod_dir / route_file).exists():
-                errors.append(f"Module '{mod_dir.name}': api_route '{route_file}' not found")
-        for model_file in manifest.get("db_models", []):
-            if not (mod_dir / model_file).exists():
-                errors.append(f"Module '{mod_dir.name}': db_model '{model_file}' not found")
+        # File existence check (delegated to validator)
+        for err in check_module_files(manifest, str(mod_dir)):
+            errors.append(f"Module '{mod_dir.name}': {err}")
 
+        # ID must match directory name
         if manifest.get("id") != mod_dir.name:
             errors.append(
                 f"Module '{mod_dir.name}': id '{manifest.get('id')}' doesn't match directory"
@@ -75,7 +65,7 @@ def main():
 
         modules_found.append(manifest.get("id", mod_dir.name))
 
-    # Check dependencies
+    # Check cross-module dependencies
     for mod_dir in sorted(modules_dir.iterdir()):
         manifest_path = mod_dir / "manifest.json"
         if not manifest_path.exists() or not mod_dir.is_dir():
