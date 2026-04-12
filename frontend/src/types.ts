@@ -49,6 +49,7 @@ export interface ModuleManifest {
   id: string;
   name: string;
   description?: string;
+  help?: string;
   active: boolean;
   core: boolean;
   icon?: string;

@@ -2,6 +2,7 @@
   "id": "tax_receipts",
   "name": "Recus fiscaux",
   "description": "Generation et suivi des recus fiscaux",
+  "help": "Generez des recus fiscaux pour les dons (cerfa). Numerotation automatique par annee fiscale (RF-2025-001). Associez chaque recu a un contact du module Tiers.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",

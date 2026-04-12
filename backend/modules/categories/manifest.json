@@ -2,6 +2,7 @@
   "id": "categories",
   "name": "Categories",
   "description": "Gestion des categories de transactions",
+  "help": "Organisez vos transactions par categories (ex: Loyer, Fournitures, Ventes). Les categories peuvent etre hierarchiques (parent/enfant). Assignez une categorie a chaque transaction pour suivre vos depenses par poste.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "core",

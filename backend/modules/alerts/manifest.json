@@ -2,6 +2,7 @@
   "id": "alerts",
   "name": "Alertes",
   "description": "Notifications de seuils et echeances",
+  "help": "Definissez des seuils d'alerte sur votre solde. Le module verifie en temps reel si votre tresorerie passe sous un montant critique et vous previent. Ideal pour anticiper les problemes de cash.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",

@@ -2,6 +2,7 @@
   "id": "transactions",
   "name": "Transactions",
   "description": "Gestion des transactions financieres",
+  "help": "Enregistrez vos recettes et depenses. Chaque transaction a une date, un libelle et un montant (positif = recette, negatif = depense). Le solde se calcule automatiquement a partir de votre solde de reference. Filtrez par date, categorie ou mot-cle.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "core",

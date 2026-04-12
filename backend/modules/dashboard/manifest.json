@@ -2,6 +2,7 @@
   "id": "dashboard",
   "name": "Dashboard",
   "description": "Tableau de bord personnalisable",
+  "help": "Vue d'ensemble de votre tresorerie : solde actuel, revenus, depenses, et widgets personnalisables. Le tableau de bord agrege les donnees de tous vos modules actifs en un coup d'oeil.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "core",

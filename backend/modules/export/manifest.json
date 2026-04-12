@@ -2,6 +2,7 @@
   "id": "export",
   "name": "Export",
   "description": "Exporter les donnees en CSV et JSON",
+  "help": "Exportez vos donnees en CSV ou JSON. Generez un bilan par categorie avec le detail des recettes, depenses et solde net. Filtrez par date pour des rapports periodiques.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",

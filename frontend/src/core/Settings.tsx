@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
-import { Pencil, Check, X } from "lucide-react";
+import { Pencil, Check, X, ChevronDown, ChevronUp, Info } from "lucide-react";
 
 const CORE_MODULE_IDS = ["transactions", "categories", "dashboard"];
 
@@ -30,6 +30,7 @@ interface DisplayModule {
   id: string;
   name: string;
   description?: string;
+  help?: string;
   active: boolean;
   core: boolean;
 }
@@ -136,6 +137,7 @@ export default function Settings() {
         id,
         name: manifest?.name ?? id,
         description: manifest?.description,
+        help: manifest?.help,
         active: active as boolean,
         core: CORE_MODULE_IDS.includes(id),
       };
@@ -186,40 +188,60 @@ export default function Settings() {
   const moduleMap = new Map(modules.map((m) => [m.id, m]));
   const eur = (v: number) =>
     new Intl.NumberFormat("fr-FR", { style: "currency", currency: config?.entity.currency || "EUR" }).format(v);
+  const [expandedHelp, setExpandedHelp] = useState<string | null>(null);
 
   function renderModuleRow(mod: DisplayModule, idx: number) {
     const isCore = CORE_MODULE_IDS.includes(mod.id);
+    const isExpanded = expandedHelp === mod.id;
     return (
       <div
         key={mod.id}
-        className={`flex items-center justify-between px-5 py-4 ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
+        className={`${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
       >
-        <div className="flex-1 min-w-0 mr-4">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-white">{mod.name}</p>
-            {mod.active && <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] flex-shrink-0" />}
+        <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex-1 min-w-0 mr-4">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-white">{mod.name}</p>
+              {mod.active && <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] flex-shrink-0" />}
+              {mod.help && (
+                <button
+                  onClick={() => setExpandedHelp(isExpanded ? null : mod.id)}
+                  className="text-[#666] hover:text-[#F2C48D] transition-colors p-0.5"
+                  aria-label={`Aide pour ${mod.name}`}
+                >
+                  <Info size={14} />
+                </button>
+              )}
+            </div>
+            {mod.description ? <p className="text-xs text-[#666] mt-0.5 truncate">{mod.description}</p> : null}
           </div>
-          {mod.description ? <p className="text-xs text-[#666] mt-0.5 truncate">{mod.description}</p> : null}
-        </div>
-        {isCore ? (
-          <span className="text-xs text-[#666] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full flex-shrink-0">
-            Toujours actif
-          </span>
-        ) : (
-          <button
-            onClick={() => handleToggle(mod)}
-            disabled={toggling === mod.id}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-              mod.active ? "bg-[#F2C48D]" : "bg-[#333]"
-            }`}
-            aria-label={`Toggle ${mod.name}`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                mod.active ? "translate-x-5" : "translate-x-0"
+          {isCore ? (
+            <span className="text-xs text-[#666] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full flex-shrink-0">
+              Toujours actif
+            </span>
+          ) : (
+            <button
+              onClick={() => handleToggle(mod)}
+              disabled={toggling === mod.id}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                mod.active ? "bg-[#F2C48D]" : "bg-[#333]"
               }`}
-            />
-          </button>
+              aria-label={`Toggle ${mod.name}`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                  mod.active ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          )}
+        </div>
+        {isExpanded && mod.help && (
+          <div className="px-5 pb-4 -mt-1">
+            <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3">
+              <p className="text-xs text-[#999] leading-relaxed">{mod.help}</p>
+            </div>
+          </div>
         )}
       </div>
     );

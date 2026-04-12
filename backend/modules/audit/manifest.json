@@ -2,6 +2,7 @@
   "id": "audit",
   "name": "Piste d'audit",
   "description": "Journal immuable de toutes les modifications",
+  "help": "Journal immuable de toutes les modifications. Chaque action (creation, modification, suppression) est enregistree avec l'horodatage, l'utilisateur et les valeurs avant/apres. Consultable mais non modifiable.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",

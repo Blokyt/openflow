@@ -2,6 +2,7 @@
   "id": "fec_export",
   "name": "Export FEC",
   "description": "Génère le Fichier des Ecritures Comptables (FEC) au format officiel",
+  "help": "Generez le Fichier des Ecritures Comptables (FEC) au format legal francais. Chaque transaction est convertie en ecriture comptable avec journaux, comptes et debit/credit. Obligatoire pour les controles fiscaux.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",

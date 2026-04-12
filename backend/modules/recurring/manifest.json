@@ -2,6 +2,7 @@
   "id": "recurring",
   "name": "Transactions recurrentes",
   "description": "Automatiser les transactions repetitives",
+  "help": "Automatisez les transactions repetitives (loyer, abonnements, salaires). Definissez la frequence (hebdo, mensuel, trimestriel, annuel) et le module genere les ecritures automatiquement.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",

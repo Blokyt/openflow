@@ -2,6 +2,7 @@
   "id": "grants",
   "name": "Suivi de subventions",
   "description": "Suivi des subventions accordees et recues",
+  "help": "Suivez vos subventions : montant accorde, montant recu, solde en attente. Le recapitulatif calcule automatiquement le total accorde, recu et restant a percevoir.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",

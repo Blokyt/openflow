@@ -2,6 +2,7 @@
   "id": "divisions",
   "name": "Poles & Divisions",
   "description": "Decouper l'entite en sous-groupes",
+  "help": "Decoupez votre entite en poles, services ou projets. Chaque transaction peut etre rattachee a une division. Consultez le bilan (recettes, depenses, solde) par division.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",

@@ -35,7 +35,8 @@
         }
       }
     },
-    "settings_schema": { "type": "object" }
+    "settings_schema": { "type": "object" },
+    "help": { "type": "string" }
   },
   "additionalProperties": false
 }

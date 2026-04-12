@@ -2,6 +2,7 @@
   "id": "invoices",
   "name": "Factures & Devis",
   "description": "Emission et suivi de factures et devis",
+  "help": "Creez des factures et devis avec numerotation automatique (FAC-2025-001, DEV-2025-001). Ajoutez des lignes, un taux de TVA, et convertissez un devis en facture en un clic. Le total se calcule automatiquement.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",
