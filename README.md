@@ -79,7 +79,7 @@ Pour l'installer :
 ## Dev
 
 ```bash
-# Tests (423 tests)
+# Tests (435 tests)
 pip install -r requirements-dev.txt
 python -m pytest tests/ -v
 

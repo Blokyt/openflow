@@ -21,3 +21,8 @@ def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(str(_db_path))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def row_to_dict(row: sqlite3.Row) -> dict:
+    """Convert a sqlite3.Row to a plain dict."""
+    return dict(row)

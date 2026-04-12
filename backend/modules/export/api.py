@@ -8,13 +8,11 @@ from typing import Optional
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
 
-def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
 
 
 def _fetch_transactions(

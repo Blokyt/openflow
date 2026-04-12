@@ -1,17 +1,13 @@
 """Categories CRUD API."""
-import sqlite3
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
-
-def row_to_dict(row):
-    return dict(row) if row else None
 
 
 class CategoryIn(BaseModel):

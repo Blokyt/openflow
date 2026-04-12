@@ -6,15 +6,13 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
 VALID_TYPES = {"checking", "savings", "cash"}
 
 
-def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
 
 
 # --- Pydantic models ---

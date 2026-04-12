@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
@@ -18,8 +18,6 @@ def ensure_attachments_dir():
     ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
 
 
 @router.get("/transaction/{tx_id}")

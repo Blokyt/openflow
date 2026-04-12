@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from backend.core.balance import compute_entity_balance, compute_legacy_balance
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
@@ -18,8 +18,6 @@ CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 MODULES_DIR = PROJECT_ROOT / "backend" / "modules"
 
 
-def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
 
 
 class WidgetLayout(BaseModel):

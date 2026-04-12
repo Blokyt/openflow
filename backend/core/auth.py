@@ -16,21 +16,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api/") or path in PUBLIC_PATHS:
             return await call_next(request)
 
-        # If no users exist yet, skip auth (first-time setup)
         conn = get_conn()
         try:
             user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             if user_count == 0:
                 return await call_next(request)
-        finally:
-            conn.close()
 
-        session_id = request.cookies.get("session_id")
-        if not session_id:
-            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+            session_id = request.cookies.get("session_id")
+            if not session_id:
+                return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
-        conn = get_conn()
-        try:
             session = conn.execute(
                 "SELECT user_id FROM sessions WHERE id = ?", (session_id,)
             ).fetchone()

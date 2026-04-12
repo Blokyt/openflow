@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.core.balance import compute_legacy_balance
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
@@ -17,8 +17,6 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
 
-def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
 
 
 class TransactionCreate(BaseModel):

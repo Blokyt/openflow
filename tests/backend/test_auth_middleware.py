@@ -24,7 +24,7 @@ def test_api_with_users_requires_auth(client):
     """After creating a user, API requires auth."""
     # Create a user (this makes the DB non-empty)
     client.post("/api/multi_users/", json={
-        "username": "admin", "password": "pass", "role": "admin"
+        "username": "admin", "password": "pass123", "role": "admin"
     })
     # Now try to access without login
     resp = client.get("/api/transactions/")
@@ -41,11 +41,11 @@ def test_api_with_session_works(client):
 def test_login_is_always_public(client):
     """Login endpoint is accessible even when auth is required."""
     client.post("/api/multi_users/", json={
-        "username": "admin", "password": "pass", "role": "admin"
+        "username": "admin", "password": "pass123", "role": "admin"
     })
     # Login should work without existing session
     resp = client.post("/api/multi_users/login", json={
-        "username": "admin", "password": "pass"
+        "username": "admin", "password": "pass123"
     })
     assert resp.status_code == 200
 
@@ -53,7 +53,7 @@ def test_login_is_always_public(client):
 def test_invalid_session_returns_401(client):
     """Invalid session cookie returns 401."""
     client.post("/api/multi_users/", json={
-        "username": "admin", "password": "pass", "role": "admin"
+        "username": "admin", "password": "pass123", "role": "admin"
     })
     client.cookies.set("session_id", "fake-session-id")
     resp = client.get("/api/transactions/")

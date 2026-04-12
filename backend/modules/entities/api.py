@@ -1,21 +1,17 @@
 """Entities API module for OpenFlow."""
-import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance, compute_consolidated_balance
 
 router = APIRouter()
 
 VALID_TYPES = {"internal", "external"}
 
-
-def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
 
 
 class EntityCreate(BaseModel):
@@ -149,6 +145,20 @@ def update_entity(entity_id: int, update: EntityUpdate):
         if not fields:
             return row_to_dict(existing)
 
+        if "parent_id" in fields:
+            new_parent = fields["parent_id"]
+            if new_parent == entity_id:
+                raise HTTPException(400, "Entity cannot be its own parent")
+            # Walk up from proposed parent to check for cycles
+            current = new_parent
+            while current:
+                row = conn.execute("SELECT parent_id FROM entities WHERE id = ?", (current,)).fetchone()
+                if not row:
+                    break
+                if row["parent_id"] == entity_id:
+                    raise HTTPException(400, "Circular parent reference detected")
+                current = row["parent_id"]
+
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE entities SET {set_clause} WHERE id = ?", list(fields.values()) + [entity_id])
@@ -186,6 +196,7 @@ def delete_entity(entity_id: int):
             pass
 
         conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
+        conn.execute("DELETE FROM user_entities WHERE entity_id = ?", (entity_id,))
         conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
         conn.commit()
         return {"deleted": entity_id}

@@ -5,6 +5,10 @@ export interface Transaction {
   amount: number;
   description?: string;
   category_id?: number;
+  division_id?: number;
+  contact_id?: number;
+  from_entity_id?: number;
+  to_entity_id?: number;
   category?: Category;
 }
 
@@ -66,6 +70,8 @@ export interface Entity {
   is_divers: number;
   color: string;
   position: number;
+  created_at?: string;
+  updated_at?: string;
   children?: Entity[];
 }
 

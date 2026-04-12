@@ -8,7 +8,7 @@ import bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from backend.core.database import get_conn
+from backend.core.database import get_conn, row_to_dict
 from backend.core.auth import is_root_admin
 
 router = APIRouter()
@@ -30,7 +30,7 @@ def _verify_password(password: str, hashed: str) -> bool:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
-    d = dict(row)
+    d = row_to_dict(row)
     # Never expose password_hash
     d.pop("password_hash", None)
     return d
@@ -170,6 +170,8 @@ def change_password(request: Request, body: PasswordChange):
     user = _get_session_user(request)
     if not _verify_password(body.old_password, user["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
 
     new_hash = _hash_password(body.new_password)
     session_id = request.cookies.get("session_id")
@@ -355,6 +357,8 @@ def create_user(user: UserCreate, request: Request):
             status_code=400,
             detail=f"Invalid role '{user.role}'. Must be one of: {', '.join(VALID_ROLES)}",
         )
+    if len(user.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
 
     now = datetime.now(timezone.utc).isoformat()
     password_hash = _hash_password(user.password)
@@ -466,6 +470,8 @@ def delete_user(user_id: int, request: Request):
         ).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_entities WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         return {"deleted": user_id}

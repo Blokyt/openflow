@@ -21,7 +21,7 @@ python tools/migrate.py   # Applique les migrations DB (backup auto)
 python tools/create_module.py <id> --name "Nom" --description "Desc"
 
 pip install -r requirements-dev.txt   # Deps de test
-python -m pytest tests/ -v            # 423 tests, ~2.5min
+python -m pytest tests/ -v            # 435 tests, ~2.5min
 
 cd frontend && npm run build   # Build prod (Vite + React + Tailwind)
 cd frontend && npm run dev     # Dev server HMR sur port 5173
@@ -61,7 +61,7 @@ Toute la logique de calcul de solde est dans `backend/core/balance.py` :
 - `compute_entity_balance()` — solde propre d'une entite
 - `compute_consolidated_balance()` — solde consolide avec enfants
 
-## Systeme d'auth (en cours — Phase 2)
+## Systeme d'auth
 
 Le module `multi_users` gere l'authentification et les roles :
 
@@ -70,7 +70,7 @@ Le module `multi_users` gere l'authentification et les roles :
 - **`user_entities`** : role par entite par utilisateur (admin/tresorier/lecteur)
 - **Roles globaux** : `admin`, `tresorier`, `reader`
 - **Roles par entite** : granularite fine sur quel utilisateur voit quelle entite
-- Middleware auth en cours d'implementation dans `main.py` (Phase 2, T3)
+- Middleware auth actif dans `main.py` quand `multi_users` est active.
 
 ## Convention modules
 

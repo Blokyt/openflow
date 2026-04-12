@@ -59,7 +59,7 @@ export const api = {
   },
   getEntityTree: () => request<any[]>("/entities/tree"),
   createEntity: (e: any) => request<any>("/entities/", { method: "POST", body: JSON.stringify(e) }),
-  updateEntity_: (id: number, e: any) => request<any>(`/entities/${id}`, { method: "PUT", body: JSON.stringify(e) }),
+  updateEntityNode: (id: number, e: any) => request<any>(`/entities/${id}`, { method: "PUT", body: JSON.stringify(e) }),
   deleteEntity: (id: number) => request<any>(`/entities/${id}`, { method: "DELETE" }),
   getEntityBalance: (id: number) => request<any>(`/entities/${id}/balance`),
   getConsolidatedBalance: (id: number) => request<any>(`/entities/${id}/consolidated`),
