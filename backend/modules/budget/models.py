@@ -13,4 +13,7 @@ migrations = {
             FOREIGN KEY (division_id) REFERENCES divisions(id)
         )""",
     ],
+    "1.1.0": [
+        "ALTER TABLE budgets ADD COLUMN entity_id INTEGER",
+    ],
 }

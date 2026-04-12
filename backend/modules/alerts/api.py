@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.balance import compute_legacy_balance
+from backend.core.balance import compute_entity_balance, compute_legacy_balance
 from backend.core.database import get_conn
 
 router = APIRouter()
@@ -64,8 +64,10 @@ def create_alert_rule(rule: AlertRuleCreate):
         conn.close()
 
 
-def _compute_balance(conn: sqlite3.Connection) -> float:
-    """Compute current balance: reference_amount + sum of transactions since reference_date."""
+def _compute_balance(conn: sqlite3.Connection, entity_id=None) -> float:
+    """Compute current balance: entity-scoped if entity_id given, else legacy global."""
+    if entity_id:
+        return compute_entity_balance(conn, entity_id)["balance"]
     return compute_legacy_balance(conn, str(CONFIG_PATH))["balance"]
 
 
@@ -88,7 +90,8 @@ def check_alerts():
             threshold = rule_dict.get("threshold")
 
             if rule_dict["type"] == "low_balance":
-                current_value = _compute_balance(conn)
+                rule_entity_id = rule_dict.get("entity_id")
+                current_value = _compute_balance(conn, entity_id=rule_entity_id)
                 if threshold is not None:
                     triggered = current_value < threshold
 

@@ -3,7 +3,7 @@
   "name": "Budget Previsionnel",
   "description": "Enveloppes budgetaires par categorie",
   "help": "Definissez des enveloppes budgetaires par categorie et par periode. Le module calcule automatiquement le depense vs. budgete et le reste disponible. Ideal pour controler vos postes de depenses.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "categories"],

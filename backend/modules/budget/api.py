@@ -18,6 +18,7 @@ def row_to_dict(row: sqlite3.Row) -> dict:
 class BudgetCreate(BaseModel):
     category_id: Optional[int] = None
     division_id: Optional[int] = None
+    entity_id: Optional[int] = None
     period_start: str
     period_end: str
     amount: float
@@ -60,11 +61,12 @@ def create_budget(budget: BudgetCreate):
     try:
         cur = conn.execute(
             """INSERT INTO budgets
-               (category_id, division_id, period_start, period_end, amount, label, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (category_id, division_id, entity_id, period_start, period_end, amount, label, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 budget.category_id,
                 budget.division_id,
+                budget.entity_id,
                 budget.period_start,
                 budget.period_end,
                 budget.amount,
@@ -90,22 +92,42 @@ def get_status():
         result = []
         for b in budgets:
             b_dict = row_to_dict(b)
+            entity_id = b_dict.get("entity_id")
             # Sum transactions matching category_id within the budget date range
             if b["category_id"] is not None:
-                cur = conn.execute(
-                    """SELECT COALESCE(SUM(amount), 0) FROM transactions
-                       WHERE category_id = ?
-                         AND date >= ?
-                         AND date <= ?""",
-                    (b["category_id"], b["period_start"], b["period_end"]),
-                )
+                if entity_id is not None:
+                    cur = conn.execute(
+                        """SELECT COALESCE(SUM(amount), 0) FROM transactions
+                           WHERE category_id = ?
+                             AND date >= ?
+                             AND date <= ?
+                             AND (from_entity_id = ? OR to_entity_id = ?)""",
+                        (b["category_id"], b["period_start"], b["period_end"], entity_id, entity_id),
+                    )
+                else:
+                    cur = conn.execute(
+                        """SELECT COALESCE(SUM(amount), 0) FROM transactions
+                           WHERE category_id = ?
+                             AND date >= ?
+                             AND date <= ?""",
+                        (b["category_id"], b["period_start"], b["period_end"]),
+                    )
             else:
-                # No category filter: sum all transactions in the period
-                cur = conn.execute(
-                    """SELECT COALESCE(SUM(amount), 0) FROM transactions
-                       WHERE date >= ? AND date <= ?""",
-                    (b["period_start"], b["period_end"]),
-                )
+                if entity_id is not None:
+                    # No category filter, but entity filter: sum entity transactions in the period
+                    cur = conn.execute(
+                        """SELECT COALESCE(SUM(amount), 0) FROM transactions
+                           WHERE date >= ? AND date <= ?
+                             AND (from_entity_id = ? OR to_entity_id = ?)""",
+                        (b["period_start"], b["period_end"], entity_id, entity_id),
+                    )
+                else:
+                    # No category filter: sum all transactions in the period
+                    cur = conn.execute(
+                        """SELECT COALESCE(SUM(amount), 0) FROM transactions
+                           WHERE date >= ? AND date <= ?""",
+                        (b["period_start"], b["period_end"]),
+                    )
             spent = cur.fetchone()[0]
             b_dict["budgeted"] = b["amount"]
             b_dict["spent"] = spent

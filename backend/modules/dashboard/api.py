@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from backend.core.balance import compute_legacy_balance
+from backend.core.balance import compute_entity_balance, compute_legacy_balance
 from backend.core.database import get_conn
 
 router = APIRouter()
@@ -95,23 +95,42 @@ def save_layout(layout: list[WidgetLayout]):
 
 
 @router.get("/summary")
-def get_summary():
-    """Compute financial summary from config reference + transactions."""
+def get_summary(entity_id: Optional[int] = None):
+    """Compute financial summary from config reference + transactions.
+
+    If entity_id is provided, scope the balance and aggregates to that entity.
+    """
     conn = get_conn()
     try:
         cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'")
         if cur.fetchone() is None:
             return {"balance": 0.0, "total_income": 0.0, "total_expenses": 0.0, "transaction_count": 0}
 
-        bal = compute_legacy_balance(conn, str(CONFIG_PATH))
-
-        total_income = conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount > 0"
-        ).fetchone()[0]
-        total_expenses = abs(conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount < 0"
-        ).fetchone()[0])
-        transaction_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        if entity_id is not None:
+            bal = compute_entity_balance(conn, entity_id)
+            total_income = conn.execute(
+                """SELECT COALESCE(SUM(amount), 0) FROM transactions
+                   WHERE amount > 0 AND (from_entity_id = ? OR to_entity_id = ?)""",
+                (entity_id, entity_id),
+            ).fetchone()[0]
+            total_expenses = abs(conn.execute(
+                """SELECT COALESCE(SUM(amount), 0) FROM transactions
+                   WHERE amount < 0 AND (from_entity_id = ? OR to_entity_id = ?)""",
+                (entity_id, entity_id),
+            ).fetchone()[0])
+            transaction_count = conn.execute(
+                "SELECT COUNT(*) FROM transactions WHERE from_entity_id = ? OR to_entity_id = ?",
+                (entity_id, entity_id),
+            ).fetchone()[0]
+        else:
+            bal = compute_legacy_balance(conn, str(CONFIG_PATH))
+            total_income = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount > 0"
+            ).fetchone()[0]
+            total_expenses = abs(conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount < 0"
+            ).fetchone()[0])
+            transaction_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
 
         return {
             "balance": bal["balance"],

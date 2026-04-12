@@ -21,6 +21,7 @@ def _fetch_transactions(
     conn: sqlite3.Connection,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    entity_id: Optional[int] = None,
 ) -> list[dict]:
     query = "SELECT * FROM transactions WHERE 1=1"
     params = []
@@ -30,6 +31,9 @@ def _fetch_transactions(
     if date_to:
         query += " AND date <= ?"
         params.append(date_to)
+    if entity_id is not None:
+        query += " AND (from_entity_id = ? OR to_entity_id = ?)"
+        params.extend([entity_id, entity_id])
     query += " ORDER BY date DESC, id DESC"
     cur = conn.execute(query, params)
     return [row_to_dict(r) for r in cur.fetchall()]
@@ -39,11 +43,12 @@ def _fetch_transactions(
 def export_transactions_csv(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    entity_id: Optional[int] = None,
 ):
     """Export all transactions as a CSV file."""
     conn = get_conn()
     try:
-        rows = _fetch_transactions(conn, date_from, date_to)
+        rows = _fetch_transactions(conn, date_from, date_to, entity_id)
     finally:
         conn.close()
 
@@ -72,11 +77,12 @@ def export_transactions_csv(
 def export_transactions_json(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    entity_id: Optional[int] = None,
 ):
     """Export all transactions as a JSON file."""
     conn = get_conn()
     try:
-        rows = _fetch_transactions(conn, date_from, date_to)
+        rows = _fetch_transactions(conn, date_from, date_to, entity_id)
     finally:
         conn.close()
 
@@ -96,6 +102,7 @@ def export_transactions_json(
 def export_summary_csv(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    entity_id: Optional[int] = None,
 ):
     """Export a summary by category as a CSV file (category_name, total_income, total_expenses, net)."""
     conn = get_conn()
@@ -117,6 +124,9 @@ def export_summary_csv(
         if date_to:
             query += " AND t.date <= ?"
             params.append(date_to)
+        if entity_id is not None:
+            query += " AND (t.from_entity_id = ? OR t.to_entity_id = ?)"
+            params.extend([entity_id, entity_id])
         query += " GROUP BY COALESCE(c.name, 'Sans categorie') ORDER BY category_name"
         cur = conn.execute(query, params)
         rows = [row_to_dict(r) for r in cur.fetchall()]
