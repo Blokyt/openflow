@@ -63,14 +63,16 @@ Toute la logique de calcul de solde est dans `backend/core/balance.py` :
 
 ## Systeme d'auth
 
-Le module `multi_users` gere l'authentification et les roles :
+Le module `multi_users` gere l'authentification et les permissions :
 
-- **`users`** : username + password_hash (bcrypt) + role global + active
-- **`sessions`** : token de session (UUID) → user_id
-- **`user_entities`** : role par entite par utilisateur (admin/tresorier/lecteur)
-- **Roles globaux** : `admin`, `tresorier`, `reader`
-- **Roles par entite** : granularite fine sur quel utilisateur voit quelle entite
-- Middleware auth actif dans `main.py` quand `multi_users` est active.
+- **`users`** : username + password_hash (bcrypt, min 6 chars) + active
+- **`sessions`** : cookie httponly, token UUID, supprime a la fermeture navigateur
+- **`user_entities`** : `(user_id, entity_id, role)` — role par entite
+- **Roles** : `tresorier` (lire + ecrire) ou `lecteur` (consultation seule)
+- **Tresorier de la racine = admin** — gere les users, la structure, tout
+- **Heritage** : acces a une entite = acces a ses enfants
+- Middleware auth actif dans `main.py` quand `multi_users` est active
+- Sans users en DB → app ouverte (bootstrap du premier admin)
 
 ## Convention modules
 

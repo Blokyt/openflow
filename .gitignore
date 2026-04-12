@@ -6,6 +6,8 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
+.venv/
+venv/
 
 # Build (reconstruit par start.py)
 frontend/dist/
@@ -16,8 +18,28 @@ data/openflow.db.backup.*
 data/attachments/*
 !data/attachments/.gitkeep
 
+# Config utilisateur (cree par setup.py depuis config.example.yaml)
+config.yaml
+
 # Environment
 .env
+.env.local
 
-# Config utilisateur (chaque instance a sa propre config)
-config.yaml
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Plans/docs locaux (les specs et plans sont versionnes, pas les brouillons)
+*.draft.md
