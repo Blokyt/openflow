@@ -17,6 +17,7 @@ def main():
     errors = []
     warnings = []
     modules_found = []
+    parsed_manifests = []
 
     # Check config files
     if not (project / "config.example.yaml").exists():
@@ -64,17 +65,10 @@ def main():
             )
 
         modules_found.append(manifest.get("id", mod_dir.name))
+        parsed_manifests.append(manifest)
 
-    # Check cross-module dependencies
-    for mod_dir in sorted(modules_dir.iterdir()):
-        manifest_path = mod_dir / "manifest.json"
-        if not manifest_path.exists() or not mod_dir.is_dir():
-            continue
-        with open(manifest_path, encoding="utf-8") as f:
-            try:
-                manifest = json.load(f)
-            except json.JSONDecodeError:
-                continue
+    # Check cross-module dependencies (reuse already-parsed manifests)
+    for manifest in parsed_manifests:
         for dep in manifest.get("dependencies", []):
             if dep not in modules_found:
                 errors.append(

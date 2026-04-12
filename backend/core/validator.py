@@ -1,17 +1,20 @@
 import json
+from functools import lru_cache
 from pathlib import Path
 import jsonschema
 
 SCHEMA_PATH = Path(__file__).parent.parent.parent / "tools" / "schemas" / "manifest.schema.json"
 
-def _load_schema() -> dict:
+
+@lru_cache(maxsize=1)
+def _get_validator() -> jsonschema.Draft202012Validator:
     with open(SCHEMA_PATH, encoding="utf-8") as f:
-        return json.load(f)
+        schema = json.load(f)
+    return jsonschema.Draft202012Validator(schema)
+
 
 def validate_manifest(manifest: dict) -> list[str]:
-    schema = _load_schema()
-    validator = jsonschema.Draft202012Validator(schema)
-    return [e.message for e in validator.iter_errors(manifest)]
+    return [e.message for e in _get_validator().iter_errors(manifest)]
 
 def validate_manifest_file(path: str) -> list[str]:
     with open(path, encoding="utf-8") as f:

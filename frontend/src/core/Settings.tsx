@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
-import { Pencil, Check, X, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Pencil, Check, X, Info } from "lucide-react";
 
 const CORE_MODULE_IDS = ["transactions", "categories", "dashboard"];
 
@@ -126,6 +126,7 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [expandedHelp, setExpandedHelp] = useState<string | null>(null);
 
   async function reload() {
     const [cfg, discoveredMods] = await Promise.all([api.getConfig(), api.getAllModules()]);
@@ -186,9 +187,6 @@ export default function Settings() {
   }
 
   const moduleMap = new Map(modules.map((m) => [m.id, m]));
-  const eur = (v: number) =>
-    new Intl.NumberFormat("fr-FR", { style: "currency", currency: config?.entity.currency || "EUR" }).format(v);
-  const [expandedHelp, setExpandedHelp] = useState<string | null>(null);
 
   function renderModuleRow(mod: DisplayModule, idx: number) {
     const isCore = CORE_MODULE_IDS.includes(mod.id);

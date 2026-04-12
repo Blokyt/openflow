@@ -1,6 +1,6 @@
 """Shared fixtures for backend tests — isolated DB per test."""
 import json
-import os
+import shutil
 import sqlite3
 import sys
 from pathlib import Path
@@ -32,19 +32,24 @@ def _init_db(db_path: str):
             manifest = json.load(f)
         module_id = manifest.get("id", mod_dir.name)
         target_version = manifest.get("version", "1.0.0")
-        try:
-            migrations = load_migrations(models_path)
-        except Exception:
-            continue
+        migrations = load_migrations(models_path)
         apply_migrations(conn, module_id, migrations, None, target_version)
     conn.close()
 
 
+@pytest.fixture(scope="session")
+def _db_template(tmp_path_factory):
+    """Build the fully-migrated DB once for the entire test session."""
+    template = tmp_path_factory.mktemp("template") / "template.db"
+    _init_db(str(template))
+    return template
+
+
 @pytest.fixture
-def db_path(tmp_path):
-    """Return the path to the isolated test DB (for tests that need raw access)."""
+def db_path(tmp_path, _db_template):
+    """Copy the template DB — avoids re-running migrations per test."""
     db_file = tmp_path / "test.db"
-    _init_db(str(db_file))
+    shutil.copy2(str(_db_template), str(db_file))
     return db_file
 
 
