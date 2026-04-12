@@ -1,0 +1,246 @@
+"""Tests for auth endpoints: login, logout, me, password change, entity access."""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def make_user(client, username="authuser", password="testpass123", role="reader"):
+    resp = client.post("/api/multi_users/", json={
+        "username": username,
+        "password": password,
+        "role": role,
+        "display_name": "Auth Test User",
+    })
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def make_entity(client, name="TestEntity"):
+    resp = client.post("/api/entities/", json={"name": name, "type": "internal"})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/multi_users/login
+# ---------------------------------------------------------------------------
+
+def test_login_success(client):
+    make_user(client, username="login_ok_user", password="correctpass")
+    resp = client.post("/api/multi_users/login", json={
+        "username": "login_ok_user",
+        "password": "correctpass",
+    })
+    assert resp.status_code == 200
+    # Cookie should be set
+    assert "session_id" in resp.cookies
+
+
+def test_login_wrong_password(client):
+    make_user(client, username="login_wrong_pwd_user", password="rightpass")
+    resp = client.post("/api/multi_users/login", json={
+        "username": "login_wrong_pwd_user",
+        "password": "wrongpass",
+    })
+    assert resp.status_code == 401
+
+
+def test_login_nonexistent_user(client):
+    resp = client.post("/api/multi_users/login", json={
+        "username": "ghost_user_xyz",
+        "password": "whatever",
+    })
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /api/multi_users/logout
+# ---------------------------------------------------------------------------
+
+def test_logout(client):
+    make_user(client, username="logout_test_user", password="logoutpass")
+    # Login
+    login_resp = client.post("/api/multi_users/login", json={
+        "username": "logout_test_user",
+        "password": "logoutpass",
+    })
+    assert login_resp.status_code == 200
+    assert "session_id" in client.cookies
+
+    # Logout
+    logout_resp = client.post("/api/multi_users/logout")
+    assert logout_resp.status_code == 200
+
+    # Cookie should be cleared — /me should now return 401
+    # We need to clear the client cookies to simulate cleared cookie
+    client.cookies.clear()
+    me_resp = client.get("/api/multi_users/me")
+    assert me_resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /api/multi_users/me
+# ---------------------------------------------------------------------------
+
+def test_me_with_session(client):
+    make_user(client, username="me_session_user", password="mepass")
+    client.post("/api/multi_users/login", json={
+        "username": "me_session_user",
+        "password": "mepass",
+    })
+    resp = client.get("/api/multi_users/me")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["username"] == "me_session_user"
+    assert "id" in data
+    assert "display_name" in data
+    assert "entities" in data
+
+
+def test_me_without_session(client):
+    resp = client.get("/api/multi_users/me")
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/multi_users/me/password
+# ---------------------------------------------------------------------------
+
+def test_change_password(client):
+    make_user(client, username="change_pwd_user", password="oldpassword")
+    client.post("/api/multi_users/login", json={
+        "username": "change_pwd_user",
+        "password": "oldpassword",
+    })
+
+    # Change password
+    resp = client.put("/api/multi_users/me/password", json={
+        "old_password": "oldpassword",
+        "new_password": "newpassword123",
+    })
+    assert resp.status_code == 200
+
+    # Login with new password
+    client.cookies.clear()
+    login_resp = client.post("/api/multi_users/login", json={
+        "username": "change_pwd_user",
+        "password": "newpassword123",
+    })
+    assert login_resp.status_code == 200
+
+
+def test_change_password_wrong_old(client):
+    make_user(client, username="wrong_old_pwd_user", password="correctold")
+    client.post("/api/multi_users/login", json={
+        "username": "wrong_old_pwd_user",
+        "password": "correctold",
+    })
+
+    resp = client.put("/api/multi_users/me/password", json={
+        "old_password": "wrongold",
+        "new_password": "doesntmatter",
+    })
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Entity access endpoints
+# ---------------------------------------------------------------------------
+
+def test_assign_entity_access(client):
+    user = make_user(client, username="assign_entity_user")
+    entity = make_entity(client, name="AssignEntity")
+
+    resp = client.post(f"/api/multi_users/{user['id']}/entities", json={
+        "entity_id": entity["id"],
+        "role": "lecteur",
+    })
+    assert resp.status_code == 201
+
+    list_resp = client.get(f"/api/multi_users/{user['id']}/entities")
+    assert list_resp.status_code == 200
+    entities = list_resp.json()
+    entity_ids = [e["entity_id"] for e in entities]
+    assert entity["id"] in entity_ids
+
+
+def test_remove_entity_access(client):
+    user = make_user(client, username="remove_entity_user")
+    entity = make_entity(client, name="RemoveEntity")
+
+    # Assign
+    client.post(f"/api/multi_users/{user['id']}/entities", json={
+        "entity_id": entity["id"],
+        "role": "lecteur",
+    })
+
+    # Remove
+    del_resp = client.delete(f"/api/multi_users/{user['id']}/entities/{entity['id']}")
+    assert del_resp.status_code == 200
+
+    # List should be empty
+    list_resp = client.get(f"/api/multi_users/{user['id']}/entities")
+    assert list_resp.json() == []
+
+
+def test_assign_duplicate_entity_returns_400(client):
+    user = make_user(client, username="dup_entity_user")
+    entity = make_entity(client, name="DupEntity")
+
+    client.post(f"/api/multi_users/{user['id']}/entities", json={
+        "entity_id": entity["id"],
+        "role": "lecteur",
+    })
+    resp = client.post(f"/api/multi_users/{user['id']}/entities", json={
+        "entity_id": entity["id"],
+        "role": "tresorier",
+    })
+    assert resp.status_code == 400
+
+
+def test_assign_invalid_entity_role_returns_400(client):
+    user = make_user(client, username="invalid_role_entity_user")
+    entity = make_entity(client, name="InvalidRoleEntity")
+
+    resp = client.post(f"/api/multi_users/{user['id']}/entities", json={
+        "entity_id": entity["id"],
+        "role": "admin",
+    })
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# GET /api/multi_users/me — includes entities
+# ---------------------------------------------------------------------------
+
+def test_me_includes_entities(client):
+    user = make_user(client, username="me_entities_user", password="meentpass")
+    entity = make_entity(client, name="MeIncludeEntity")
+
+    # Assign entity
+    client.post(f"/api/multi_users/{user['id']}/entities", json={
+        "entity_id": entity["id"],
+        "role": "tresorier",
+    })
+
+    # Login
+    client.post("/api/multi_users/login", json={
+        "username": "me_entities_user",
+        "password": "meentpass",
+    })
+
+    # /me should include entities
+    resp = client.get("/api/multi_users/me")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "entities" in data
+    assert len(data["entities"]) >= 1
+    entity_ids = [e["entity_id"] for e in data["entities"]]
+    assert entity["id"] in entity_ids

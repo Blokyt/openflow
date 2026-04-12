@@ -3,7 +3,7 @@
   "name": "Multi-utilisateurs",
   "description": "Gestion des utilisateurs et des rôles d'accès",
   "help": "Gerez les acces a l'application avec des roles : admin (tout), tresorier (lecture/ecriture), lecteur (consultation). Chaque utilisateur a un identifiant et un mot de passe securise.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "origin": "builtin",
   "category": "advanced",
   "dependencies": ["audit"],

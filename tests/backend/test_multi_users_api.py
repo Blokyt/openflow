@@ -1,5 +1,4 @@
 """Tests for the multi_users module API."""
-import hashlib
 import os
 import sys
 
@@ -82,12 +81,11 @@ def test_create_user_duplicate_username_returns_400(client):
 
 
 def test_password_is_hashed_in_database(client_and_db):
-    """Verify that SHA-256 hash of the password is stored, not plaintext."""
+    """Verify that bcrypt hash of the password is stored, not plaintext."""
     import sqlite3
     client, db_file = client_and_db
 
     password = "mysecretpassword"
-    expected_hash = hashlib.sha256(password.encode()).hexdigest()
 
     user = make_user(client, username="hash_check_user", password=password)
 
@@ -96,7 +94,8 @@ def test_password_is_hashed_in_database(client_and_db):
     conn.close()
 
     assert row is not None
-    assert row[0] == expected_hash
+    # bcrypt hashes start with $2b$
+    assert row[0].startswith("$2b$")
 
 
 # ---------------------------------------------------------------------------
@@ -187,13 +186,12 @@ def test_update_user_password_not_returned(client):
 
 
 def test_update_user_password_rehashed(client_and_db):
-    """After updating password, new hash should be stored."""
+    """After updating password, new bcrypt hash should be stored."""
     import sqlite3
     client, db_file = client_and_db
 
     user = make_user(client, username="rehash_user", password="oldpass")
     new_password = "newpass"
-    expected_hash = hashlib.sha256(new_password.encode()).hexdigest()
 
     client.put(f"/api/multi_users/{user['id']}", json={"password": new_password})
 
@@ -201,7 +199,8 @@ def test_update_user_password_rehashed(client_and_db):
     row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
     conn.close()
 
-    assert row[0] == expected_hash
+    # bcrypt hashes start with $2b$
+    assert row[0].startswith("$2b$")
 
 
 def test_update_user_not_found_returns_404(client):
