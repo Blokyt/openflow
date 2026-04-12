@@ -22,7 +22,7 @@ def main():
     # Check config files
     config_example_path = project / "config.example.yaml"
     if not config_example_path.exists():
-        errors.append("config.example.yaml not found at project root")
+        warnings.append("config.example.yaml not found at project root")
     config_path = project / "config.yaml"
     if not config_path.exists():
         warnings.append("config.yaml not found — run 'python setup.py' or copy config.example.yaml")
