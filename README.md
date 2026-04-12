@@ -6,7 +6,7 @@ Outil de gestion de tresorerie modulaire. Deployez votre comptabilite depuis un 
 
 ```bash
 # Cloner le repo
-git clone https://github.com/<user>/openflow.git
+git clone https://github.com/Blokyt/openflow.git
 cd openflow
 
 # Installer (Python 3.10+, Node.js 18+)
