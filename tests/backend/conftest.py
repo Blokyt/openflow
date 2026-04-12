@@ -69,19 +69,55 @@ def client_and_db(db_path):
 
 @pytest.fixture
 def authed_client(db_path):
-    """TestClient with an admin user already created and logged in.
+    """TestClient with an admin user already created, logged in, and assigned
+    as tresorier on the root entity (so is_root_admin() returns True).
 
     Use this fixture for tests that hit protected endpoints when multi_users
     is enabled, so the auth middleware lets requests through.
     """
+    import sqlite3 as _sqlite3
+    from datetime import datetime, timezone as _tz
+
     app = create_app(config_path="config.test.yaml", db_path=str(db_path))
     c = TestClient(app)
+
     # Create the first admin (public — no users yet, middleware skips)
-    c.post("/api/multi_users/", json={
+    user_resp = c.post("/api/multi_users/", json={
         "username": "_test_admin",
         "password": "_test_pass_123",
         "role": "admin",
     })
+    user_id = user_resp.json()["id"]
+
+    # Ensure a root entity exists and assign tresorier role to the admin.
+    # We do this directly via the DB (before login so is_root_admin works).
+    conn = _sqlite3.connect(str(db_path))
+    conn.row_factory = _sqlite3.Row
+    try:
+        # Check if a root (parent_id IS NULL, type='internal', is_default=1) entity exists
+        root = conn.execute(
+            "SELECT id FROM entities WHERE parent_id IS NULL AND type='internal' AND is_default=1"
+        ).fetchone()
+        if root is None:
+            now = datetime.now(_tz.utc).isoformat()
+            cur = conn.execute(
+                "INSERT INTO entities (name, type, parent_id, is_default, color, position, created_at, updated_at) "
+                "VALUES (?, 'internal', NULL, 1, '#6B7280', 0, ?, ?)",
+                ("Root", now, now),
+            )
+            conn.commit()
+            root_id = cur.lastrowid
+        else:
+            root_id = root["id"]
+        # Assign tresorier on root entity
+        conn.execute(
+            "INSERT OR REPLACE INTO user_entities (user_id, entity_id, role) VALUES (?, ?, 'tresorier')",
+            (user_id, root_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
     # Login to obtain session cookie
     c.post("/api/multi_users/login", json={
         "username": "_test_admin",

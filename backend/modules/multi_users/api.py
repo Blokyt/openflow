@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from backend.core.database import get_conn
+from backend.core.auth import is_root_admin
 
 router = APIRouter()
 
@@ -191,11 +192,46 @@ def change_password(request: Request, body: PasswordChange):
 
 
 # ---------------------------------------------------------------------------
+# Admin utility endpoints (must come BEFORE /{user_id} routes)
+# ---------------------------------------------------------------------------
+
+@router.post("/cleanup-sessions")
+def cleanup_sessions(request: Request):
+    """Remove stale sessions older than 24h. Admin only."""
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
+
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM sessions WHERE datetime(created_at) < datetime('now', '-24 hours')")
+        conn.commit()
+        remaining = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        return {"remaining_sessions": remaining}
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Entity access endpoints
 # ---------------------------------------------------------------------------
 
 @router.get("/{user_id}/entities")
-def list_user_entities(user_id: int):
+def list_user_entities(user_id: int, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0:
+        # Allow self or root admin
+        current = getattr(request.state, "user", None)
+        if current is None or (current["id"] != user_id and not is_root_admin(request)):
+            raise HTTPException(403, "Admin access required")
     conn = get_conn()
     try:
         rows = conn.execute(
@@ -211,7 +247,14 @@ def list_user_entities(user_id: int):
 
 
 @router.post("/{user_id}/entities", status_code=201)
-def assign_entity(user_id: int, body: EntityAssignment):
+def assign_entity(user_id: int, body: EntityAssignment, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
     if body.role not in VALID_ENTITY_ROLES:
         raise HTTPException(
             status_code=400,
@@ -248,7 +291,14 @@ def assign_entity(user_id: int, body: EntityAssignment):
 
 
 @router.delete("/{user_id}/entities/{entity_id}")
-def remove_entity_access(user_id: int, entity_id: int):
+def remove_entity_access(user_id: int, entity_id: int, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
     conn = get_conn()
     try:
         existing = conn.execute(
@@ -275,7 +325,14 @@ def remove_entity_access(user_id: int, entity_id: int):
 # ---------------------------------------------------------------------------
 
 @router.get("/")
-def list_users():
+def list_users(request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
     conn = get_conn()
     try:
         cur = conn.execute("SELECT * FROM users ORDER BY id ASC")
@@ -285,7 +342,14 @@ def list_users():
 
 
 @router.post("/", status_code=201)
-def create_user(user: UserCreate):
+def create_user(user: UserCreate, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
     if user.role not in VALID_ROLES:
         raise HTTPException(
             status_code=400,
@@ -316,7 +380,17 @@ def create_user(user: UserCreate):
 
 
 @router.get("/{user_id}")
-def get_user(user_id: int):
+def get_user(user_id: int, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0:
+        # Allow self or root admin
+        current = getattr(request.state, "user", None)
+        if current is None or (current["id"] != user_id and not is_root_admin(request)):
+            raise HTTPException(403, "Admin access required")
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -328,7 +402,14 @@ def get_user(user_id: int):
 
 
 @router.put("/{user_id}")
-def update_user(user_id: int, user: UserUpdate):
+def update_user(user_id: int, user: UserUpdate, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
     conn = get_conn()
     try:
         existing = conn.execute(
@@ -370,7 +451,14 @@ def update_user(user_id: int, user: UserUpdate):
 
 
 @router.delete("/{user_id}")
-def delete_user(user_id: int):
+def delete_user(user_id: int, request: Request):
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
     conn = get_conn()
     try:
         existing = conn.execute(
