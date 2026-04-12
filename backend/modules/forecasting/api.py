@@ -5,7 +5,7 @@ from dateutil.relativedelta import relativedelta
 
 from fastapi import APIRouter
 
-from backend.core.config import load_config
+from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn
 
 router = APIRouter()
@@ -22,29 +22,11 @@ def get_projection(months: int = 6):
     2. Compute average monthly income and expenses from the last 6 months of transactions.
     3. Project forward: for each future month, balance += avg_income - avg_expenses.
     """
-    # --- Load config for balance reference ---
-    try:
-        config = load_config(str(CONFIG_PATH))
-        reference_amount = config.balance.amount
-        reference_date = config.balance.date
-    except Exception:
-        reference_amount = 0.0
-        reference_date = None
-
     conn = get_conn()
     try:
         # --- Step 1: current balance ---
-        if reference_date:
-            row = conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE date >= ?",
-                (reference_date,),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) FROM transactions"
-            ).fetchone()
-        transactions_sum = row[0]
-        current_balance = reference_amount + transactions_sum
+        bal = compute_legacy_balance(conn, str(CONFIG_PATH))
+        current_balance = bal["balance"]
 
         # --- Step 2: averages over the last 6 calendar months ---
         today = date.today()

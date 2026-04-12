@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.config import load_config
+from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn
 
 router = APIRouter()
@@ -66,23 +66,7 @@ def create_alert_rule(rule: AlertRuleCreate):
 
 def _compute_balance(conn: sqlite3.Connection) -> float:
     """Compute current balance: reference_amount + sum of transactions since reference_date."""
-    try:
-        config = load_config(str(CONFIG_PATH))
-        reference_amount = config.balance.amount
-        reference_date = config.balance.date
-    except Exception:
-        reference_amount = 0.0
-        reference_date = None
-
-    if reference_date:
-        cur = conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE date >= ?",
-            (reference_date,),
-        )
-    else:
-        cur = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM transactions")
-    total = cur.fetchone()[0]
-    return reference_amount + total
+    return compute_legacy_balance(conn, str(CONFIG_PATH))["balance"]
 
 
 # IMPORTANT: /check must be declared BEFORE /{rule_id} to avoid FastAPI

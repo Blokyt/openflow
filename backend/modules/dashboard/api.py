@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from backend.core.config import load_config
+from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn
 
 router = APIRouter()
@@ -97,57 +97,24 @@ def save_layout(layout: list[WidgetLayout]):
 @router.get("/summary")
 def get_summary():
     """Compute financial summary from config reference + transactions."""
-    # Load balance reference from config
-    try:
-        config = load_config(str(CONFIG_PATH))
-        reference_amount = config.balance.amount
-        reference_date = config.balance.date
-    except Exception:
-        reference_amount = 0.0
-        reference_date = None
-
     conn = get_conn()
     try:
-        # Check transactions table exists
-        cur = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'"
-        )
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'")
         if cur.fetchone() is None:
-            return {
-                "balance": reference_amount,
-                "total_income": 0.0,
-                "total_expenses": 0.0,
-                "transaction_count": 0,
-            }
+            return {"balance": 0.0, "total_income": 0.0, "total_expenses": 0.0, "transaction_count": 0}
 
-        if reference_date:
-            cur = conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE date >= ?",
-                (reference_date,),
-            )
-        else:
-            cur = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM transactions")
-        transactions_sum = cur.fetchone()[0]
-        balance = reference_amount + transactions_sum
+        bal = compute_legacy_balance(conn, str(CONFIG_PATH))
 
-        # Total income: sum of positive amounts
-        cur = conn.execute(
+        total_income = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount > 0"
-        )
-        total_income = cur.fetchone()[0]
-
-        # Total expenses: abs of sum of negative amounts
-        cur = conn.execute(
+        ).fetchone()[0]
+        total_expenses = abs(conn.execute(
             "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount < 0"
-        )
-        total_expenses = abs(cur.fetchone()[0])
-
-        # Transaction count
-        cur = conn.execute("SELECT COUNT(*) FROM transactions")
-        transaction_count = cur.fetchone()[0]
+        ).fetchone()[0])
+        transaction_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
 
         return {
-            "balance": balance,
+            "balance": bal["balance"],
             "total_income": total_income,
             "total_expenses": total_expenses,
             "transaction_count": transaction_count,
