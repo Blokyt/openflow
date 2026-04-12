@@ -12,6 +12,7 @@ balance:
   amount: 0.0
 
 modules:
+  entities: true
   transactions: true
   categories: true
   dashboard: true
