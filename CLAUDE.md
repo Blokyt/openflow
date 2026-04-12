@@ -7,6 +7,10 @@ plug-and-play independantes. Chaque module contient son manifest, son API, ses
 migrations et son composant frontend. Ne jamais hardcoder de logique inter-modules
 dans le core — les modules se decouvrent dynamiquement via leurs manifests.
 
+**Principe fondamental :** les transactions sont la source de verite. Chaque transaction
+a toujours `from_entity_id` ET `to_entity_id` specifies — jamais null. Le solde est
+100% dynamique : reference + SUM entrant - SUM sortant par entite.
+
 ## Commands
 
 ```bash
@@ -17,7 +21,7 @@ python tools/migrate.py   # Applique les migrations DB (backup auto)
 python tools/create_module.py <id> --name "Nom" --description "Desc"
 
 pip install -r requirements-dev.txt   # Deps de test
-python -m pytest tests/ -v            # 361 tests, ~2.5min
+python -m pytest tests/ -v            # 423 tests, ~2.5min
 
 cd frontend && npm run build   # Build prod (Vite + React + Tailwind)
 cd frontend && npm run dev     # Dev server HMR sur port 5173
@@ -29,6 +33,7 @@ cd frontend && npm run dev     # Dev server HMR sur port 5173
 backend/main.py             — FastAPI app factory, charge les modules actifs
 backend/core/database.py    — get_conn() centralise, set_db_path() au demarrage
 backend/core/config.py      — Dataclasses AppConfig, load/save YAML
+backend/core/balance.py     — Calcul de solde centralise (legacy + entity-aware)
 backend/core/module_loader.py — Decouverte modules via manifest.json
 backend/core/validator.py   — Validation schema manifest (cache lru)
 backend/modules/<id>/       — Un module = manifest.json + api.py + models.py
@@ -38,6 +43,34 @@ tools/                      — Scripts CLI (check, migrate, create_module)
 config.example.yaml         — Template config (versionne)
 config.yaml                 — Config utilisateur (gitignored, cree par setup.py)
 ```
+
+## Systeme d'entites
+
+Le module `entities` introduit un arbre d'entites librement hierarchique :
+
+- **Type `internal`** : entites dont on gere la tresorerie (ex: BDA, Gastronomine)
+- **Type `external`** : tiers externes (fournisseurs, clients, banque)
+- **Hierarchie** : `parent_id` libre, profondeur illimitee
+- **Chaque transaction** a `from_entity_id → to_entity_id` (JAMAIS null)
+- **Solde propre** : reference + SUM entrant - SUM sortant pour une entite
+- **Solde consolide** : propre + tous les descendants (CTE recursive)
+- **`entity_balance_refs`** : table de references de solde par entite
+
+Toute la logique de calcul de solde est dans `backend/core/balance.py` :
+- `compute_legacy_balance()` — retrocompatibilite pour modules non entity-aware
+- `compute_entity_balance()` — solde propre d'une entite
+- `compute_consolidated_balance()` — solde consolide avec enfants
+
+## Systeme d'auth (en cours — Phase 2)
+
+Le module `multi_users` gere l'authentification et les roles :
+
+- **`users`** : username + password_hash (bcrypt) + role global + active
+- **`sessions`** : token de session (UUID) → user_id
+- **`user_entities`** : role par entite par utilisateur (admin/tresorier/lecteur)
+- **Roles globaux** : `admin`, `tresorier`, `reader`
+- **Roles par entite** : granularite fine sur quel utilisateur voit quelle entite
+- Middleware auth en cours d'implementation dans `main.py` (Phase 2, T3)
 
 ## Convention modules
 
@@ -53,6 +86,16 @@ Toujours lancer `check.py` apres modification d'un manifest.
 
 Pour creer un module : `python tools/create_module.py <id> --name "..." --description "..."`
 
+## 22 modules disponibles
+
+**Core (toujours actifs) :** transactions, categories, dashboard, entities
+
+**Standard :** invoices, reimbursements, budget, divisions, tiers, attachments,
+annotations, export
+
+**Avance :** bank_reconciliation, recurring, multi_accounts, audit, forecasting,
+alerts, tax_receipts, grants, fec_export, multi_users
+
 ## Testing
 
 - `conftest.py` build une DB template une fois par session, puis la copie par test
@@ -60,6 +103,7 @@ Pour creer un module : `python tools/create_module.py <id> --name "..." --descri
 - Fixture `client` → TestClient avec DB isolee
 - Fixture `client_and_db` → (TestClient, db_path) pour acces DB direct
 - Les `test_coherence_*.py` verifient les calculs cross-modules
+- `test_balance_core.py` et `test_coherence_entities.py` couvrent le systeme d'entites
 
 ## Gotchas
 
@@ -68,5 +112,7 @@ Pour creer un module : `python tools/create_module.py <id> --name "..." --descri
 - **PRAGMA foreign_keys OFF** partout — pas de contraintes FK au runtime
 - **MODULE_CATEGORIES dans Settings.tsx** : hardcode le groupement par categorie
   (devrait a terme lire manifest.category dynamiquement)
-- **CONFIG_PATH** : certains modules (transactions, dashboard, alerts, forecasting)
-  lisent config.yaml directement pour calculer le solde — a centraliser si ca grossit
+- **Solde centralise dans balance.py** : ne pas recalculer le solde dans les modules,
+  toujours importer depuis `backend.core.balance`
+- **from_entity_id / to_entity_id** : toujours specifies sur les transactions — le
+  calcul de solde repose dessus. Ne jamais les laisser null en insertion.

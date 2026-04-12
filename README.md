@@ -21,9 +21,10 @@ python start.py
 
 | Module | Categorie | Description |
 |--------|-----------|-------------|
-| transactions | noyau | CRUD, filtres, solde dynamique |
+| transactions | noyau | CRUD, filtres, solde dynamique, from/to entity |
 | categories | noyau | Hierarchie parent/enfant |
 | dashboard | noyau | Cartes de synthese, widgets |
+| entities | noyau | Arbre d'entites, soldes propres et consolides |
 | invoices | standard | Factures & devis |
 | reimbursements | standard | Suivi des avances |
 | budget | standard | Enveloppes budgetaires |
@@ -41,7 +42,7 @@ python start.py
 | tax_receipts | avance | Recus fiscaux cerfa |
 | grants | avance | Suivi subventions |
 | fec_export | avance | Export FEC legal |
-| multi_users | avance | Roles admin/tresorier/lecteur |
+| multi_users | avance | Auth multi-utilisateurs, roles, droits par entite |
 
 Activez/desactivez les modules dans `config.yaml` section `modules`, puis relancez l'app.
 
@@ -59,6 +60,14 @@ balance:
   date: '2025-06-01' # A cette date
 ```
 
+## Systeme d'entites
+
+Le module `entities` permet de gerer des structures organisationnelles complexes : association principale, sous-clubs, fournisseurs, clients. Chaque transaction trace explicitement qui paie qui (`from_entity_id → to_entity_id`). Les soldes sont calcules dynamiquement, avec une vue consolidee (entite parente + tous les descendants).
+
+## Multi-utilisateurs
+
+Le module `multi_users` ajoute l'authentification et le controle d'acces : roles globaux (`admin`, `tresorier`, `lecteur`), droits par entite, sessions securisees avec bcrypt.
+
 ## Skill Claude Code
 
 OpenFlow inclut un skill pour [Claude Code](https://claude.ai/claude-code) qui vous guide dans la configuration, l'import de donnees et l'evolution de votre tresorerie.
@@ -70,7 +79,7 @@ Pour l'installer :
 ## Dev
 
 ```bash
-# Tests
+# Tests (423 tests)
 pip install -r requirements-dev.txt
 python -m pytest tests/ -v
 

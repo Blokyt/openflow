@@ -1,6 +1,6 @@
 ---
 name: openflow
-description: "Assistant intelligent pour OpenFlow, l'outil de gestion de tresorerie modulaire. Utilise ce skill quand l'utilisateur mentionne : tresorerie, comptabilite, factures, transactions, budget, remboursements, bilan financier, gestion d'asso, gestion d'entreprise, import Excel comptable, solde, depenses, recettes, categories comptables, ou quand il veut creer/configurer/diagnostiquer une app de gestion financiere. Utilise aussi quand l'utilisateur dit /openflow ou mentionne OpenFlow par son nom."
+description: "Assistant intelligent pour OpenFlow, l'outil de gestion de tresorerie modulaire. Utilise ce skill quand l'utilisateur mentionne : tresorerie, comptabilite, factures, transactions, budget, remboursements, bilan financier, gestion d'asso, gestion d'entreprise, import Excel comptable, solde, depenses, recettes, categories comptables, entites, sous-clubs, ou quand il veut creer/configurer/diagnostiquer une app de gestion financiere. Utilise aussi quand l'utilisateur dit /openflow ou mentionne OpenFlow par son nom."
 ---
 
 # OpenFlow - Assistant de Tresorerie Modulaire
@@ -34,8 +34,8 @@ Pose ces questions une par une :
 
 Presente les modules disponibles par categorie et recommande ceux adaptes au type d'entite :
 
-**Pour une association :** transactions, categories, dashboard, reimbursements, divisions, budget, tiers, export, annotations
-**Pour une entreprise :** transactions, categories, dashboard, invoices, tiers, budget, export, bank_reconciliation, fec_export
+**Pour une association :** transactions, categories, dashboard, entities, reimbursements, divisions, budget, tiers, export, annotations
+**Pour une entreprise :** transactions, categories, dashboard, entities, invoices, tiers, budget, export, bank_reconciliation, fec_export
 **Pour un auto-entrepreneur :** transactions, categories, dashboard, invoices, tiers, export
 
 L'utilisateur peut toujours activer/desactiver plus tard.
@@ -47,6 +47,7 @@ Si l'utilisateur a des fichiers Excel/CSV :
 2. Analyse la structure : detecte les colonnes (date, montant, libelle, categorie, etc.)
 3. Propose un mapping colonnes → champs OpenFlow
 4. Apres validation, importe les donnees dans la DB via des INSERT directs
+5. Si le module `entities` est actif, assure-toi que `from_entity_id` et `to_entity_id` sont renseignes
 
 ### Etape 4 : Configuration du projet
 
@@ -81,6 +82,7 @@ Quand tu lis le `config.yaml` et les donnees, propose des ameliorations :
 - "Tu as beaucoup de transactions avec un payeur different de l'entite → le module Remboursements serait utile"
 - "Tu as des transactions recurrentes chaque mois → le module Recurrences pourrait t'aider"
 - "Tu n'as pas de categories → veux-tu que je t'aide a en creer ?"
+- "Tu as plusieurs sous-clubs ou poles → le module Entites te permettrait de tracer 'qui paie qui' sur chaque transaction"
 
 ## Mode Diagnostic - Resoudre un probleme
 
@@ -91,19 +93,22 @@ L'utilisateur signale un probleme.
 1. Lance `python tools/check.py` pour verifier l'integrite du projet
 2. Si FAIL : lis les erreurs et corrige (manifest invalide, fichiers manquants, dependances)
 3. Si PASS mais probleme de donnees :
-   - Lis la DB avec sqlite3 pour inspecter les transactions, categories, etc.
+   - Lis la DB avec sqlite3 pour inspecter les transactions, categories, entites, etc.
    - Verifie la coherence du solde (reference + sum des transactions)
    - Cherche les doublons, les montants aberrants
+   - Verifie que `from_entity_id` et `to_entity_id` sont renseignes sur les transactions
 4. Explique le probleme et propose une correction
 5. Apres correction, relance `check.py` pour confirmer
 
 ### Problemes courants
 
-- **Solde incorrect** : verifie la date/montant de reference dans config.yaml, verifie qu'il n'y a pas de transactions en double
+- **Solde incorrect** : verifie la date/montant de reference dans config.yaml ou dans `entity_balance_refs`, verifie qu'il n'y a pas de transactions en double
 - **Module qui n'apparait pas** : verifie qu'il est `true` dans config.yaml et que le manifest est valide
 - **Erreur au demarrage** : verifie les dependances Python (`pip install -r requirements.txt`) et le build frontend
 - **Donnees manquantes apres import** : verifie le mapping des colonnes
 - **config.yaml manquant** : copier config.example.yaml vers config.yaml ou lancer `python setup.py`
+- **Solde entite a 0** : verifie que les transactions ont `from_entity_id` et `to_entity_id` corrects
+- **Erreur auth** : verifie que le module multi_users est actif et que les migrations ont ete lancees
 
 ## Mode Creation Custom - Nouveau module sur mesure
 
@@ -132,16 +137,62 @@ L'utilisateur a besoin d'une fonctionnalite qui n'existe pas dans les modules st
 
 4. Implemente l'API dans `backend/modules/<id>/api.py` — CRUD minimum avec FastAPI router
 
-5. Cree le composant React dans `frontend/src/modules/<id>/index.tsx`
+5. Si le module manipule des soldes, utilise `backend.core.balance` :
+   ```python
+   from backend.core.balance import compute_entity_balance, compute_consolidated_balance
+   ```
 
-6. Lance la validation :
+6. Cree le composant React dans `frontend/src/modules/<id>/index.tsx`
+
+7. Lance la validation :
    ```bash
    python tools/migrate.py
    python tools/check.py
    cd frontend && npm run build
    ```
 
-7. Le module custom a `"origin": "custom"` dans son manifest pour le distinguer des modules builtin
+8. Le module custom a `"origin": "custom"` dans son manifest pour le distinguer des modules builtin
+
+## Systeme d'entites — concepts cles
+
+Le module `entities` est central dans l'architecture :
+
+- **Arbre libre** : chaque entite a un `parent_id` optionnel, profondeur illimitee
+- **Types** : `internal` (entites dont on gere la tresorerie) vs `external` (tiers)
+- **Transactions** : chaque transaction a `from_entity_id` ET `to_entity_id` — JAMAIS null
+- **Solde propre** : reference de l'entite + SUM entrant - SUM sortant
+- **Solde consolide** : propre + recursif sur tous les descendants `internal`
+- **`entity_balance_refs`** : references de solde par entite (separees de `config.yaml`)
+
+Exemple :
+```
+BDA (internal, racine)
+├── Gastronomine (internal)
+├── PapiMamine (internal)
+└── CineClub (internal)
+Banque SG (external)
+Fournisseur X (external)
+```
+
+Transaction "Gastronomine paie un fournisseur" :
+- `from_entity_id` = id de Gastronomine
+- `to_entity_id` = id du fournisseur
+- `amount` = -50.00 (negatif = sortie du point de vue de Gastronomine)
+
+## Systeme d'auth — concepts cles
+
+Le module `multi_users` gere l'authentification et les droits :
+
+- **Utilisateurs** : `users` (username, password_hash bcrypt, role global, active)
+- **Sessions** : `sessions` (token UUID → user_id, pas d'expiration pour l'instant)
+- **Roles par entite** : `user_entities` (user_id, entity_id, role) — granularite fine
+- **Roles globaux** : `admin` (tout), `tresorier` (lecture/ecriture), `reader` (consultation)
+- **Login** : `POST /api/multi_users/login` → retourne session token
+- **Logout** : `POST /api/multi_users/logout`
+- **Profil** : `GET /api/multi_users/me`
+- **Acces entites** : `GET/POST/DELETE /api/multi_users/{user_id}/entities`
+
+Note : le middleware auth dans `main.py` est en cours d'implementation (Phase 2).
 
 ## Architecture de reference
 
@@ -149,7 +200,8 @@ L'utilisateur a besoin d'une fonctionnalite qui n'existe pas dans les modules st
 openflow/
 ├── backend/
 │   ├── main.py                 # FastAPI app, auto-loading des modules
-│   ├── core/                   # Config, module loader, validator
+│   ├── core/                   # Config, module loader, validator, balance
+│   │   ├── balance.py          # Calcul solde centralise (legacy + entity-aware)
 │   │   ├── config.py           # Chargement/sauvegarde YAML
 │   │   ├── module_loader.py    # Decouverte et filtrage des modules
 │   │   └── validator.py        # Validation JSON Schema des manifests
@@ -176,12 +228,13 @@ openflow/
 └── LICENSE                     # MIT
 ```
 
-## Modules disponibles
+## Modules disponibles (22 modules)
 
 ### Noyau (toujours actifs)
-- **transactions** : CRUD, filtres, solde dynamique
+- **transactions** : CRUD, filtres, solde dynamique, from/to entity
 - **categories** : Hierarchie parent/enfant
 - **dashboard** : Cartes de synthese, widgets
+- **entities** : Arbre d'entites internes/externes, soldes propres et consolides
 
 ### Standard
 - **invoices** : Factures & devis, numerotation auto, conversion devis→facture
@@ -203,7 +256,7 @@ openflow/
 - **tax_receipts** : Recus fiscaux cerfa (asso)
 - **grants** : Suivi subventions par financeur
 - **fec_export** : Export FEC format legal francais
-- **multi_users** : Roles admin/tresorier/lecteur
+- **multi_users** : Auth bcrypt, sessions, roles admin/tresorier/lecteur, droits par entite
 
 ## Installation du skill Claude
 
@@ -233,5 +286,6 @@ Le skill se declenche automatiquement dans Claude Code quand vous parlez de tres
 - **Toujours lancer `check.py`** apres toute modification
 - **Backup automatique** avant chaque migration (gere par migrate.py)
 - **Ne jamais supprimer de donnees** sans confirmation explicite de l'utilisateur
-- **Le solde se calcule toujours dynamiquement** : reference + sum(transactions)
+- **Le solde se calcule toujours dynamiquement** depuis `backend.core.balance`, jamais inline dans un module
+- **from_entity_id et to_entity_id** toujours specifies sur les transactions — jamais null
 - **Parler en francais** a l'utilisateur
