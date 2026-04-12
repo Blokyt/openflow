@@ -4,6 +4,8 @@ import { api } from "./api";
 import Sidebar from "./core/Sidebar";
 import Dashboard from "./core/Dashboard";
 import Settings from "./core/Settings";
+import { EntityProvider } from "./core/EntityContext";
+import EntityTree from "./modules/entities/EntityTree";
 import TransactionList from "./modules/transactions/TransactionList";
 import CategoryManager from "./modules/categories/CategoryManager";
 import BudgetManager from "./modules/budget/BudgetManager";
@@ -20,6 +22,7 @@ const MODULE_ROUTES: Record<string, { path: string; element: React.ReactNode }> 
   forecasting: { path: "/forecasting", element: <ForecastingView /> },
   bank_reconciliation: { path: "/bank-reconciliation", element: <BankReconciliation /> },
   tax_receipts: { path: "/tax-receipts", element: <TaxReceiptsView /> },
+  entities: { path: "/entities", element: <EntityTree /> },
 };
 
 export default function App() {
@@ -43,21 +46,24 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="flex h-screen bg-black">
-        <Sidebar activeModuleIds={activeModuleIds} />
-        <main className="flex-1 overflow-auto bg-black">
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            {Object.entries(MODULE_ROUTES).map(([moduleId, route]) =>
-              activeModuleIds.includes(moduleId) ? (
-                <Route key={moduleId} path={route.path} element={route.element} />
-              ) : null
-            )}
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </main>
-      </div>
+      <EntityProvider>
+        <div className="flex h-screen bg-black">
+          <Sidebar activeModuleIds={activeModuleIds} />
+          <main className="flex-1 overflow-auto bg-black">
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/entities" element={<EntityTree />} />
+              {Object.entries(MODULE_ROUTES).map(([moduleId, route]) =>
+                moduleId !== "entities" && activeModuleIds.includes(moduleId) ? (
+                  <Route key={moduleId} path={route.path} element={route.element} />
+                ) : null
+              )}
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </main>
+        </div>
+      </EntityProvider>
     </BrowserRouter>
   );
 }

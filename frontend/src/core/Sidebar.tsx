@@ -1,10 +1,14 @@
+import { useState, useRef, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Repeat,
   TrendingUp, GitCompare, Receipt, Settings, FileText, RotateCcw,
   Building2, Users, Paperclip, MessageSquare, Download, Wallet,
   ShieldCheck, Bell, HandCoins, FileSpreadsheet, UsersRound,
+  ChevronDown, GitBranch, Check,
 } from "lucide-react";
+import { useEntity } from "./EntityContext";
+import { Entity } from "../types";
 
 const ICON_MAP: Record<string, any> = {
   "layout-dashboard": LayoutDashboard,
@@ -60,6 +64,121 @@ const MODULES_WITH_PAGES = new Set([
   "forecasting", "bank_reconciliation", "tax_receipts",
 ]);
 
+// ─── Entity selector dropdown ─────────────────────────────────────────────────
+
+function EntitySelectorOption({
+  entity,
+  depth,
+  selectedId,
+  onSelect,
+}: {
+  entity: Entity;
+  depth: number;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  return (
+    <>
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-[#1a1a1a] transition-colors text-left"
+        style={{ paddingLeft: `${12 + depth * 14}px` }}
+        onClick={() => onSelect(entity.id)}
+      >
+        <span
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: entity.color || "#F2C48D" }}
+        />
+        <span className={`flex-1 truncate ${selectedId === entity.id ? "text-[#F2C48D]" : "text-[#B0B0B0]"}`}>
+          {entity.name}
+        </span>
+        {selectedId === entity.id && <Check size={12} className="text-[#F2C48D] flex-shrink-0" />}
+      </button>
+      {entity.children?.map((child) => (
+        <EntitySelectorOption
+          key={child.id}
+          entity={child}
+          depth={depth + 1}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+      ))}
+    </>
+  );
+}
+
+function EntitySelector() {
+  const { entities, selectedEntityId, selectedEntity, setSelectedEntityId } = useEntity();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  function handleSelect(id: number) {
+    setSelectedEntityId(id);
+    setOpen(false);
+  }
+
+  function handleClear(e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelectedEntityId(null);
+    setOpen(false);
+  }
+
+  if (entities.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative px-3 pb-3">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[#111] border border-[#222] hover:border-[#333] transition-colors text-sm"
+      >
+        <GitBranch size={13} className="text-[#F2C48D] flex-shrink-0" strokeWidth={1.5} />
+        <span className="flex-1 truncate text-left text-[#B0B0B0]">
+          {selectedEntity ? selectedEntity.name : "Toutes les entités"}
+        </span>
+        <ChevronDown
+          size={13}
+          className={`text-[#555] transition-transform flex-shrink-0 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden">
+          {/* All entities option */}
+          <button
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
+            onClick={handleClear}
+          >
+            <span className="flex-1 text-[#666]">Toutes les entités</span>
+            {selectedEntityId === null && <Check size={12} className="text-[#F2C48D]" />}
+          </button>
+
+          <div className="max-h-48 overflow-y-auto py-1">
+            {entities.map((e) => (
+              <EntitySelectorOption
+                key={e.id}
+                entity={e}
+                depth={0}
+                selectedId={selectedEntityId}
+                onSelect={handleSelect}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+
 interface SidebarProps {
   activeModuleIds: string[];
 }
@@ -71,6 +190,8 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
     // Transactions and categories are core, always shown
     { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
     { to: "/categories", label: "Catégories", icon: Tags },
+    // Entities always shown
+    { to: "/entities", label: "Entités", icon: GitBranch },
   ];
 
   // Add module pages that are active
@@ -105,6 +226,9 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
           <span className="text-white">Open</span>
           <span className="text-[#F2C48D]">Flow</span>
         </span>
+      </div>
+      <div className="pt-3 border-b border-[#1a1a1a]">
+        <EntitySelector />
       </div>
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
         {allItems.map(({ to, label, icon: Icon }) => (

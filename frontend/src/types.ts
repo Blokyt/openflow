@@ -55,3 +55,31 @@ export interface ModuleManifest {
   icon?: string;
   route?: string;
 }
+
+export interface Entity {
+  id: number;
+  name: string;
+  description: string;
+  type: "internal" | "external";
+  parent_id: number | null;
+  is_default: number;
+  is_divers: number;
+  color: string;
+  position: number;
+  children?: Entity[];
+}
+
+export interface EntityBalance {
+  entity_id: number;
+  balance: number;
+  reference_amount: number;
+  reference_date: string | null;
+  transactions_sum: number;
+}
+
+export interface ConsolidatedBalance {
+  entity_id: number;
+  own_balance: number;
+  consolidated_balance: number;
+  children: EntityBalance[];
+}

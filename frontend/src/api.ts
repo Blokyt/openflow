@@ -48,7 +48,23 @@ export const api = {
     request<any>(`/bank_reconciliation/unmatch/${id}`, { method: "POST" }),
   deleteBankStatement: (id: number) =>
     request<any>(`/bank_reconciliation/${id}`, { method: "DELETE" }),
-  getSummary: () => request<any>("/dashboard/summary"),
+  getSummary: (entityId?: number) => {
+    const query = entityId ? `?entity_id=${entityId}` : "";
+    return request<any>(`/dashboard/summary${query}`);
+  },
+  // Entities
+  getEntities: (type?: string) => {
+    const query = type ? `?type=${type}` : "";
+    return request<any[]>(`/entities/${query}`);
+  },
+  getEntityTree: () => request<any[]>("/entities/tree"),
+  createEntity: (e: any) => request<any>("/entities/", { method: "POST", body: JSON.stringify(e) }),
+  updateEntity_: (id: number, e: any) => request<any>(`/entities/${id}`, { method: "PUT", body: JSON.stringify(e) }),
+  deleteEntity: (id: number) => request<any>(`/entities/${id}`, { method: "DELETE" }),
+  getEntityBalance: (id: number) => request<any>(`/entities/${id}/balance`),
+  getConsolidatedBalance: (id: number) => request<any>(`/entities/${id}/consolidated`),
+  getBalanceRef: (id: number) => request<any>(`/entities/${id}/balance-ref`),
+  updateBalanceRef: (id: number, ref: any) => request<any>(`/entities/${id}/balance-ref`, { method: "PUT", body: JSON.stringify(ref) }),
   getWidgets: () => request<any[]>("/dashboard/widgets"),
   getLayout: () => request<any[]>("/dashboard/layout"),
   saveLayout: (layout: any[]) => request<any>("/dashboard/layout", { method: "PUT", body: JSON.stringify(layout) }),

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { DashboardSummary } from "../types";
 import { TrendingUp, TrendingDown, Wallet, Hash } from "lucide-react";
+import { useEntity } from "./EntityContext";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -33,14 +34,16 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { selectedEntityId } = useEntity();
 
   useEffect(() => {
+    setLoading(true);
     api
-      .getSummary()
+      .getSummary(selectedEntityId ?? undefined)
       .then(setSummary)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedEntityId]);
 
   if (loading) {
     return (
