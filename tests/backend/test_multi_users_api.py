@@ -71,9 +71,9 @@ def test_create_user_invalid_role_returns_400(client):
     assert resp.status_code == 400
 
 
-def test_create_user_duplicate_username_returns_400(client):
-    make_user(client, username="duplicate_user_x")
-    resp = client.post("/api/multi_users/", json={
+def test_create_user_duplicate_username_returns_400(authed_client):
+    make_user(authed_client, username="duplicate_user_x")
+    resp = authed_client.post("/api/multi_users/", json={
         "username": "duplicate_user_x",
         "password": "anotherpass",
     })
@@ -120,9 +120,9 @@ def test_list_users_no_password_hash(client):
         assert "password" not in user
 
 
-def test_list_users_contains_created_user(client):
-    user = make_user(client, username="listed_user")
-    resp = client.get("/api/multi_users/")
+def test_list_users_contains_created_user(authed_client):
+    user = make_user(authed_client, username="listed_user")
+    resp = authed_client.get("/api/multi_users/")
     ids = [u["id"] for u in resp.json()]
     assert user["id"] in ids
 
@@ -131,15 +131,15 @@ def test_list_users_contains_created_user(client):
 # GET /api/multi_users/{id} — get single
 # ---------------------------------------------------------------------------
 
-def test_get_user_returns_200(client):
-    user = make_user(client, username="get_single_user")
-    resp = client.get(f"/api/multi_users/{user['id']}")
+def test_get_user_returns_200(authed_client):
+    user = make_user(authed_client, username="get_single_user")
+    resp = authed_client.get(f"/api/multi_users/{user['id']}")
     assert resp.status_code == 200
 
 
-def test_get_user_returns_correct_data(client):
-    user = make_user(client, username="get_data_user", display_name="Display Name")
-    resp = client.get(f"/api/multi_users/{user['id']}")
+def test_get_user_returns_correct_data(authed_client):
+    user = make_user(authed_client, username="get_data_user", display_name="Display Name")
+    resp = authed_client.get(f"/api/multi_users/{user['id']}")
     data = resp.json()
     assert data["username"] == "get_data_user"
     assert data["display_name"] == "Display Name"
@@ -162,23 +162,23 @@ def test_get_user_no_password_hash(client):
 # PUT /api/multi_users/{id} — update
 # ---------------------------------------------------------------------------
 
-def test_update_user_display_name(client):
-    user = make_user(client, username="update_display_user")
-    resp = client.put(f"/api/multi_users/{user['id']}", json={"display_name": "Updated Name"})
+def test_update_user_display_name(authed_client):
+    user = make_user(authed_client, username="update_display_user")
+    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"display_name": "Updated Name"})
     assert resp.status_code == 200
     assert resp.json()["display_name"] == "Updated Name"
 
 
-def test_update_user_role(client):
-    user = make_user(client, username="update_role_user", role="reader")
-    resp = client.put(f"/api/multi_users/{user['id']}", json={"role": "treasurer"})
+def test_update_user_role(authed_client):
+    user = make_user(authed_client, username="update_role_user", role="reader")
+    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"role": "treasurer"})
     assert resp.status_code == 200
     assert resp.json()["role"] == "treasurer"
 
 
-def test_update_user_password_not_returned(client):
-    user = make_user(client, username="update_pwd_user")
-    resp = client.put(f"/api/multi_users/{user['id']}", json={"password": "newpassword"})
+def test_update_user_password_not_returned(authed_client):
+    user = make_user(authed_client, username="update_pwd_user")
+    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"password": "newpassword"})
     assert resp.status_code == 200
     data = resp.json()
     assert "password_hash" not in data
@@ -208,9 +208,9 @@ def test_update_user_not_found_returns_404(client):
     assert resp.status_code == 404
 
 
-def test_update_user_invalid_role_returns_400(client):
-    user = make_user(client, username="invalid_role_update_user")
-    resp = client.put(f"/api/multi_users/{user['id']}", json={"role": "god"})
+def test_update_user_invalid_role_returns_400(authed_client):
+    user = make_user(authed_client, username="invalid_role_update_user")
+    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"role": "god"})
     assert resp.status_code == 400
 
 
@@ -218,22 +218,22 @@ def test_update_user_invalid_role_returns_400(client):
 # DELETE /api/multi_users/{id} — delete
 # ---------------------------------------------------------------------------
 
-def test_delete_user_returns_200(client):
-    user = make_user(client, username="delete_me_user")
-    resp = client.delete(f"/api/multi_users/{user['id']}")
+def test_delete_user_returns_200(authed_client):
+    user = make_user(authed_client, username="delete_me_user")
+    resp = authed_client.delete(f"/api/multi_users/{user['id']}")
     assert resp.status_code == 200
 
 
-def test_delete_user_response_has_deleted_id(client):
-    user = make_user(client, username="delete_id_check_user")
-    resp = client.delete(f"/api/multi_users/{user['id']}")
+def test_delete_user_response_has_deleted_id(authed_client):
+    user = make_user(authed_client, username="delete_id_check_user")
+    resp = authed_client.delete(f"/api/multi_users/{user['id']}")
     assert resp.json()["deleted"] == user["id"]
 
 
-def test_delete_user_no_longer_retrievable(client):
-    user = make_user(client, username="delete_gone_user")
-    client.delete(f"/api/multi_users/{user['id']}")
-    resp = client.get(f"/api/multi_users/{user['id']}")
+def test_delete_user_no_longer_retrievable(authed_client):
+    user = make_user(authed_client, username="delete_gone_user")
+    authed_client.delete(f"/api/multi_users/{user['id']}")
+    resp = authed_client.get(f"/api/multi_users/{user['id']}")
     assert resp.status_code == 404
 
 

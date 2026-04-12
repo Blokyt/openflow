@@ -16,11 +16,16 @@ from backend.core.module_loader import discover_modules, filter_active
 def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db") -> FastAPI:
     app = FastAPI(title="OpenFlow", version="0.1.0")
 
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
     project_root = Path(__file__).parent.parent
     config_file = project_root / config_path
     config = load_config(str(config_file))
+
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+    # Auth middleware — only active when multi_users module is enabled
+    if config.modules.get("multi_users", False):
+        from backend.core.auth import AuthMiddleware
+        app.add_middleware(AuthMiddleware)
 
     modules_dir = project_root / "backend" / "modules"
     all_modules = discover_modules(str(modules_dir))

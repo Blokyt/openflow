@@ -154,62 +154,62 @@ def test_change_password_wrong_old(client):
 # Entity access endpoints
 # ---------------------------------------------------------------------------
 
-def test_assign_entity_access(client):
-    user = make_user(client, username="assign_entity_user")
-    entity = make_entity(client, name="AssignEntity")
+def test_assign_entity_access(authed_client):
+    user = make_user(authed_client, username="assign_entity_user")
+    entity = make_entity(authed_client, name="AssignEntity")
 
-    resp = client.post(f"/api/multi_users/{user['id']}/entities", json={
+    resp = authed_client.post(f"/api/multi_users/{user['id']}/entities", json={
         "entity_id": entity["id"],
         "role": "lecteur",
     })
     assert resp.status_code == 201
 
-    list_resp = client.get(f"/api/multi_users/{user['id']}/entities")
+    list_resp = authed_client.get(f"/api/multi_users/{user['id']}/entities")
     assert list_resp.status_code == 200
     entities = list_resp.json()
     entity_ids = [e["entity_id"] for e in entities]
     assert entity["id"] in entity_ids
 
 
-def test_remove_entity_access(client):
-    user = make_user(client, username="remove_entity_user")
-    entity = make_entity(client, name="RemoveEntity")
+def test_remove_entity_access(authed_client):
+    user = make_user(authed_client, username="remove_entity_user")
+    entity = make_entity(authed_client, name="RemoveEntity")
 
     # Assign
-    client.post(f"/api/multi_users/{user['id']}/entities", json={
+    authed_client.post(f"/api/multi_users/{user['id']}/entities", json={
         "entity_id": entity["id"],
         "role": "lecteur",
     })
 
     # Remove
-    del_resp = client.delete(f"/api/multi_users/{user['id']}/entities/{entity['id']}")
+    del_resp = authed_client.delete(f"/api/multi_users/{user['id']}/entities/{entity['id']}")
     assert del_resp.status_code == 200
 
     # List should be empty
-    list_resp = client.get(f"/api/multi_users/{user['id']}/entities")
+    list_resp = authed_client.get(f"/api/multi_users/{user['id']}/entities")
     assert list_resp.json() == []
 
 
-def test_assign_duplicate_entity_returns_400(client):
-    user = make_user(client, username="dup_entity_user")
-    entity = make_entity(client, name="DupEntity")
+def test_assign_duplicate_entity_returns_400(authed_client):
+    user = make_user(authed_client, username="dup_entity_user")
+    entity = make_entity(authed_client, name="DupEntity")
 
-    client.post(f"/api/multi_users/{user['id']}/entities", json={
+    authed_client.post(f"/api/multi_users/{user['id']}/entities", json={
         "entity_id": entity["id"],
         "role": "lecteur",
     })
-    resp = client.post(f"/api/multi_users/{user['id']}/entities", json={
+    resp = authed_client.post(f"/api/multi_users/{user['id']}/entities", json={
         "entity_id": entity["id"],
         "role": "tresorier",
     })
     assert resp.status_code == 400
 
 
-def test_assign_invalid_entity_role_returns_400(client):
-    user = make_user(client, username="invalid_role_entity_user")
-    entity = make_entity(client, name="InvalidRoleEntity")
+def test_assign_invalid_entity_role_returns_400(authed_client):
+    user = make_user(authed_client, username="invalid_role_entity_user")
+    entity = make_entity(authed_client, name="InvalidRoleEntity")
 
-    resp = client.post(f"/api/multi_users/{user['id']}/entities", json={
+    resp = authed_client.post(f"/api/multi_users/{user['id']}/entities", json={
         "entity_id": entity["id"],
         "role": "admin",
     })
@@ -220,24 +220,24 @@ def test_assign_invalid_entity_role_returns_400(client):
 # GET /api/multi_users/me — includes entities
 # ---------------------------------------------------------------------------
 
-def test_me_includes_entities(client):
-    user = make_user(client, username="me_entities_user", password="meentpass")
-    entity = make_entity(client, name="MeIncludeEntity")
+def test_me_includes_entities(authed_client):
+    user = make_user(authed_client, username="me_entities_user", password="meentpass")
+    entity = make_entity(authed_client, name="MeIncludeEntity")
 
     # Assign entity
-    client.post(f"/api/multi_users/{user['id']}/entities", json={
+    authed_client.post(f"/api/multi_users/{user['id']}/entities", json={
         "entity_id": entity["id"],
         "role": "tresorier",
     })
 
-    # Login
-    client.post("/api/multi_users/login", json={
+    # Login as the new user (replacing the admin session)
+    authed_client.post("/api/multi_users/login", json={
         "username": "me_entities_user",
         "password": "meentpass",
     })
 
     # /me should include entities
-    resp = client.get("/api/multi_users/me")
+    resp = authed_client.get("/api/multi_users/me")
     assert resp.status_code == 200
     data = resp.json()
     assert "entities" in data

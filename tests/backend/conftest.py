@@ -65,3 +65,26 @@ def client_and_db(db_path):
     """TestClient + raw DB path for tests that need both."""
     app = create_app(config_path="config.test.yaml", db_path=str(db_path))
     return TestClient(app), db_path
+
+
+@pytest.fixture
+def authed_client(db_path):
+    """TestClient with an admin user already created and logged in.
+
+    Use this fixture for tests that hit protected endpoints when multi_users
+    is enabled, so the auth middleware lets requests through.
+    """
+    app = create_app(config_path="config.test.yaml", db_path=str(db_path))
+    c = TestClient(app)
+    # Create the first admin (public — no users yet, middleware skips)
+    c.post("/api/multi_users/", json={
+        "username": "_test_admin",
+        "password": "_test_pass_123",
+        "role": "admin",
+    })
+    # Login to obtain session cookie
+    c.post("/api/multi_users/login", json={
+        "username": "_test_admin",
+        "password": "_test_pass_123",
+    })
+    return c
