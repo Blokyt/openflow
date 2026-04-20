@@ -188,6 +188,7 @@ function InvoiceFormModal({
 }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [clientId, setClientId] = useState<string>("");
+  const [taxRate, setTaxRate] = useState<number>(vatEnabled ? 20 : 0);
   const [lines, setLines] = useState<InvoiceLine[]>([
     { description: "", quantity: 1, unit_price: 0 },
   ]);
@@ -195,7 +196,8 @@ function InvoiceFormModal({
   const [error, setError] = useState<string | null>(null);
 
   const totalHT = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
-  const totalTTC = totalHT;
+  const totalVAT = vatEnabled ? totalHT * (taxRate / 100) : 0;
+  const totalTTC = totalHT + totalVAT;
 
   function updateLine(idx: number, field: keyof InvoiceLine, value: any) {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
@@ -219,6 +221,7 @@ function InvoiceFormModal({
           type,
           date,
           contact_id: clientId ? parseInt(clientId) : null,
+          tax_rate: vatEnabled ? taxRate : 0,
           lines,
         }),
       });
@@ -282,6 +285,15 @@ function InvoiceFormModal({
             </div>
           </div>
 
+          {vatEnabled && (
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-[#B0B0B0] whitespace-nowrap">Taux TVA (%)</label>
+              <input type="number" step="0.1" min="0" max="100" value={taxRate}
+                onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                className="w-24 bg-[#111] border border-[#222] rounded-lg px-2 py-1.5 text-xs text-white" />
+            </div>
+          )}
+
           <div className="border-t border-[#1a1a1a] pt-4 space-y-1 text-sm">
             <div className="flex justify-between text-[#B0B0B0]">
               <span>Total HT</span>
@@ -289,8 +301,8 @@ function InvoiceFormModal({
             </div>
             {vatEnabled && (
               <div className="flex justify-between text-[#B0B0B0]">
-                <span>TVA</span>
-                <span>{eurFormatter.format(0)}</span>
+                <span>TVA ({taxRate}%)</span>
+                <span>{eurFormatter.format(totalVAT)}</span>
               </div>
             )}
             <div className="flex justify-between text-[#F2C48D] font-semibold">
