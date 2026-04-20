@@ -9,6 +9,7 @@ entity:
   rna: ''
   siret: ''
   type: association
+  vat_enabled: false
 modules:
   annotations: true
   attachments: true

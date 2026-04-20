@@ -14,6 +14,7 @@ class EntityConfig:
     address: str = ""
     siret: str = ""
     rna: str = ""
+    vat_enabled: bool = False
 
 
 @dataclass
