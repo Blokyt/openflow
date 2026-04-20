@@ -22,23 +22,16 @@ const TABLE_LABELS: Record<string, string> = {
   contacts: "Contacts",
   transactions: "Transactions",
   budgets: "Budgets",
-  recurring_transactions: "Récurrences",
   reimbursements: "Remboursements",
   invoices: "Factures",
   invoice_lines: "Lignes factures",
   attachments: "Pièces jointes",
-  bank_statements: "Relevés bancaires",
-  alert_rules: "Alertes",
-  tax_receipts: "Reçus fiscaux",
-  grants: "Subventions",
-  accounts: "Comptes",
   transfers: "Virements",
   audit_log: "Journal audit",
   annotations: "Annotations",
   users: "Utilisateurs",
   sessions: "Sessions",
   user_entities: "Accès utilisateurs",
-  divisions: "Divisions",
 };
 
 export default function BackupManager() {
