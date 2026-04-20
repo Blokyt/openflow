@@ -1,48 +1,29 @@
-entity:
-  name: Mon Entite
-  type: association
-  currency: EUR
-  logo: ''
-  address: ''
-  siret: ''
-  rna: ''
-
 balance:
   amount: 0.0
   date: '2025-01-01'
-
+entity:
+  address: ''
+  currency: EUR
+  logo: ''
+  name: Mon Entite
+  rna: ''
+  siret: ''
+  type: association
 modules:
-  # --- Core : toujours actifs, fondations de l'app ---
-  dashboard: true
-  transactions: true
-  categories: true
-  entities: true
-
-  # --- Utilitaires : activés par défaut (import, sauvegarde, auth, maintenance) ---
-  smart_import: true
-  backup: true
-  multi_users: true
-  system: true
-
-  # --- Intégrés dans Transactions / Paramètres (pas d'onglet dédié) ---
   annotations: true
   attachments: true
+  audit: true
+  backup: true
+  budget: false
+  categories: true
+  dashboard: true
+  entities: true
   export: true
   fec_export: true
-  audit: true
-
-  # --- Métier : à activer manuellement selon besoin (1 module = 1 onglet) ---
-  budget: false
-  tiers: false
-  reimbursements: false
-  grants: false
   invoices: false
-  tax_receipts: false
-  recurring: false
-  forecasting: false
-  bank_reconciliation: false
-
-  # --- Cachés (pas de frontend, réservés usage avancé / futur) ---
-  divisions: false
-  alerts: false
-  multi_accounts: false
+  multi_users: true
+  reimbursements: false
+  smart_import: true
+  system: true
+  tiers: false
+  transactions: true
