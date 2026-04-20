@@ -54,7 +54,7 @@ def _bootstrap_admin(db_path: Path):
         conn.close()
 
 
-def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db") -> FastAPI:
+def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db", bootstrap: bool = True) -> FastAPI:
     app = FastAPI(title="OpenFlow", version="0.1.0")
 
     project_root = Path(__file__).parent.parent
@@ -88,7 +88,7 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
                     print(f"Warning: failed to load routes for {module_id}: {e}")
 
     # Bootstrap: create default admin user if multi_users is active and no users exist
-    if config.modules.get("multi_users", False):
+    if bootstrap and config.modules.get("multi_users", False):
         _bootstrap_admin(project_root / db_path)
 
     @app.get("/api/modules")
