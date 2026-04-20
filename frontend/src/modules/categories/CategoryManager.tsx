@@ -234,9 +234,18 @@ export default function CategoryManager() {
 
   return (
     <div className="p-8 max-w-2xl">
-      <h1 className="text-3xl font-bold text-white mb-8" style={{ letterSpacing: "-0.02em" }}>
+      <h1 className="text-3xl font-bold text-white mb-2" style={{ letterSpacing: "-0.02em" }}>
         Catégories
       </h1>
+      <p className="text-sm text-[#B0B0B0] mb-2 leading-relaxed">
+        Les catégories décrivent <span className="text-white font-medium">la nature</span> d'une
+        transaction (ex&nbsp;: <em>matériel, transport, cotisations, sponsoring</em>).
+      </p>
+      <p className="text-xs text-[#666] mb-8 leading-relaxed">
+        Pour modéliser <span className="text-[#B0B0B0]">qui gère le budget</span> (sous-clubs,
+        pôles, sections), utilise plutôt{" "}
+        <a href="/entities" className="text-[#F2C48D] hover:underline">Entités</a>.
+      </p>
 
       {error && (
         <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">

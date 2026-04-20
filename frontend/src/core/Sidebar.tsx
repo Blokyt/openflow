@@ -10,6 +10,7 @@ import {
 import { useEntity } from "./EntityContext";
 import { useAuth } from "./AuthContext";
 import { Entity } from "../types";
+import { MODULE_IDS_WITH_ROUTE } from "../routes";
 
 // Map manifest icon names → React components
 const ICON_MAP: Record<string, any> = {
@@ -40,7 +41,9 @@ const ICON_MAP: Record<string, any> = {
   "activity": Activity,
 };
 
-// Module ID → route path (must match MODULE_ROUTES in App.tsx)
+// Module ID → route path. Must match MODULE_ROUTES in ../routes.tsx.
+// Keep only modules that actually have a React component — the MODULE_IDS_WITH_ROUTE
+// filter in optionalModules hides any tab not listed here.
 const MODULE_PATH_MAP: Record<string, string> = {
   dashboard: "/dashboard",
   transactions: "/transactions",
@@ -51,18 +54,9 @@ const MODULE_PATH_MAP: Record<string, string> = {
   forecasting: "/forecasting",
   bank_reconciliation: "/bank-reconciliation",
   tax_receipts: "/tax-receipts",
-  invoices: "/invoices",
-  reimbursements: "/reimbursements",
-  divisions: "/divisions",
   tiers: "/tiers",
-  attachments: "/attachments",
-  annotations: "/annotations",
-  export: "/export",
-  multi_accounts: "/multi-accounts",
-  audit: "/audit",
-  alerts: "/alerts",
+  reimbursements: "/reimbursements",
   grants: "/grants",
-  fec_export: "/fec-export",
   multi_users: "/multi-users",
   backup: "/backup",
   smart_import: "/smart-import",
@@ -230,9 +224,12 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   }));
 
   // Build optional module nav items (sorted by manifest menu.position)
+  // Hard guarantee: only show modules that have BOTH a menu entry AND a
+  // registered React route. Prevents ghost tabs when a backend module lacks
+  // its frontend component. Complements the check.py invariant.
   const optionalModules = activeModules
     .filter((m) => !CORE_IDS.includes(m.id) && m.id !== "multi_users")
-    .filter((m) => m.menu) // must have a menu entry
+    .filter((m) => m.menu && MODULE_IDS_WITH_ROUTE.has(m.id))
     .sort((a, b) => (a.menu?.position ?? 99) - (b.menu?.position ?? 99));
 
   const optionalItems = optionalModules.map((m: any) => ({

@@ -12,25 +12,37 @@ balance:
   date: '2025-01-01'
 
 modules:
-  entities: true
+  # --- Core : toujours actifs, fondations de l'app ---
+  dashboard: true
   transactions: true
   categories: true
-  dashboard: true
-  alerts: false
-  annotations: false
-  attachments: false
-  audit: false
-  bank_reconciliation: false
+  entities: true
+
+  # --- Utilitaires : activés par défaut (import, sauvegarde, auth, maintenance) ---
+  smart_import: true
+  backup: true
+  multi_users: true
+  system: true
+
+  # --- Intégrés dans Transactions / Paramètres (pas d'onglet dédié) ---
+  annotations: true
+  attachments: true
+  export: true
+  fec_export: true
+  audit: true
+
+  # --- Métier : à activer manuellement selon besoin (1 module = 1 onglet) ---
   budget: false
-  divisions: false
-  export: false
-  fec_export: false
-  forecasting: false
+  tiers: false
+  reimbursements: false
   grants: false
   invoices: false
-  multi_accounts: false
-  multi_users: false
-  recurring: false
-  reimbursements: false
   tax_receipts: false
-  tiers: false
+  recurring: false
+  forecasting: false
+  bank_reconciliation: false
+
+  # --- Cachés (pas de frontend, réservés usage avancé / futur) ---
+  divisions: false
+  alerts: false
+  multi_accounts: false

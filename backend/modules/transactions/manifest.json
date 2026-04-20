@@ -1,15 +1,31 @@
 {
   "id": "transactions",
   "name": "Transactions",
-  "description": "Gestion des transactions financieres",
+  "description": "Saisie et historique de toutes les opérations financières",
   "help": "Enregistrez vos recettes et depenses. Chaque transaction a une date, un libelle et un montant (positif = recette, negatif = depense). Le solde se calcule automatiquement a partir de votre solde de reference. Filtrez par date, categorie ou mot-cle.",
   "version": "1.1.0",
   "origin": "builtin",
   "category": "core",
   "dependencies": [],
-  "menu": {"label": "Transactions", "icon": "arrow-left-right", "position": 1},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
-  "dashboard_widgets": [{"id": "recent_transactions", "name": "Dernieres transactions", "component": "widgets/RecentTransactions.tsx", "default_visible": true, "size": "full"}],
+  "menu": {
+    "label": "Transactions",
+    "icon": "arrow-left-right",
+    "position": 1
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
+  "dashboard_widgets": [
+    {
+      "id": "recent_transactions",
+      "name": "Dernieres transactions",
+      "component": "widgets/RecentTransactions.tsx",
+      "default_visible": true,
+      "size": "full"
+    }
+  ],
   "settings_schema": {}
 }

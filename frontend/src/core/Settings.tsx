@@ -1,28 +1,19 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
-import { Pencil, Check, X, Info } from "lucide-react";
+import { Pencil, Check, X, Info, FileSpreadsheet, ShieldCheck, Download } from "lucide-react";
 import { useAuth } from "./AuthContext";
 
 const CORE_MODULE_IDS = ["transactions", "categories", "dashboard", "entities"];
 
-const MODULE_CATEGORIES: Record<string, { label: string; ids: string[] }> = {
-  core: {
-    label: "Noyau",
-    ids: ["transactions", "categories", "dashboard", "entities"],
-  },
-  standard: {
-    label: "Standard",
-    ids: ["invoices", "reimbursements", "budget", "divisions", "tiers", "attachments", "annotations", "export", "backup"],
-  },
-  advanced: {
-    label: "Avancé",
-    ids: [
-      "bank_reconciliation", "recurring", "multi_accounts", "audit",
-      "forecasting", "alerts", "tax_receipts", "grants", "fec_export", "multi_users",
-    ],
-  },
+// Category labels — modules are classified dynamically via manifest.category.
+const CATEGORY_LABELS: Record<string, string> = {
+  core: "Noyau",
+  standard: "Standard",
+  advanced: "Avancé",
+  custom: "Personnalisé",
 };
+const CATEGORY_ORDER = ["core", "standard", "advanced", "custom"];
 
 const ENTITY_TYPES = ["association", "entreprise", "auto-entrepreneur", "autre"];
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "CAD"];
@@ -32,6 +23,7 @@ interface DisplayModule {
   name: string;
   description?: string;
   help?: string;
+  category: string;
   active: boolean;
   core: boolean;
 }
@@ -118,6 +110,132 @@ function EditableField({
         </button>
       </div>
     </div>
+  );
+}
+
+function FecExportSection() {
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+        <FileSpreadsheet size={16} className="text-[#F2C48D]" />
+        Export FEC
+      </h2>
+      <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <p className="text-xs text-[#666] mb-4">
+          Génère le Fichier des Écritures Comptables (FEC) au format légal français
+          pour une année fiscale. Obligatoire en cas de contrôle fiscal.
+        </p>
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <label className="block text-xs text-[#666] mb-1.5">Année fiscale</label>
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+              placeholder="2026"
+            />
+          </div>
+          <a
+            href={`/api/fec_export/generate?fiscal_year=${year}`}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+          >
+            <Download size={14} /> Télécharger
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+interface AuditEntry {
+  id: number;
+  timestamp: string;
+  user_id: number | null;
+  action: string;
+  table_name: string;
+  record_id: number | null;
+  before_value: string | null;
+  after_value: string | null;
+}
+
+function AuditSection() {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/audit/?limit=200")
+      .then((r) => {
+        if (!r.ok) throw new Error(r.statusText);
+        return r.json();
+      })
+      .then(setEntries)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const shown = expanded ? entries : entries.slice(0, 20);
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+        <ShieldCheck size={16} className="text-[#F2C48D]" />
+        Journal d'audit
+      </h2>
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+        {loading ? (
+          <div className="py-8 text-center text-sm text-[#666]">Chargement…</div>
+        ) : error ? (
+          <div className="p-4 text-sm text-[#FF5252]">{error}</div>
+        ) : entries.length === 0 ? (
+          <div className="py-8 text-center text-sm text-[#666]">Aucun événement enregistré.</div>
+        ) : (
+          <>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#1a1a1a]">
+                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#666] uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#666] uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#666] uppercase tracking-wider">Table</th>
+                  <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#666] uppercase tracking-wider">ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((e, idx) => (
+                  <tr key={e.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
+                    <td className="px-4 py-2 text-[#B0B0B0] whitespace-nowrap">
+                      {new Date(e.timestamp).toLocaleString("fr-FR")}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-[#222] text-[#B0B0B0] text-[10px] font-mono">
+                        {e.action}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-[#B0B0B0]">{e.table_name}</td>
+                    <td className="px-4 py-2 text-right text-[#666]">
+                      {e.record_id !== null ? `#${e.record_id}` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {entries.length > 20 && (
+              <div className="border-t border-[#1a1a1a] p-3 text-center">
+                <button
+                  onClick={() => setExpanded(!expanded)}
+                  className="text-xs text-[#F2C48D] hover:underline"
+                >
+                  {expanded ? "Réduire" : `Afficher les ${entries.length} entrées`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -249,6 +367,7 @@ export default function Settings() {
         name: manifest?.name ?? id,
         description: manifest?.description,
         help: manifest?.help,
+        category: (manifest as any)?.category ?? "custom",
         active: active as boolean,
         core: CORE_MODULE_IDS.includes(id),
       };
@@ -428,20 +547,25 @@ export default function Settings() {
 
       <PasswordSection />
 
+      {moduleMap.get("fec_export")?.active && <FecExportSection />}
+      {moduleMap.get("audit")?.active && <AuditSection />}
+
       <section className="space-y-6">
         <h2 className="text-base font-semibold text-white">Modules</h2>
+        <p className="text-xs text-[#666] -mt-4">
+          Active un module pour le voir apparaître dans la barre latérale à gauche.
+          Chaque module activé = un onglet fonctionnel.
+        </p>
 
-        {Object.entries(MODULE_CATEGORIES).map(([catKey, cat]) => {
-          const catModules = cat.ids
-            .map((id) => moduleMap.get(id))
-            .filter((m): m is DisplayModule => m !== undefined);
+        {CATEGORY_ORDER.map((catKey) => {
+          const catModules = modules.filter((m) => m.category === catKey);
           if (catModules.length === 0) return null;
           const activeCount = catModules.filter((m) => m.active).length;
-
+          const label = CATEGORY_LABELS[catKey] ?? catKey;
           return (
             <div key={catKey}>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">{cat.label}</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">{label}</h3>
                 <span className="text-xs text-[#666]">{activeCount}/{catModules.length} actifs</span>
               </div>
               <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
@@ -452,19 +576,19 @@ export default function Settings() {
         })}
 
         {(() => {
-          const knownIds = new Set(Object.values(MODULE_CATEGORIES).flatMap((c) => c.ids));
-          const customModules = modules.filter((m) => !knownIds.has(m.id));
-          if (customModules.length === 0) return null;
+          const known = new Set(CATEGORY_ORDER);
+          const orphans = modules.filter((m) => !known.has(m.category));
+          if (orphans.length === 0) return null;
           return (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">Personnalisé</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">Autre</h3>
                 <span className="text-xs text-[#666]">
-                  {customModules.filter((m) => m.active).length}/{customModules.length} actifs
+                  {orphans.filter((m) => m.active).length}/{orphans.length} actifs
                 </span>
               </div>
               <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-                {customModules.map((mod, idx) => renderModuleRow(mod, idx))}
+                {orphans.map((mod, idx) => renderModuleRow(mod, idx))}
               </div>
             </div>
           );

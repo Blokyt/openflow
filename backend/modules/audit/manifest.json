@@ -7,8 +7,11 @@
   "origin": "builtin",
   "category": "advanced",
   "dependencies": [],
-  "menu": {"label": "Audit", "icon": "shield-check", "position": 80},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "settings_schema": {}
 }

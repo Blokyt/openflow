@@ -3,7 +3,9 @@ import { api } from "../../api";
 import { Transaction } from "../../types";
 import { useEntity } from "../../core/EntityContext";
 import TransactionForm from "./TransactionForm";
-import { Plus, Pencil, Trash2, X, Search, ArrowRight } from "lucide-react";
+import AttachmentsSection from "./AttachmentsSection";
+import AnnotationsSection from "./AnnotationsSection";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Download, FileJson } from "lucide-react";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -19,6 +21,31 @@ export default function TransactionList() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [detailTx, setDetailTx] = useState<Transaction | null>(null);
+  const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    api.getModules()
+      .then((mods: any[]) => setActiveModuleIds(new Set(mods.map((m) => m.id))))
+      .catch(() => {});
+  }, []);
+
+  const hasAttachments = activeModuleIds.has("attachments");
+  const hasAnnotations = activeModuleIds.has("annotations");
+  const hasExport = activeModuleIds.has("export");
+
+  function buildExportQuery(): string {
+    const p = new URLSearchParams();
+    if (search) p.set("search", search);
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo) p.set("date_to", dateTo);
+    if (selectedEntityId) {
+      p.set("entity_id", String(selectedEntityId));
+      p.set("include_children", "true");
+    }
+    const q = p.toString();
+    return q ? `?${q}` : "";
+  }
 
   const fetchTransactions = useCallback(() => {
     setLoading(true);
@@ -80,12 +107,32 @@ export default function TransactionList() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => { setShowForm(true); setEditingTx(null); }}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
-        >
-          <Plus size={15} /> Ajouter
-        </button>
+        <div className="flex items-center gap-2">
+          {hasExport && (
+            <>
+              <a
+                href={`/api/export/transactions/csv${buildExportQuery()}`}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#B0B0B0] border border-[#333] rounded-full hover:border-[#F2C48D] hover:text-[#F2C48D] transition-colors"
+                title="Télécharger CSV"
+              >
+                <Download size={14} /> CSV
+              </a>
+              <a
+                href={`/api/export/transactions/json${buildExportQuery()}`}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#B0B0B0] border border-[#333] rounded-full hover:border-[#F2C48D] hover:text-[#F2C48D] transition-colors"
+                title="Télécharger JSON"
+              >
+                <FileJson size={14} /> JSON
+              </a>
+            </>
+          )}
+          <button
+            onClick={() => { setShowForm(true); setEditingTx(null); }}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+          >
+            <Plus size={15} /> Ajouter
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -253,6 +300,15 @@ export default function TransactionList() {
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
+                        {(hasAttachments || hasAnnotations) && (
+                          <button
+                            onClick={() => setDetailTx(tx)}
+                            className="p-1.5 text-[#666] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
+                            title="Détails (notes, pièces jointes)"
+                          >
+                            <Eye size={14} strokeWidth={1.5} />
+                          </button>
+                        )}
                         <button
                           onClick={() => { setEditingTx(tx); setShowForm(false); }}
                           className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
@@ -276,6 +332,52 @@ export default function TransactionList() {
           </table>
         )}
       </div>
+
+      {detailTx && (
+        <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setDetailTx(null)}>
+          <div
+            className="w-full max-w-md bg-[#0a0a0a] border-l border-[#222] h-full overflow-y-auto p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xl font-bold text-white break-words">{detailTx.label}</h2>
+                <div className="text-sm text-[#666] mt-1">{detailTx.date}</div>
+                <div
+                  className={`mt-3 text-2xl font-bold ${
+                    detailTx.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"
+                  }`}
+                >
+                  {eurFormatter.format(detailTx.amount)}
+                </div>
+              </div>
+              <button
+                onClick={() => setDetailTx(null)}
+                className="text-[#666] hover:text-white p-1 flex-shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {(detailTx as any).description && (
+              <div className="mb-4 bg-[#111] border border-[#222] rounded-xl p-3 text-sm text-[#B0B0B0]">
+                {(detailTx as any).description}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {hasAttachments && <AttachmentsSection txId={detailTx.id} />}
+              {hasAnnotations && <AnnotationsSection txId={detailTx.id} />}
+              {!hasAttachments && !hasAnnotations && (
+                <div className="text-sm text-[#666]">
+                  Active les modules « Pièces jointes » et « Annotations » dans Paramètres
+                  pour enrichir le détail des transactions.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

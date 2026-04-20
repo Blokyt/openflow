@@ -1,18 +1,38 @@
 {
   "id": "dashboard",
-  "name": "Dashboard",
-  "description": "Tableau de bord personnalisable",
+  "name": "Tableau de bord",
+  "description": "Vue d'ensemble personnalisable (solde, KPIs, widgets)",
   "help": "Vue d'ensemble de votre tresorerie : solde actuel, revenus, depenses, et widgets personnalisables. Le tableau de bord agrege les donnees de tous vos modules actifs en un coup d'oeil.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "core",
   "dependencies": [],
-  "menu": {"label": "Dashboard", "icon": "layout-dashboard", "position": 0},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "menu": {
+    "label": "Dashboard",
+    "icon": "layout-dashboard",
+    "position": 0
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [
-    {"id": "current_balance", "name": "Solde actuel", "component": "widgets/CurrentBalance.tsx", "default_visible": true, "size": "quarter"},
-    {"id": "income_expense_chart", "name": "Entrees / Sorties", "component": "widgets/IncomeExpenseChart.tsx", "default_visible": true, "size": "half"}
+    {
+      "id": "current_balance",
+      "name": "Solde actuel",
+      "component": "widgets/CurrentBalance.tsx",
+      "default_visible": true,
+      "size": "quarter"
+    },
+    {
+      "id": "income_expense_chart",
+      "name": "Entrees / Sorties",
+      "component": "widgets/IncomeExpenseChart.tsx",
+      "default_visible": true,
+      "size": "half"
+    }
   ],
   "settings_schema": {}
 }

@@ -1,15 +1,25 @@
 {
   "id": "forecasting",
-  "name": "Previsions de tresorerie",
+  "name": "Prévisions de trésorerie",
   "description": "Projection du cash-flow futur",
   "help": "Projetez votre tresorerie sur les mois a venir. Le module analyse vos 6 derniers mois de recettes et depenses pour estimer l'evolution de votre solde. Visualisez si vous risquez un deficit.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Previsions", "icon": "trending-up", "position": 84},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "dependencies": [
+    "transactions"
+  ],
+  "menu": {
+    "label": "Prévisions",
+    "icon": "trending-up",
+    "position": 84
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
   "settings_schema": {}
 }

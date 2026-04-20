@@ -7,33 +7,7 @@ import Settings from "./core/Settings";
 import Login from "./core/Login";
 import { AuthProvider, useAuth } from "./core/AuthContext";
 import { EntityProvider } from "./core/EntityContext";
-import EntityTree from "./modules/entities/EntityTree";
-import TransactionList from "./modules/transactions/TransactionList";
-import CategoryManager from "./modules/categories/CategoryManager";
-import BudgetManager from "./modules/budget/BudgetManager";
-import RecurringManager from "./modules/recurring/RecurringManager";
-import ForecastingView from "./modules/forecasting/ForecastingView";
-import BankReconciliation from "./modules/bank_reconciliation/BankReconciliation";
-import TaxReceiptsView from "./modules/tax_receipts/TaxReceiptsView";
-import UserManager from "./modules/multi_users/UserManager";
-import BackupManager from "./modules/backup/BackupManager";
-import SmartImportPage from "./modules/smart_import/SmartImportPage";
-import SystemPage from "./modules/system/SystemPage";
-
-const MODULE_ROUTES: Record<string, { path: string; element: React.ReactNode }> = {
-  transactions: { path: "/transactions", element: <TransactionList /> },
-  categories: { path: "/categories", element: <CategoryManager /> },
-  budget: { path: "/budget", element: <BudgetManager /> },
-  recurring: { path: "/recurring", element: <RecurringManager /> },
-  forecasting: { path: "/forecasting", element: <ForecastingView /> },
-  bank_reconciliation: { path: "/bank-reconciliation", element: <BankReconciliation /> },
-  tax_receipts: { path: "/tax-receipts", element: <TaxReceiptsView /> },
-  entities: { path: "/entities", element: <EntityTree /> },
-  multi_users: { path: "/multi-users", element: <UserManager /> },
-  backup: { path: "/backup", element: <BackupManager /> },
-  smart_import: { path: "/smart-import", element: <SmartImportPage /> },
-  system: { path: "/system", element: <SystemPage /> },
-};
+import { MODULE_ROUTES } from "./routes";
 
 function Spinner() {
   return (
@@ -59,7 +33,6 @@ function AppContent() {
 
   const activeModuleIds = activeModules.map((m: any) => m.id);
 
-  // If multi_users module is active and user is not logged in, show login page
   const authRequired = activeModuleIds.includes("multi_users");
   if (authRequired && !user) return <Login />;
 
@@ -72,9 +45,8 @@ function AppContent() {
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/entities" element={<EntityTree />} />
               {Object.entries(MODULE_ROUTES).map(([moduleId, route]) =>
-                moduleId !== "entities" && activeModuleIds.includes(moduleId) ? (
+                activeModuleIds.includes(moduleId) ? (
                   <Route key={moduleId} path={route.path} element={route.element} />
                 ) : null
               )}

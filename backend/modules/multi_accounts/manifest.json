@@ -1,15 +1,20 @@
 {
   "id": "multi_accounts",
   "name": "Multi-comptes",
-  "description": "Gerer plusieurs comptes bancaires et caisse",
+  "description": "Gérer plusieurs comptes bancaires et caisse",
   "help": "Gerez plusieurs comptes (courant, epargne, caisse). Effectuez des virements entre comptes et suivez le solde de chaque compte independamment. Les transferts n'affectent pas le solde global.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "advanced",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Comptes", "icon": "wallet", "position": 82},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "dependencies": [
+    "transactions"
+  ],
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
   "settings_schema": {}
 }

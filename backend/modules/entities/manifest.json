@@ -1,15 +1,25 @@
 {
   "id": "entities",
-  "name": "Entites",
-  "description": "Arbre d'entites internes et externes",
+  "name": "Entités",
+  "description": "Structure de l'organisation : qui gère quoi (ex: BDA, Gastronomine)",
   "help": "Gerez votre structure organisationnelle : entite racine, sous-clubs, fournisseurs, clients. Chaque transaction trace qui paie qui. Consultez le solde propre et consolide de chaque entite.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "core",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Entites", "icon": "git-branch", "position": 1},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "dependencies": [
+    "transactions"
+  ],
+  "menu": {
+    "label": "Entités",
+    "icon": "git-branch",
+    "position": 1
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
   "settings_schema": {}
 }
