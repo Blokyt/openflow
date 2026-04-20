@@ -84,4 +84,28 @@ export const api = {
     request<any>(`/multi_users/${userId}/entities`, { method: "POST", body: JSON.stringify(data) }),
   removeUserEntity: (userId: number, entityId: number) =>
     request<any>(`/multi_users/${userId}/entities/${entityId}`, { method: "DELETE" }),
+  // Backup
+  getBackupPreview: () => request<any>("/backup/preview"),
+  exportBackup: async () => {
+    const response = await fetch(`${BASE_URL}/backup/export`);
+    if (!response.ok) throw new Error("Erreur lors de l'export");
+    const blob = await response.blob();
+    const filename = response.headers.get("Content-Disposition")?.split("filename=")[1] || "openflow-backup.zip";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importBackup: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(`${BASE_URL}/backup/import`, { method: "POST", body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || response.statusText);
+    }
+    return response.json();
+  },
 };

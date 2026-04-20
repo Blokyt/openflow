@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../../api";
 import { Transaction } from "../../types";
+import { useEntity } from "../../core/EntityContext";
 import TransactionForm from "./TransactionForm";
-import { Plus, Pencil, Trash2, X, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight } from "lucide-react";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
 export default function TransactionList() {
+  const { selectedEntityId, selectedEntity } = useEntity();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,12 +26,16 @@ export default function TransactionList() {
     if (search) params.search = search;
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
+    if (selectedEntityId) {
+      params.entity_id = String(selectedEntityId);
+      params.include_children = "true";
+    }
     api
       .getTransactions(Object.keys(params).length ? params : undefined)
       .then(setTransactions)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [search, dateFrom, dateTo]);
+  }, [search, dateFrom, dateTo, selectedEntityId]);
 
   useEffect(() => {
     fetchTransactions();
@@ -64,9 +70,16 @@ export default function TransactionList() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
-          Transactions
-        </h1>
+        <div>
+          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
+            Transactions
+          </h1>
+          {selectedEntity && (
+            <p className="text-sm text-[#999] mt-1">
+              Filtrées pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités
+            </p>
+          )}
+        </div>
         <button
           onClick={() => { setShowForm(true); setEditingTx(null); }}
           className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
@@ -152,37 +165,75 @@ export default function TransactionList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Libellé</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Libellé</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Flux</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
+                <th className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
+                <th className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {transactions.map((tx, idx) => (
+              {transactions.map((tx: any, idx) => (
                 <tr
                   key={tx.id}
                   className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
                 >
-                  <td className="px-5 py-3.5 text-[#B0B0B0] whitespace-nowrap">{tx.date}</td>
-                  <td className="px-5 py-3.5 font-medium text-white">
+                  <td className="px-4 py-3.5 text-[#B0B0B0] whitespace-nowrap">{tx.date}</td>
+                  <td className="px-4 py-3.5 font-medium text-white">
                     {tx.label}
                     {tx.description && (
-                      <p className="text-xs text-[#666] font-normal mt-0.5">{tx.description}</p>
+                      <p className="text-xs text-[#666] font-normal mt-0.5 truncate max-w-xs">{tx.description}</p>
                     )}
                   </td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">
-                    {tx.category?.name ?? <span className="text-[#444]">—</span>}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span
+                        className="px-2 py-0.5 rounded-full truncate max-w-[100px]"
+                        style={{
+                          backgroundColor: (tx.from_entity_color || "#6B7280") + "20",
+                          color: tx.from_entity_color || "#999",
+                        }}
+                        title={tx.from_entity_name}
+                      >
+                        {tx.from_entity_name || "—"}
+                      </span>
+                      <ArrowRight size={12} className="text-[#555] shrink-0" />
+                      <span
+                        className="px-2 py-0.5 rounded-full truncate max-w-[100px]"
+                        style={{
+                          backgroundColor: (tx.to_entity_color || "#6B7280") + "20",
+                          color: tx.to_entity_color || "#999",
+                        }}
+                        title={tx.to_entity_name}
+                      >
+                        {tx.to_entity_name || "—"}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    {tx.category_name ? (
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: (tx.category_color || "#6B7280") + "20",
+                          color: tx.category_color || "#999",
+                        }}
+                      >
+                        {tx.category_name}
+                      </span>
+                    ) : (
+                      <span className="text-[#444]">—</span>
+                    )}
                   </td>
                   <td
-                    className={`px-5 py-3.5 text-right font-semibold whitespace-nowrap ${
+                    className={`px-4 py-3.5 text-right font-semibold whitespace-nowrap ${
                       tx.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"
                     }`}
                   >
                     {eurFormatter.format(tx.amount)}
                   </td>
-                  <td className="px-5 py-3.5 text-right">
+                  <td className="px-4 py-3.5 text-right">
                     {confirmDelete === tx.id ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="text-xs text-[#666]">Supprimer ?</span>

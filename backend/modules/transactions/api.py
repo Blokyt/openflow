@@ -56,23 +56,30 @@ def list_transactions(
 ):
     conn = get_conn()
     try:
-        query = "SELECT * FROM transactions WHERE 1=1"
+        query = """SELECT t.*,
+                   c.name AS category_name, c.color AS category_color,
+                   ef.name AS from_entity_name, ef.color AS from_entity_color,
+                   et.name AS to_entity_name, et.color AS to_entity_color
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id
+            LEFT JOIN entities ef ON t.from_entity_id = ef.id
+            LEFT JOIN entities et ON t.to_entity_id = et.id
+            WHERE 1=1"""
         params = []
         if date_from:
-            query += " AND date >= ?"
+            query += " AND t.date >= ?"
             params.append(date_from)
         if date_to:
-            query += " AND date <= ?"
+            query += " AND t.date <= ?"
             params.append(date_to)
         if category_id is not None:
-            query += " AND category_id = ?"
+            query += " AND t.category_id = ?"
             params.append(category_id)
         if search:
-            query += " AND (label LIKE ? OR description LIKE ?)"
+            query += " AND (t.label LIKE ? OR t.description LIKE ?)"
             params.extend([f"%{search}%", f"%{search}%"])
         if entity_id is not None:
             if include_children:
-                # Recursive CTE to get all descendant entity IDs
                 rows = conn.execute(
                     """WITH RECURSIVE subtree(id) AS (
                            SELECT ? AS id
@@ -85,13 +92,13 @@ def list_transactions(
                 ).fetchall()
                 entity_ids = [r[0] for r in rows]
                 placeholders = ",".join("?" * len(entity_ids))
-                query += f" AND (from_entity_id IN ({placeholders}) OR to_entity_id IN ({placeholders}))"
+                query += f" AND (t.from_entity_id IN ({placeholders}) OR t.to_entity_id IN ({placeholders}))"
                 params.extend(entity_ids)
                 params.extend(entity_ids)
             else:
-                query += " AND (from_entity_id = ? OR to_entity_id = ?)"
+                query += " AND (t.from_entity_id = ? OR t.to_entity_id = ?)"
                 params.extend([entity_id, entity_id])
-        query += " ORDER BY date DESC, id DESC"
+        query += " ORDER BY t.date DESC, t.id DESC"
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]
     finally:

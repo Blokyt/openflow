@@ -1,5 +1,7 @@
 """Multi-users API module for OpenFlow."""
+import secrets
 import sqlite3
+import string
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -13,8 +15,8 @@ from backend.core.auth import is_root_admin
 
 router = APIRouter()
 
-VALID_ROLES = {"admin", "treasurer", "reader"}
-VALID_ENTITY_ROLES = {"tresorier", "lecteur"}
+VALID_ROLES = {"admin", "tresorier", "president", "lecteur"}
+VALID_ENTITY_ROLES = {"tresorier", "president", "lecteur"}
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +36,17 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     # Never expose password_hash
     d.pop("password_hash", None)
     return d
+
+
+def _require_admin_if_users_exist(request: Request):
+    """If any users exist, require the caller to be root admin. Raises 403 otherwise."""
+    conn = get_conn()
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+    if user_count > 0 and not is_root_admin(request):
+        raise HTTPException(403, "Admin access required")
 
 
 def _get_session_user(request: Request):
@@ -64,8 +77,8 @@ def _get_session_user(request: Request):
 
 class UserCreate(BaseModel):
     username: str
-    password: str
-    role: str = "reader"
+    password: str = ""  # Empty = auto-generate
+    role: str = "lecteur"
     display_name: str = ""
 
 
@@ -200,13 +213,7 @@ def change_password(request: Request, body: PasswordChange):
 @router.post("/cleanup-sessions")
 def cleanup_sessions(request: Request):
     """Remove stale sessions older than 24h. Admin only."""
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
 
     conn = get_conn()
     try:
@@ -250,13 +257,7 @@ def list_user_entities(user_id: int, request: Request):
 
 @router.post("/{user_id}/entities", status_code=201)
 def assign_entity(user_id: int, body: EntityAssignment, request: Request):
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
     if body.role not in VALID_ENTITY_ROLES:
         raise HTTPException(
             status_code=400,
@@ -294,13 +295,7 @@ def assign_entity(user_id: int, body: EntityAssignment, request: Request):
 
 @router.delete("/{user_id}/entities/{entity_id}")
 def remove_entity_access(user_id: int, entity_id: int, request: Request):
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
     conn = get_conn()
     try:
         existing = conn.execute(
@@ -328,13 +323,7 @@ def remove_entity_access(user_id: int, entity_id: int, request: Request):
 
 @router.get("/")
 def list_users(request: Request):
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
     conn = get_conn()
     try:
         cur = conn.execute("SELECT * FROM users ORDER BY id ASC")
@@ -345,23 +334,25 @@ def list_users(request: Request):
 
 @router.post("/", status_code=201)
 def create_user(user: UserCreate, request: Request):
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
     if user.role not in VALID_ROLES:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid role '{user.role}'. Must be one of: {', '.join(VALID_ROLES)}",
         )
-    if len(user.password) < 6:
+
+    # Auto-generate password if not provided
+    raw_password = user.password
+    generated = False
+    if not raw_password:
+        alphabet = string.ascii_letters + string.digits
+        raw_password = "".join(secrets.choice(alphabet) for _ in range(10))
+        generated = True
+    elif len(raw_password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
 
     now = datetime.now(timezone.utc).isoformat()
-    password_hash = _hash_password(user.password)
+    password_hash = _hash_password(raw_password)
 
     conn = get_conn()
     try:
@@ -378,7 +369,11 @@ def create_user(user: UserCreate, request: Request):
             )
 
         row = conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return _row_to_dict(row)
+        result = _row_to_dict(row)
+        # Return generated password ONCE so admin can share it
+        if generated:
+            result["generated_password"] = raw_password
+        return result
     finally:
         conn.close()
 
@@ -407,13 +402,7 @@ def get_user(user_id: int, request: Request):
 
 @router.put("/{user_id}")
 def update_user(user_id: int, user: UserUpdate, request: Request):
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
     conn = get_conn()
     try:
         existing = conn.execute(
@@ -456,13 +445,7 @@ def update_user(user_id: int, user: UserUpdate, request: Request):
 
 @router.delete("/{user_id}")
 def delete_user(user_id: int, request: Request):
-    conn = get_conn()
-    try:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    finally:
-        conn.close()
-    if user_count > 0 and not is_root_admin(request):
-        raise HTTPException(403, "Admin access required")
+    _require_admin_if_users_exist(request)
     conn = get_conn()
     try:
         existing = conn.execute(

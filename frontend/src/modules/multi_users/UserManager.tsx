@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../core/AuthContext";
-import { Users, Plus, Trash2, Shield, Eye, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, Plus, Trash2, Shield, Eye, X, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 
 interface User {
   id: number;
@@ -25,13 +25,15 @@ interface Entity {
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   tresorier: "Trésorier",
-  reader: "Lecteur",
+  president: "Président",
+  lecteur: "Lecteur",
 };
 
 const ROLE_ICON: Record<string, typeof Shield> = {
   admin: Shield,
   tresorier: Shield,
-  reader: Eye,
+  president: Shield,
+  lecteur: Eye,
 };
 
 function RoleBadge({ role }: { role: string }) {
@@ -39,7 +41,8 @@ function RoleBadge({ role }: { role: string }) {
   const colors: Record<string, string> = {
     admin: "text-[#F2C48D] bg-[#F2C48D]/10 border-[#F2C48D]/20",
     tresorier: "text-[#64B5F6] bg-[#64B5F6]/10 border-[#64B5F6]/20",
-    reader: "text-[#888] bg-[#1a1a1a] border-[#333]",
+    president: "text-[#A78BFA] bg-[#A78BFA]/10 border-[#A78BFA]/20",
+    lecteur: "text-[#888] bg-[#1a1a1a] border-[#333]",
   };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${colors[role] || colors.reader}`}>
@@ -54,24 +57,84 @@ function RoleBadge({ role }: { role: string }) {
 function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("reader");
+  const [role, setRole] = useState("lecteur");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSaving(true);
     try {
-      await api.createUser({ username, display_name: displayName, password, role });
+      const result = await api.createUser({ username, display_name: displayName, password: "", role });
+      if (result.generated_password) {
+        setGeneratedPassword(result.generated_password);
+      }
       onCreated();
-      onClose();
     } catch (err: any) {
       setError(err.message || "Erreur lors de la création");
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleCopy() {
+    if (generatedPassword) {
+      navigator.clipboard.writeText(generatedPassword);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  // After creation: show generated password
+  if (generatedPassword) {
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div className="bg-[#111] border border-[#222] rounded-2xl p-6 w-full max-w-md">
+          <h3 className="text-base font-semibold text-white mb-4">Utilisateur créé</h3>
+
+          <div className="bg-[#0a0a0a] border border-[#333] rounded-xl p-4 space-y-3 mb-5">
+            <div className="flex justify-between text-sm">
+              <span className="text-[#666]">Identifiant</span>
+              <span className="text-white font-medium">{username}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-[#666]">Rôle</span>
+              <RoleBadge role={role} />
+            </div>
+            <div className="border-t border-[#222] pt-3">
+              <p className="text-xs text-[#666] mb-2">Mot de passe généré (visible une seule fois) :</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-[#1a1a1a] border border-[#F2C48D]/30 rounded-lg px-3 py-2 text-[#F2C48D] font-mono text-sm select-all">
+                  {generatedPassword}
+                </code>
+                <button
+                  onClick={handleCopy}
+                  className="p-2 text-[#666] hover:text-[#F2C48D] transition-colors"
+                  title="Copier"
+                >
+                  {copied ? <Check size={16} className="text-[#00C853]" /> : <Copy size={16} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#999] mb-4">
+            Communiquez ce mot de passe à l'utilisateur. Il pourra le changer dans ses paramètres.
+            Vous ne pourrez plus le voir après avoir fermé cette fenêtre.
+          </p>
+
+          <button
+            onClick={onClose}
+            className="w-full bg-[#F2C48D] text-black font-medium rounded-lg py-2.5 text-sm hover:bg-[#e5b87e] transition-colors"
+          >
+            Fermer
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -103,29 +166,27 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+              placeholder="Ex: Joséphine Peronne"
             />
           </div>
           <div>
-            <label className="block text-xs text-[#666] mb-1.5">Mot de passe</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-[#666] mb-1.5">Rôle global</label>
+            <label className="block text-xs text-[#666] mb-1.5">Rôle</label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
               className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
             >
-              <option value="reader">Lecteur</option>
-              <option value="tresorier">Trésorier</option>
-              <option value="admin">Admin</option>
+              <option value="lecteur">Lecteur — consultation seule</option>
+              <option value="president">Président — lecture + validation</option>
+              <option value="tresorier">Trésorier — lecture + écriture</option>
+              <option value="admin">Admin — accès total</option>
             </select>
+          </div>
+
+          <div className="bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5">
+            <p className="text-xs text-[#999]">
+              Un mot de passe sera généré automatiquement et affiché une seule fois après la création.
+            </p>
           </div>
 
           {error && <p className="text-[#FF5252] text-xs">{error}</p>}
@@ -168,7 +229,7 @@ function UserRow({
   const [userEntities, setUserEntities] = useState<UserEntity[]>([]);
   const [loadingEntities, setLoadingEntities] = useState(false);
   const [assignEntityId, setAssignEntityId] = useState("");
-  const [assignRole, setAssignRole] = useState("reader");
+  const [assignRole, setAssignRole] = useState("lecteur");
   const [assigning, setAssigning] = useState(false);
   const [error, setError] = useState("");
 
@@ -313,9 +374,9 @@ function UserRow({
                   onChange={(e) => setAssignRole(e.target.value)}
                   className="bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F2C48D]"
                 >
-                  <option value="reader">Lecteur</option>
+                  <option value="lecteur">Lecteur</option>
+                  <option value="president">Président</option>
                   <option value="tresorier">Trésorier</option>
-                  <option value="admin">Admin</option>
                 </select>
                 <button
                   type="submit"

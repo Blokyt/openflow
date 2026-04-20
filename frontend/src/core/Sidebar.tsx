@@ -5,12 +5,13 @@ import {
   TrendingUp, GitCompare, Receipt, Settings, FileText, RotateCcw,
   Building2, Users, Paperclip, MessageSquare, Download, Wallet,
   ShieldCheck, Bell, HandCoins, FileSpreadsheet, UsersRound,
-  ChevronDown, GitBranch, Check, LogOut,
+  ChevronDown, GitBranch, Check, LogOut, Archive, FileUp, Activity,
 } from "lucide-react";
 import { useEntity } from "./EntityContext";
 import { useAuth } from "./AuthContext";
 import { Entity } from "../types";
 
+// Map manifest icon names → React components
 const ICON_MAP: Record<string, any> = {
   "layout-dashboard": LayoutDashboard,
   "arrow-left-right": ArrowLeftRight,
@@ -33,12 +34,18 @@ const ICON_MAP: Record<string, any> = {
   "hand-coins": HandCoins,
   "file-spreadsheet": FileSpreadsheet,
   "users-round": UsersRound,
+  "git-branch": GitBranch,
+  "archive": Archive,
+  "file-up": FileUp,
+  "activity": Activity,
 };
 
+// Module ID → route path (must match MODULE_ROUTES in App.tsx)
 const MODULE_PATH_MAP: Record<string, string> = {
   dashboard: "/dashboard",
   transactions: "/transactions",
   categories: "/categories",
+  entities: "/entities",
   budget: "/budget",
   recurring: "/recurring",
   forecasting: "/forecasting",
@@ -57,13 +64,13 @@ const MODULE_PATH_MAP: Record<string, string> = {
   grants: "/grants",
   fec_export: "/fec-export",
   multi_users: "/multi-users",
+  backup: "/backup",
+  smart_import: "/smart-import",
+  system: "/system",
 };
 
-// Modules that have a page (not just backend-only)
-const MODULES_WITH_PAGES = new Set([
-  "dashboard", "transactions", "categories", "budget", "recurring",
-  "forecasting", "bank_reconciliation", "tax_receipts",
-]);
+// Core modules: always shown, in fixed order
+const CORE_IDS = ["dashboard", "transactions", "categories", "entities"];
 
 // ─── Entity selector dropdown ─────────────────────────────────────────────────
 
@@ -112,7 +119,6 @@ function EntitySelector() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -152,7 +158,6 @@ function EntitySelector() {
 
       {open && (
         <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden">
-          {/* All entities option */}
           <button
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
             onClick={handleClear}
@@ -160,7 +165,6 @@ function EntitySelector() {
             <span className="flex-1 text-[#666]">Toutes les entités</span>
             {selectedEntityId === null && <Check size={12} className="text-[#F2C48D]" />}
           </button>
-
           <div className="max-h-48 overflow-y-auto py-1">
             {entities.map((e) => (
               <EntitySelectorOption
@@ -178,53 +182,68 @@ function EntitySelector() {
   );
 }
 
+// ─── Nav item component ─────────────────────────────────────────────────────
+
+function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: any }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
+          isActive
+            ? "text-white bg-[#111]"
+            : "text-[#666] hover:bg-[#111] hover:text-white"
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
+          )}
+          <Icon size={17} strokeWidth={1.5} />
+          {label}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
-  activeModuleIds: string[];
+  activeModules: any[];
 }
 
-export default function Sidebar({ activeModuleIds }: SidebarProps) {
+export default function Sidebar({ activeModules }: SidebarProps) {
   const { user, logout } = useAuth();
 
-  const navItems = [
-    // Dashboard always first
-    { to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
-    // Transactions and categories are core, always shown
-    { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
-    { to: "/categories", label: "Catégories", icon: Tags },
-    // Entities always shown
-    { to: "/entities", label: "Entités", icon: GitBranch },
-  ];
+  // Build core nav items (fixed, always shown)
+  const coreManifests = CORE_IDS
+    .map((id) => activeModules.find((m) => m.id === id))
+    .filter(Boolean);
 
-  // Add module pages that are active
-  const moduleNavItems: { to: string; label: string; icon: any }[] = [];
-  const moduleLabels: Record<string, string> = {
-    budget: "Budget",
-    recurring: "Récurrences",
-    forecasting: "Prévisions",
-    bank_reconciliation: "Rapprochement",
-    tax_receipts: "Reçus fiscaux",
-  };
+  const coreItems = coreManifests.map((m: any) => ({
+    to: MODULE_PATH_MAP[m.id] || `/${m.id}`,
+    label: m.menu?.label || m.name,
+    icon: ICON_MAP[m.menu?.icon] || LayoutDashboard,
+  }));
 
-  for (const modId of activeModuleIds) {
-    if (["dashboard", "transactions", "categories"].includes(modId)) continue;
-    if (!MODULES_WITH_PAGES.has(modId)) continue;
-    const path = MODULE_PATH_MAP[modId];
-    if (!path) continue;
-    const icon = ICON_MAP[getModuleIcon(modId)] || LayoutDashboard;
-    moduleNavItems.push({
-      to: path,
-      label: moduleLabels[modId] || modId,
-      icon,
-    });
-  }
+  // Build optional module nav items (sorted by manifest menu.position)
+  const optionalModules = activeModules
+    .filter((m) => !CORE_IDS.includes(m.id) && m.id !== "multi_users")
+    .filter((m) => m.menu) // must have a menu entry
+    .sort((a, b) => (a.menu?.position ?? 99) - (b.menu?.position ?? 99));
 
-  // Show Users link only to admins when multi_users is active
+  const optionalItems = optionalModules.map((m: any) => ({
+    to: MODULE_PATH_MAP[m.id] || `/${m.id}`,
+    label: m.menu?.label || m.name,
+    icon: ICON_MAP[m.menu?.icon] || LayoutDashboard,
+  }));
+
+  // Multi-users shown only for admins, at the bottom
   const isAdmin = user?.role === "admin";
-  const multiUsersActive = activeModuleIds.includes("multi_users");
-
-  const allItems = [...navItems, ...moduleNavItems];
+  const multiUsersActive = activeModules.some((m) => m.id === "multi_users");
 
   return (
     <aside className="w-60 bg-[#080808] border-r border-[#222] flex flex-col h-full flex-shrink-0">
@@ -238,73 +257,28 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
         <EntitySelector />
       </div>
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-        {allItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
-                isActive
-                  ? "text-white bg-[#111]"
-                  : "text-[#666] hover:bg-[#111] hover:text-white"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
-                )}
-                <Icon size={17} strokeWidth={1.5} />
-                {label}
-              </>
-            )}
-          </NavLink>
+        {/* Core modules */}
+        {coreItems.map((item) => (
+          <NavItem key={item.to} {...item} />
+        ))}
+
+        {/* Separator if there are optional modules */}
+        {optionalItems.length > 0 && (
+          <div className="!my-3 border-t border-[#1a1a1a]" />
+        )}
+
+        {/* Optional modules — each one = one sidebar entry */}
+        {optionalItems.map((item) => (
+          <NavItem key={item.to} {...item} />
         ))}
       </nav>
+
+      {/* Bottom section: admin + settings + user */}
       <div className="px-3 pb-3 space-y-0.5 border-t border-[#222] pt-3">
         {isAdmin && multiUsersActive && (
-          <NavLink
-            to="/multi-users"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
-                isActive
-                  ? "text-white bg-[#111]"
-                  : "text-[#666] hover:bg-[#111] hover:text-white"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
-                )}
-                <Users size={17} strokeWidth={1.5} />
-                Utilisateurs
-              </>
-            )}
-          </NavLink>
+          <NavItem to="/multi-users" label="Utilisateurs" icon={UsersRound} />
         )}
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
-              isActive
-                ? "text-white bg-[#111]"
-                : "text-[#666] hover:bg-[#111] hover:text-white"
-            }`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
-              )}
-              <Settings size={17} strokeWidth={1.5} />
-              Paramètres
-            </>
-          )}
-        </NavLink>
+        <NavItem to="/settings" label="Paramètres" icon={Settings} />
 
         {user && (
           <div className="mt-2 pt-2 border-t border-[#1a1a1a]">
@@ -328,28 +302,4 @@ export default function Sidebar({ activeModuleIds }: SidebarProps) {
       </div>
     </aside>
   );
-}
-
-function getModuleIcon(moduleId: string): string {
-  const map: Record<string, string> = {
-    budget: "piggy-bank",
-    recurring: "repeat",
-    forecasting: "trending-up",
-    bank_reconciliation: "git-compare",
-    tax_receipts: "receipt",
-    invoices: "file-text",
-    reimbursements: "rotate-ccw",
-    divisions: "building-2",
-    tiers: "users",
-    attachments: "paperclip",
-    annotations: "message-square",
-    export: "download",
-    multi_accounts: "wallet",
-    audit: "shield-check",
-    alerts: "bell",
-    grants: "hand-coins",
-    fec_export: "file-spreadsheet",
-    multi_users: "users-round",
-  };
-  return map[moduleId] || "layout-dashboard";
 }

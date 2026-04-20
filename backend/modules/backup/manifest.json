@@ -1,0 +1,15 @@
+{
+  "id": "backup",
+  "name": "Sauvegarde",
+  "description": "Exporter et importer une sauvegarde complete de la base de donnees",
+  "help": "Exportez l'integralite de vos donnees (entites, categories, transactions, contacts, config) dans un fichier ZIP portable. Importez une sauvegarde pour restaurer ou migrer vers une autre installation OpenFlow.",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": [],
+  "menu": {"label": "Sauvegarde", "icon": "archive", "position": 20},
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {}
+}

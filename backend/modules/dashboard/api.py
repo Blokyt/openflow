@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from backend.core.balance import compute_entity_balance, compute_legacy_balance
+from backend.core.balance import compute_consolidated_balance, compute_entity_balance, compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -120,8 +120,18 @@ def get_summary(entity_id: Optional[int] = None):
                 "SELECT COUNT(*) FROM transactions WHERE from_entity_id = ? OR to_entity_id = ?",
                 (entity_id, entity_id),
             ).fetchone()[0]
+            balance = bal["balance"]
         else:
-            bal = compute_legacy_balance(conn, str(CONFIG_PATH))
+            # "Toutes les entités" = consolidated balance of root entity
+            root = conn.execute(
+                "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
+            ).fetchone()
+            if root:
+                consolidated = compute_consolidated_balance(conn, root["id"])
+                balance = consolidated["consolidated_balance"]
+            else:
+                bal = compute_legacy_balance(conn, str(CONFIG_PATH))
+                balance = bal["balance"]
             total_income = conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount > 0"
             ).fetchone()[0]
@@ -131,7 +141,7 @@ def get_summary(entity_id: Optional[int] = None):
             transaction_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
 
         return {
-            "balance": bal["balance"],
+            "balance": balance,
             "total_income": total_income,
             "total_expenses": total_expenses,
             "transaction_count": transaction_count,

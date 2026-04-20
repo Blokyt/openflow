@@ -1,0 +1,4 @@
+{
+  "max_backups": 6,
+  "temp_max_age_hours": 24
+}

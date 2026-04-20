@@ -16,6 +16,9 @@ import ForecastingView from "./modules/forecasting/ForecastingView";
 import BankReconciliation from "./modules/bank_reconciliation/BankReconciliation";
 import TaxReceiptsView from "./modules/tax_receipts/TaxReceiptsView";
 import UserManager from "./modules/multi_users/UserManager";
+import BackupManager from "./modules/backup/BackupManager";
+import SmartImportPage from "./modules/smart_import/SmartImportPage";
+import SystemPage from "./modules/system/SystemPage";
 
 const MODULE_ROUTES: Record<string, { path: string; element: React.ReactNode }> = {
   transactions: { path: "/transactions", element: <TransactionList /> },
@@ -27,6 +30,9 @@ const MODULE_ROUTES: Record<string, { path: string; element: React.ReactNode }> 
   tax_receipts: { path: "/tax-receipts", element: <TaxReceiptsView /> },
   entities: { path: "/entities", element: <EntityTree /> },
   multi_users: { path: "/multi-users", element: <UserManager /> },
+  backup: { path: "/backup", element: <BackupManager /> },
+  smart_import: { path: "/smart-import", element: <SmartImportPage /> },
+  system: { path: "/system", element: <SystemPage /> },
 };
 
 function Spinner() {
@@ -39,17 +45,19 @@ function Spinner() {
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
-  const [activeModuleIds, setActiveModuleIds] = useState<string[]>([]);
+  const [activeModules, setActiveModules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.getModules()
-      .then((mods) => setActiveModuleIds(mods.map((m: any) => m.id)))
+      .then(setActiveModules)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
   if (loading || authLoading) return <Spinner />;
+
+  const activeModuleIds = activeModules.map((m: any) => m.id);
 
   // If multi_users module is active and user is not logged in, show login page
   const authRequired = activeModuleIds.includes("multi_users");
@@ -59,7 +67,7 @@ function AppContent() {
     <BrowserRouter>
       <EntityProvider>
         <div className="flex h-screen bg-black">
-          <Sidebar activeModuleIds={activeModuleIds} />
+          <Sidebar activeModules={activeModules} />
           <main className="flex-1 overflow-auto bg-black">
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />

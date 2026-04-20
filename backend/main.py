@@ -13,6 +13,47 @@ from backend.core.database import set_db_path
 from backend.core.module_loader import discover_modules, filter_active
 
 
+def _bootstrap_admin(db_path: Path):
+    """Create default admin user (admin/admin) if no users exist."""
+    import sqlite3
+    from datetime import datetime, timezone
+    from backend.modules.multi_users.api import _hash_password
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        if count > 0:
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        password_hash = _hash_password("admin")
+
+        conn.execute(
+            """INSERT INTO users (username, password_hash, role, display_name, created_at, active)
+               VALUES ('admin', ?, 'admin', 'Administrateur', ?, 1)""",
+            (password_hash, now),
+        )
+        admin_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Assign admin as trésorier of root entity
+        root = conn.execute(
+            "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
+        ).fetchone()
+        if root:
+            conn.execute(
+                "INSERT INTO user_entities (user_id, entity_id, role) VALUES (?, ?, 'tresorier')",
+                (admin_id, root[0]),
+            )
+
+        conn.commit()
+        print(f"  Bootstrap: admin user created (login: admin / password: admin)")
+    except Exception as e:
+        print(f"  Bootstrap admin skipped: {e}")
+    finally:
+        conn.close()
+
+
 def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db") -> FastAPI:
     app = FastAPI(title="OpenFlow", version="0.1.0")
 
@@ -45,6 +86,10 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
                         app.include_router(mod.router, prefix=f"/api/{module_id}", tags=[manifest["name"]])
                 except Exception as e:
                     print(f"Warning: failed to load routes for {module_id}: {e}")
+
+    # Bootstrap: create default admin user if multi_users is active and no users exist
+    if config.modules.get("multi_users", False):
+        _bootstrap_admin(project_root / db_path)
 
     @app.get("/api/modules")
     def get_modules():

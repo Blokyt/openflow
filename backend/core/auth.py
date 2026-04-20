@@ -5,7 +5,12 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from backend.core.database import get_conn
 
-PUBLIC_PATHS = {"/api/multi_users/login"}
+PUBLIC_PATHS = {
+    "/api/multi_users/login",
+    "/api/modules",
+    "/api/modules/all",
+    "/api/config",
+}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

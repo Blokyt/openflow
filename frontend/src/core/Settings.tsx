@@ -4,16 +4,16 @@ import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info } from "lucide-react";
 import { useAuth } from "./AuthContext";
 
-const CORE_MODULE_IDS = ["transactions", "categories", "dashboard"];
+const CORE_MODULE_IDS = ["transactions", "categories", "dashboard", "entities"];
 
 const MODULE_CATEGORIES: Record<string, { label: string; ids: string[] }> = {
   core: {
     label: "Noyau",
-    ids: ["transactions", "categories", "dashboard"],
+    ids: ["transactions", "categories", "dashboard", "entities"],
   },
   standard: {
     label: "Standard",
-    ids: ["invoices", "reimbursements", "budget", "divisions", "tiers", "attachments", "annotations", "export"],
+    ids: ["invoices", "reimbursements", "budget", "divisions", "tiers", "attachments", "annotations", "export", "backup"],
   },
   advanced: {
     label: "Avancé",
@@ -216,10 +216,31 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [expandedHelp, setExpandedHelp] = useState<string | null>(null);
+  const [rootEntityId, setRootEntityId] = useState<number | null>(null);
+  const [balanceRef, setBalanceRef] = useState<{ date: string; amount: number }>({ date: "2025-01-01", amount: 0 });
 
   async function reload() {
-    const [cfg, discoveredMods] = await Promise.all([api.getConfig(), api.getAllModules()]);
+    const [cfg, discoveredMods, entities] = await Promise.all([
+      api.getConfig(),
+      api.getAllModules(),
+      api.getEntities("internal").catch(() => []),
+    ]);
     setConfig(cfg);
+
+    // Find root entity (is_default=1 or parent_id=null)
+    const root = entities.find((e: any) => e.is_default === 1) || entities.find((e: any) => !e.parent_id);
+    if (root) {
+      setRootEntityId(root.id);
+      try {
+        const ref = await api.getBalanceRef(root.id);
+        setBalanceRef({ date: ref.reference_date || "2025-01-01", amount: ref.reference_amount ?? 0 });
+      } catch {
+        setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: cfg.balance.amount ?? 0 });
+      }
+    } else {
+      setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: cfg.balance.amount ?? 0 });
+    }
+
     const manifestMap = new Map(discoveredMods.map((m: ModuleManifest) => [m.id, m]));
     const allModules: DisplayModule[] = Object.entries(cfg.modules).map(([id, active]) => {
       const manifest = manifestMap.get(id);
@@ -259,11 +280,22 @@ export default function Settings() {
     await reload();
   }
 
-  async function updateBalance(field: string, value: string) {
-    const payload: any = {};
-    if (field === "amount") payload.amount = parseFloat(value);
-    else payload[field] = value;
-    await api.updateBalance(payload);
+  async function updateBalanceRef(field: string, value: string) {
+    if (rootEntityId) {
+      const payload: any = {
+        reference_date: balanceRef.date,
+        reference_amount: balanceRef.amount,
+      };
+      if (field === "amount") payload.reference_amount = parseFloat(value);
+      if (field === "date") payload.reference_date = value;
+      await api.updateBalanceRef(rootEntityId, payload);
+    } else {
+      // Fallback to legacy config
+      const payload: any = {};
+      if (field === "amount") payload.amount = parseFloat(value);
+      else payload[field] = value;
+      await api.updateBalance(payload);
+    }
     await reload();
   }
 
@@ -377,16 +409,16 @@ export default function Settings() {
             <div className="border-t border-[#1a1a1a] pt-4">
               <EditableField
                 label="Date de référence"
-                value={config.balance.date || "2025-01-01"}
-                onSave={(v) => updateBalance("date", v)}
+                value={balanceRef.date}
+                onSave={(v) => updateBalanceRef("date", v)}
                 type="date"
               />
             </div>
             <div className="border-t border-[#1a1a1a] pt-4">
               <EditableField
                 label="Solde de référence"
-                value={String(config.balance.amount)}
-                onSave={(v) => updateBalance("amount", v)}
+                value={String(balanceRef.amount)}
+                onSave={(v) => updateBalanceRef("amount", v)}
                 type="number"
               />
             </div>

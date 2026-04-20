@@ -26,7 +26,7 @@ def run_migrations():
         print(f"Migration warnings: {result.stderr}")
 
 def main():
-    port = 8000
+    port = 8001
     host = "127.0.0.1"
 
     config_file = PROJECT_ROOT / "config.yaml"
