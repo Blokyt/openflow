@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users } from "lucide-react";
+import EmptyState from "../../core/EmptyState";
 
 const BASE_URL = "/api";
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -325,14 +326,23 @@ export default function TiersList() {
         </div>
       )}
 
+      {!loading && contacts.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="Aucun contact pour l'instant"
+          description="Ton carnet d'adresses : sponsors, fournisseurs, membres, organismes. Lie tes transactions à un contact pour suivre les flux par tiers."
+          examples={[
+            "Schneider Electric (sponsor) — email pour relances",
+            "Marie Dupont (membre) — pour les remboursements",
+          ]}
+          ctaLabel="Ajouter mon premier contact"
+          onCta={openCreate}
+        />
+      ) : (
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
-          </div>
-        ) : contacts.length === 0 ? (
-          <div className="text-center py-12 text-[#666] text-sm">
-            Aucun contact trouvé.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -406,6 +416,7 @@ export default function TiersList() {
           </table>
         )}
       </div>
+      )}
 
       {selected && (
         <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setSelected(null)}>

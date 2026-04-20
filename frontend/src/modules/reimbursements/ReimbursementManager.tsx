@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Pencil, Trash2, X, CheckCircle2, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, X, CheckCircle2, Clock, RotateCcw } from "lucide-react";
+import EmptyState from "../../core/EmptyState";
 
 const BASE_URL = "/api";
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -336,14 +337,23 @@ export default function ReimbursementManager() {
         </div>
       )}
 
+      {!loading && items.length === 0 ? (
+        <EmptyState
+          icon={RotateCcw}
+          title="Aucun remboursement pour l'instant"
+          description="Suis qui a avancé de l'argent pour l'asso et qui doit être remboursé. Coche ✓ une fois le virement fait."
+          examples={[
+            "Marie a avancé 45 € de courses → en attente",
+            "Paul a avancé 120 € pour la soirée → remboursé",
+          ]}
+          ctaLabel="Créer le premier remboursement"
+          onCta={openCreate}
+        />
+      ) : (
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
-          </div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-12 text-[#666] text-sm">
-            Aucun remboursement.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -416,6 +426,7 @@ export default function ReimbursementManager() {
           </table>
         )}
       </div>
+      )}
     </div>
   );
 }

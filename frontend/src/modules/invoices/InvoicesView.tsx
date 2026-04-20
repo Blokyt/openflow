@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, X, Download, FileText } from "lucide-react";
+import EmptyState from "../../core/EmptyState";
 
 const BASE_URL = "/api";
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -116,15 +117,25 @@ export default function InvoicesView() {
         </div>
       )}
 
+      {!loading && items.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title={`Aucun ${tab === "invoice" ? "facture" : "devis"} pour l'instant`}
+          description={tab === "invoice"
+            ? "Émets une facture à un client, télécharge le PDF, suis le statut (envoyée → payée)."
+            : "Émets un devis, convertis-le en facture d'un clic quand il est accepté."}
+          examples={[
+            "Location vidéoprojecteur → devis 350 € → facture une fois signé",
+            "Prestation animation soirée → facture directe",
+          ]}
+          ctaLabel={`Créer le premier ${tab === "invoice" ? "facture" : "devis"}`}
+          onCta={() => setShowForm(true)}
+        />
+      ) : (
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
-          </div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-12 text-[#666] text-sm">
-            <FileText size={32} className="mx-auto mb-3 opacity-30" />
-            Aucun {tab === "invoice" ? "facture" : "devis"} pour l'instant.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -163,6 +174,7 @@ export default function InvoicesView() {
           </table>
         )}
       </div>
+      )}
 
       {showForm && (
         <InvoiceFormModal
