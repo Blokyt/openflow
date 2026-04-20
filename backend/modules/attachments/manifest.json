@@ -5,7 +5,7 @@
   "help": "Joignez des fichiers (justificatifs, factures, tickets) a vos transactions. Les pieces jointes sont stockees localement et accessibles depuis le detail de chaque transaction.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "standard",
+  "category": "core",
   "dependencies": [
     "transactions"
   ],

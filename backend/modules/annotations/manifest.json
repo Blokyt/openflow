@@ -5,7 +5,7 @@
   "help": "Ajoutez des notes et commentaires sur vos transactions. Utile pour garder une trace du contexte : pourquoi cette depense, qui a valide, quel projet concerne.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "standard",
+  "category": "core",
   "dependencies": [
     "transactions"
   ],

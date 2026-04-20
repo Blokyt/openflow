@@ -4,8 +4,6 @@ import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info, FileSpreadsheet, ShieldCheck, Download } from "lucide-react";
 import { useAuth } from "./AuthContext";
 
-const CORE_MODULE_IDS = ["transactions", "categories", "dashboard", "entities"];
-
 // Category labels — modules are classified dynamically via manifest.category.
 const CATEGORY_LABELS: Record<string, string> = {
   core: "Noyau",
@@ -330,6 +328,7 @@ function PasswordSection() {
 export default function Settings() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [modules, setModules] = useState<DisplayModule[]>([]);
+  const [coreModuleIds, setCoreModuleIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -360,6 +359,10 @@ export default function Settings() {
     }
 
     const manifestMap = new Map(discoveredMods.map((m: ModuleManifest) => [m.id, m]));
+    const coreIds = new Set(
+      discoveredMods.filter((m: ModuleManifest) => (m as any).category === "core").map((m: ModuleManifest) => m.id)
+    );
+    setCoreModuleIds(coreIds);
     const allModules: DisplayModule[] = Object.entries(cfg.modules).map(([id, active]) => {
       const manifest = manifestMap.get(id);
       return {
@@ -369,7 +372,7 @@ export default function Settings() {
         help: manifest?.help,
         category: (manifest as any)?.category ?? "custom",
         active: active as boolean,
-        core: CORE_MODULE_IDS.includes(id),
+        core: (manifest as any)?.category === "core",
       };
     });
     setModules(allModules);
@@ -380,7 +383,7 @@ export default function Settings() {
   }, []);
 
   async function handleToggle(mod: DisplayModule) {
-    if (CORE_MODULE_IDS.includes(mod.id)) return;
+    if (coreModuleIds.has(mod.id)) return;
     setToggling(mod.id);
     try {
       await api.toggleModule(mod.id, !mod.active);
@@ -429,7 +432,7 @@ export default function Settings() {
   const moduleMap = new Map(modules.map((m) => [m.id, m]));
 
   function renderModuleRow(mod: DisplayModule, idx: number) {
-    const isCore = CORE_MODULE_IDS.includes(mod.id);
+    const isCore = coreModuleIds.has(mod.id);
     const isExpanded = expandedHelp === mod.id;
     return (
       <div
