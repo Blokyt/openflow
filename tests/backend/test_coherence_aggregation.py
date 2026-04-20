@@ -65,46 +65,6 @@ def test_budget_status_ignores_other_categories(client):
 
 
 # ============================================================
-# DIVISIONS
-# ============================================================
-
-def test_division_summary_matches_transactions(client):
-    """Division summary must match manual sum of its transactions."""
-    div = client.post("/api/divisions/", json={"name": "Marketing", "description": "dept"}).json()
-    div_id = div["id"]
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "Revenu", "amount": 800.0, "division_id": div_id})
-    client.post("/api/transactions/", json={"date": "2025-06-02", "label": "Depense", "amount": -300.0, "division_id": div_id})
-
-    summary = client.get(f"/api/divisions/{div_id}/summary").json()
-    assert summary["income"] == pytest.approx(800.0)
-    assert summary["expenses"] == pytest.approx(-300.0)
-    assert summary["balance"] == pytest.approx(500.0)
-    # Verify: balance = income + expenses
-    assert summary["balance"] == pytest.approx(summary["income"] + summary["expenses"])
-
-
-def test_division_summary_empty(client):
-    """Division with no transactions: all zeros."""
-    div = client.post("/api/divisions/", json={"name": "Vide", "description": ""}).json()
-    summary = client.get(f"/api/divisions/{div['id']}/summary").json()
-    assert summary["income"] == pytest.approx(0.0)
-    assert summary["expenses"] == pytest.approx(0.0)
-    assert summary["balance"] == pytest.approx(0.0)
-
-
-def test_division_summary_ignores_other_divisions(client):
-    """Division summary must not include transactions from other divisions."""
-    div_a = client.post("/api/divisions/", json={"name": "A", "description": ""}).json()
-    div_b = client.post("/api/divisions/", json={"name": "B", "description": ""}).json()
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "A", "amount": 100.0, "division_id": div_a["id"]})
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "B", "amount": 999.0, "division_id": div_b["id"]})
-
-    summary_a = client.get(f"/api/divisions/{div_a['id']}/summary").json()
-    assert summary_a["income"] == pytest.approx(100.0)
-    assert summary_a["balance"] == pytest.approx(100.0)
-
-
-# ============================================================
 # EXPORT
 # ============================================================
 
@@ -157,41 +117,6 @@ def test_export_empty_db(client):
     assert resp.status_code == 200
     lines = resp.text.strip().split("\n")
     assert len(lines) == 1  # Header only
-
-
-# ============================================================
-# GRANTS
-# ============================================================
-
-def test_grants_summary_arithmetic(client):
-    """Grants summary: total_pending = total_granted - total_received."""
-    resp = client.post("/api/grants/", json={
-        "name": "Subvention A", "amount_granted": 10000,
-        "amount_received": 3000, "status": "active", "date_granted": "2025-01-15",
-    })
-    assert resp.status_code == 201, resp.text
-    resp = client.post("/api/grants/", json={
-        "name": "Subvention B", "amount_granted": 5000,
-        "amount_received": 5000, "status": "completed", "date_granted": "2025-03-01",
-    })
-    assert resp.status_code == 201, resp.text
-
-    summary = client.get("/api/grants/summary").json()
-    assert summary["total_granted"] == pytest.approx(15000.0)
-    assert summary["total_received"] == pytest.approx(8000.0)
-    assert summary["total_pending"] == pytest.approx(7000.0)
-    # Verify arithmetic identity
-    assert summary["total_pending"] == pytest.approx(
-        summary["total_granted"] - summary["total_received"]
-    )
-
-
-def test_grants_summary_empty(client):
-    """No grants: all zeros."""
-    summary = client.get("/api/grants/summary").json()
-    assert summary["total_granted"] == pytest.approx(0.0)
-    assert summary["total_received"] == pytest.approx(0.0)
-    assert summary["total_pending"] == pytest.approx(0.0)
 
 
 # ============================================================

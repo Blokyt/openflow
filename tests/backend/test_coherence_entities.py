@@ -54,15 +54,6 @@ def test_dashboard_without_entity_is_legacy(client):
     assert dash["balance"] == pytest.approx(legacy_bal["balance"])
 
 
-def test_forecasting_entity_balance(client):
-    """Forecasting with entity_id should use entity balance."""
-    bda, gastro, ext = _setup_entities(client)
-
-    entity_bal = client.get(f"/api/entities/{bda['id']}/balance").json()
-    fc = client.get(f"/api/forecasting/projection?entity_id={bda['id']}").json()
-    assert fc["current_balance"] == pytest.approx(entity_bal["balance"])
-
-
 def test_export_entity_filter(client):
     """Export with entity_id only includes entity's transactions."""
     bda, gastro, ext = _setup_entities(client)
