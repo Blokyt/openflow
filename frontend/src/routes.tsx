@@ -8,6 +8,7 @@ import SmartImportPage from "./modules/smart_import/SmartImportPage";
 import SystemPage from "./modules/system/SystemPage";
 import TiersList from "./modules/tiers/TiersList";
 import ReimbursementManager from "./modules/reimbursements/ReimbursementManager";
+import InvoicesView from "./modules/invoices/InvoicesView";
 
 export type ModuleRoute = { path: string; element: React.ReactNode };
 
@@ -22,6 +23,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   backup: { path: "/backup", element: <BackupManager /> },
   smart_import: { path: "/smart-import", element: <SmartImportPage /> },
   system: { path: "/system", element: <SystemPage /> },
+  invoices: { path: "/invoices", element: <InvoicesView /> },
 };
 
 export const MODULE_IDS_WITH_ROUTE = new Set(Object.keys(MODULE_ROUTES));

@@ -10,6 +10,7 @@
     "transactions",
     "tiers"
   ],
+  "menu": {"label": "Factures", "icon": "file-text", "position": 7},
   "api_routes": [
     "api.py"
   ],
