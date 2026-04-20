@@ -1,15 +1,31 @@
 {
   "id": "invoices",
-  "name": "Factures & Devis",
-  "description": "Emission et suivi de factures et devis",
+  "name": "Factures & devis",
+  "description": "Émission et suivi de factures et devis",
   "help": "Creez des factures et devis avec numerotation automatique (FAC-2025-001, DEV-2025-001). Ajoutez des lignes, un taux de TVA, et convertissez un devis en facture en un clic. Le total se calcule automatiquement.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",
-  "dependencies": ["transactions", "tiers"],
+  "dependencies": [
+    "transactions",
+    "tiers"
+  ],
   "menu": {"label": "Factures", "icon": "file-text", "position": 7},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
-  "dashboard_widgets": [{"id": "unpaid_invoices", "name": "Factures impayees", "component": "widgets/UnpaidInvoices.tsx", "default_visible": false, "size": "half"}],
-  "settings_schema": {}
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
+  "dashboard_widgets": [
+    {
+      "id": "unpaid_invoices",
+      "name": "Factures impayees",
+      "component": "widgets/UnpaidInvoices.tsx",
+      "default_visible": false,
+      "size": "half"
+    }
+  ],
+  "settings_schema": {},
+  "example": "Location d'un vidéoprojecteur à un intervenant : je crée un devis, l'envoie, il accepte, je convertis en facture, je télécharge le PDF."
 }

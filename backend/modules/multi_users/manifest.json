@@ -6,10 +6,21 @@
   "version": "1.1.0",
   "origin": "builtin",
   "category": "advanced",
-  "dependencies": ["audit"],
-  "menu": {"label": "Utilisateurs", "icon": "users-round", "position": 89},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "dependencies": [
+    "audit"
+  ],
+  "menu": {
+    "label": "Utilisateurs",
+    "icon": "users-round",
+    "position": 89
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "J'ajoute le président CineClub comme « lecteur » sur sa sous-entité."
 }

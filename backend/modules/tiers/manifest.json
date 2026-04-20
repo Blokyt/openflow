@@ -1,15 +1,34 @@
 {
   "id": "tiers",
-  "name": "Contacts & Tiers",
-  "description": "Gestion des clients, fournisseurs et membres",
+  "name": "Contacts",
+  "description": "Carnet d'adresses : clients, fournisseurs, sponsors, membres",
   "help": "Gerez votre carnet de contacts : clients, fournisseurs, membres. Associez un contact a vos transactions, factures ou subventions pour suivre les flux par tiers.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Contacts", "icon": "users", "position": 5},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
-  "dashboard_widgets": [{"id": "top_contacts", "name": "Principaux contacts", "component": "widgets/TopContacts.tsx", "default_visible": false, "size": "half"}],
-  "settings_schema": {}
+  "dependencies": [
+    "transactions"
+  ],
+  "menu": {
+    "label": "Contacts",
+    "icon": "users",
+    "position": 5
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
+  "dashboard_widgets": [
+    {
+      "id": "top_contacts",
+      "name": "Principaux contacts",
+      "component": "widgets/TopContacts.tsx",
+      "default_visible": false,
+      "size": "half"
+    }
+  ],
+  "settings_schema": {},
+  "example": "J'ajoute le sponsor Schneider Electric comme contact avec email pour relances."
 }

@@ -5,10 +5,14 @@
   "help": "Journal immuable de toutes les modifications. Chaque action (creation, modification, suppression) est enregistree avec l'horodatage, l'utilisateur et les valeurs avant/apres. Consultable mais non modifiable.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "advanced",
+  "category": "core",
   "dependencies": [],
-  "menu": {"label": "Audit", "icon": "shield-check", "position": 80},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
-  "settings_schema": {}
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
+  "settings_schema": {},
+  "example": "Avant mon AG, je consulte le journal pour voir qui a modifié quoi."
 }

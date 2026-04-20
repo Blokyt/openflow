@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, PiggyBank } from "lucide-react";
+import EmptyState from "../../core/EmptyState";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 const BASE_URL = "/api";
@@ -284,14 +285,23 @@ export default function BudgetManager() {
       )}
 
       {/* Table */}
+      {!loading && budgets.length === 0 ? (
+        <EmptyState
+          icon={PiggyBank}
+          title="Aucune enveloppe budgétaire"
+          description="Définis une enveloppe par catégorie ou projet. L'app t'alerte quand tu approches du plafond."
+          examples={[
+            "Gala 2026 : 3 000 € (au 12/03 : 1 850 € utilisés)",
+            "Matériel Cinéclub : 500 € par semestre",
+          ]}
+          ctaLabel="Créer ma première enveloppe"
+          onCta={openCreate}
+        />
+      ) : (
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
-          </div>
-        ) : budgets.length === 0 ? (
-          <div className="text-center py-12 text-[#666] text-sm">
-            Aucune enveloppe budgétaire trouvée.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -362,6 +372,7 @@ export default function BudgetManager() {
           </table>
         )}
       </div>
+      )}
     </div>
   );
 }

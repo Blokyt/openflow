@@ -258,6 +258,84 @@ def delete_invoice(invoice_id: int):
         conn.close()
 
 
+from fastapi.responses import Response
+from fpdf import FPDF
+
+
+def _load_entity_meta():
+    """Read entity metadata from config.yaml via backend.core.config."""
+    from backend.core.config import load_config
+    cfg = load_config("config.yaml")
+    e = cfg.entity
+    return {
+        "name": e.name,
+        "vat_enabled": getattr(e, "vat_enabled", False),
+        "address": e.address,
+        "siret": e.siret,
+        "rna": e.rna,
+    }
+
+
+@router.get("/{invoice_id}/pdf")
+def generate_pdf(invoice_id: int):
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} not found")
+        invoice = row_to_dict(row)
+        # The model uses invoice_lines table (not lines_json)
+        lines = [row_to_dict(r) for r in conn.execute(
+            "SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY id ASC",
+            (invoice_id,)
+        ).fetchall()]
+    finally:
+        conn.close()
+    entity = _load_entity_meta()
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, f"{'Devis' if invoice['type'] == 'quote' else 'Facture'} {invoice['number']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Date: {invoice['date']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(90, 8, "Description", border=1)
+    pdf.cell(20, 8, "Qte", border=1, align="R")
+    pdf.cell(30, 8, "PU", border=1, align="R")
+    pdf.cell(30, 8, "Total", border=1, align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+
+    total_ht = 0.0
+    for ln in lines:
+        line_total = ln["quantity"] * ln["unit_price"]
+        total_ht += line_total
+        pdf.cell(90, 7, ln["description"][:40], border=1)
+        pdf.cell(20, 7, str(ln["quantity"]), border=1, align="R")
+        pdf.cell(30, 7, f"{ln['unit_price']:.2f} EUR", border=1, align="R")
+        pdf.cell(30, 7, f"{line_total:.2f} EUR", border=1, align="R", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(140, 8, "Total HT", align="R")
+    pdf.cell(30, 8, f"{total_ht:.2f} EUR", align="R", new_x="LMARGIN", new_y="NEXT")
+
+    if not entity["vat_enabled"]:
+        pdf.ln(6)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.multi_cell(0, 5, "TVA non applicable, art. 293 B du CGI.")
+
+    pdf_bytes = bytes(pdf.output())
+    filename = f"{invoice['number']}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/{invoice_id}/convert")
 def convert_quote_to_invoice(invoice_id: int):
     """Convert a quote (devis) to an invoice (facture)."""

@@ -36,7 +36,12 @@
       }
     },
     "settings_schema": { "type": "object" },
-    "help": { "type": "string" }
+    "help": { "type": "string" },
+    "example": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Exemple concret d'usage (1-2 lignes)"
+    }
   },
   "additionalProperties": false
 }

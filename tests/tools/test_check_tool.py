@@ -69,6 +69,11 @@ def test_check_valid_module_passes(tmp_path):
     (mod_dir / "api.py").write_text("# api")
     (mod_dir / "models.py").write_text("# models")
 
+    # Create the required frontend directory (menu present → frontend required)
+    frontend_dir = tmp_path / "frontend" / "src" / "modules" / "test_mod"
+    frontend_dir.mkdir(parents=True)
+    (frontend_dir / "TestMod.tsx").write_text("export default function TestMod() { return null; }")
+
     result = run_check(tmp_path)
     assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
     assert "PASS" in result.stdout

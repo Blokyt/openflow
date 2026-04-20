@@ -11,7 +11,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_user(client, username="authuser", password="testpass123", role="reader"):
+def make_user(client, username="authuser", password="testpass123", role="lecteur"):
     resp = client.post("/api/multi_users/", json={
         "username": username,
         "password": password,

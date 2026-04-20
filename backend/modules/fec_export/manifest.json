@@ -1,15 +1,21 @@
 {
   "id": "fec_export",
   "name": "Export FEC",
-  "description": "Génère le Fichier des Ecritures Comptables (FEC) au format officiel",
+  "description": "Génère le Fichier des Écritures Comptables (FEC) au format légal français",
   "help": "Generez le Fichier des Ecritures Comptables (FEC) au format legal francais. Chaque transaction est convertie en ecriture comptable avec journaux, comptes et debit/credit. Obligatoire pour les controles fiscaux.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "advanced",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Export FEC", "icon": "file-spreadsheet", "position": 88},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "category": "core",
+  "dependencies": [
+    "transactions"
+  ],
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Pour le contrôle fiscal 2025, je génère le fichier FEC de l'exercice."
 }

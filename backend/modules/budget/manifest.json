@@ -1,15 +1,35 @@
 {
   "id": "budget",
-  "name": "Budget Previsionnel",
-  "description": "Enveloppes budgetaires par categorie",
+  "name": "Budget prévisionnel",
+  "description": "Enveloppes budgétaires par catégorie",
   "help": "Definissez des enveloppes budgetaires par categorie et par periode. Le module calcule automatiquement le depense vs. budgete et le reste disponible. Ideal pour controler vos postes de depenses.",
   "version": "1.1.0",
   "origin": "builtin",
   "category": "standard",
-  "dependencies": ["transactions", "categories"],
-  "menu": {"label": "Budget", "icon": "piggy-bank", "position": 6},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
-  "dashboard_widgets": [{"id": "budget_progress", "name": "Suivi budgetaire", "component": "widgets/BudgetProgress.tsx", "default_visible": false, "size": "half"}],
-  "settings_schema": {}
+  "dependencies": [
+    "transactions",
+    "categories"
+  ],
+  "menu": {
+    "label": "Budget",
+    "icon": "piggy-bank",
+    "position": 6
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
+  "dashboard_widgets": [
+    {
+      "id": "budget_progress",
+      "name": "Suivi budgetaire",
+      "component": "widgets/BudgetProgress.tsx",
+      "default_visible": false,
+      "size": "half"
+    }
+  ],
+  "settings_schema": {},
+  "example": "Je pose une enveloppe 3000 € pour le Gala 2026, je vois en live si je dépasse."
 }

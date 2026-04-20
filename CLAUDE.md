@@ -88,15 +88,14 @@ Toujours lancer `check.py` apres modification d'un manifest.
 
 Pour creer un module : `python tools/create_module.py <id> --name "..." --description "..."`
 
-## 22 modules disponibles
+## 17 modules disponibles
 
-**Core (toujours actifs) :** transactions, categories, dashboard, entities
+**Noyau (toujours actifs, 10) :** transactions, categories, dashboard, entities,
+system, annotations, attachments, export, audit, fec_export
 
-**Standard :** invoices, reimbursements, budget, divisions, tiers, attachments,
-annotations, export
+**Metier (6) :** invoices, reimbursements, budget, tiers, smart_import, backup
 
-**Avance :** bank_reconciliation, recurring, multi_accounts, audit, forecasting,
-alerts, tax_receipts, grants, fec_export, multi_users
+**Avance (1) :** multi_users
 
 ## Testing
 
@@ -112,8 +111,11 @@ alerts, tax_receipts, grants, fec_export, multi_users
 - **Pas de SQLAlchemy** : tout est sqlite3 brut via `get_conn()` centralise
 - **config.yaml gitignored** : setup.py/start.py le creent depuis config.example.yaml
 - **PRAGMA foreign_keys OFF** partout — pas de contraintes FK au runtime
-- **MODULE_CATEGORIES dans Settings.tsx** : hardcode le groupement par categorie
-  (devrait a terme lire manifest.category dynamiquement)
+- **Noms de modules dans l'UI** : aucun nom hardcode dans les composants React.
+  Tout passe par `manifest.name`, `manifest.help`, `manifest.example`,
+  `manifest.menu.label`, ou `INTEGRATED_LOCATIONS` dans `frontend/src/routes.tsx`.
+  Le test `tests/backend/test_ui_text_coherence.py` fait tomber CI si une reference
+  orpheline apparait.
 - **Solde centralise dans balance.py** : ne pas recalculer le solde dans les modules,
   toujours importer depuis `backend.core.balance`
 - **from_entity_id / to_entity_id** : toujours specifies sur les transactions — le

@@ -3,6 +3,7 @@ import { api } from "../api";
 import { DashboardSummary } from "../types";
 import { TrendingUp, TrendingDown, Wallet, Hash } from "lucide-react";
 import { useEntity } from "./EntityContext";
+import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -67,6 +68,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-8">
+      <ModuleDiscoveryHint />
       {/* Header with large balance */}
       <div className="mb-10">
         <p className="text-sm font-medium text-[#666] uppercase tracking-wider mb-2">Solde actuel</p>

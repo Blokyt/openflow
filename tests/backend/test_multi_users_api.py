@@ -15,7 +15,7 @@ def make_user(client, **kwargs):
     payload = {
         "username": f"testuser_{id(kwargs)}",
         "password": "securepassword",
-        "role": "reader",
+        "role": "lecteur",
         "display_name": "Test User",
     }
     payload.update(kwargs)
@@ -52,9 +52,9 @@ def test_create_user_password_not_in_response(client):
     assert "password_hash" not in user
 
 
-def test_create_user_default_role_is_reader(client):
+def test_create_user_default_role_is_lecteur(client):
     user = make_user(client, username="default_role_user")
-    assert user["role"] == "reader"
+    assert user["role"] == "lecteur"
 
 
 def test_create_user_custom_role(client):
@@ -170,10 +170,10 @@ def test_update_user_display_name(authed_client):
 
 
 def test_update_user_role(authed_client):
-    user = make_user(authed_client, username="update_role_user", role="reader")
-    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"role": "treasurer"})
+    user = make_user(authed_client, username="update_role_user", role="lecteur")
+    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"role": "tresorier"})
     assert resp.status_code == 200
-    assert resp.json()["role"] == "treasurer"
+    assert resp.json()["role"] == "tresorier"
 
 
 def test_update_user_password_not_returned(authed_client):

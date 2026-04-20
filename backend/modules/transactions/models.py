@@ -7,7 +7,6 @@ migrations = {
             description TEXT DEFAULT '',
             amount REAL NOT NULL,
             category_id INTEGER,
-            division_id INTEGER,
             contact_id INTEGER,
             created_by TEXT DEFAULT '',
             created_at TEXT NOT NULL,

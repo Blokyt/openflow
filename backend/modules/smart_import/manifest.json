@@ -1,15 +1,26 @@
 {
   "id": "smart_import",
-  "name": "Import Intelligent",
-  "description": "Importer des transactions depuis n'importe quel format (Excel, CSV...)",
-  "help": "Glissez-d\u00e9posez un fichier et laissez OpenFlow analyser son format. Plusieurs strat\u00e9gies de parsing sont tent\u00e9es, vous choisissez celle qui donne le bon r\u00e9sultat. D\u00e9tecte automatiquement les nouvelles transactions, les mises \u00e0 jour et les doublons.",
+  "name": "Import intelligent",
+  "description": "Importer des transactions depuis Excel, CSV ou tout autre format",
+  "help": "Glissez-déposez un fichier et laissez OpenFlow analyser son format. Plusieurs stratégies de parsing sont tentées, vous choisissez celle qui donne le bon résultat. Détecte automatiquement les nouvelles transactions, les mises à jour et les doublons.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Import", "icon": "file-up", "position": 15},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "dependencies": [
+    "transactions"
+  ],
+  "menu": {
+    "label": "Import",
+    "icon": "file-up",
+    "position": 15
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je dépose le Excel du relevé bancaire, l'app crée les 23 transactions du mois."
 }

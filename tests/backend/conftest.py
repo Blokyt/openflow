@@ -56,14 +56,14 @@ def db_path(tmp_path, _db_template):
 @pytest.fixture
 def client(db_path):
     """TestClient backed by the same isolated DB as db_path."""
-    app = create_app(config_path="config.test.yaml", db_path=str(db_path))
+    app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
     return TestClient(app)
 
 
 @pytest.fixture
 def client_and_db(db_path):
     """TestClient + raw DB path for tests that need both."""
-    app = create_app(config_path="config.test.yaml", db_path=str(db_path))
+    app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
     return TestClient(app), db_path
 
 
@@ -78,7 +78,7 @@ def authed_client(db_path):
     import sqlite3 as _sqlite3
     from datetime import datetime, timezone as _tz
 
-    app = create_app(config_path="config.test.yaml", db_path=str(db_path))
+    app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
     c = TestClient(app)
 
     # Create the first admin (public — no users yet, middleware skips)

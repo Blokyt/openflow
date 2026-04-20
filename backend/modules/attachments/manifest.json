@@ -1,15 +1,21 @@
 {
   "id": "attachments",
-  "name": "Pieces jointes",
+  "name": "Pièces jointes",
   "description": "Attacher des fichiers aux transactions",
   "help": "Joignez des fichiers (justificatifs, factures, tickets) a vos transactions. Les pieces jointes sont stockees localement et accessibles depuis le detail de chaque transaction.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "standard",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Pieces jointes", "icon": "paperclip", "position": 91},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "category": "core",
+  "dependencies": [
+    "transactions"
+  ],
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je joins le ticket de caisse PDF à la transaction correspondante."
 }

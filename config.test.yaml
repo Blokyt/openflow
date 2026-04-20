@@ -19,18 +19,13 @@ modules:
   invoices: true
   reimbursements: true
   budget: true
-  divisions: true
   tiers: true
   attachments: true
   annotations: true
   export: true
-  bank_reconciliation: true
-  recurring: true
-  multi_accounts: true
   audit: true
-  forecasting: true
-  alerts: true
-  tax_receipts: true
-  grants: true
   fec_export: true
   multi_users: true
+  backup: true
+  smart_import: true
+  system: true

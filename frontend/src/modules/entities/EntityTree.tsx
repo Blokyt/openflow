@@ -354,8 +354,15 @@ export default function EntityTree() {
           <GitBranch size={22} className="text-[#F2C48D]" strokeWidth={1.5} />
           <h1 className="text-2xl font-bold text-white">Entités</h1>
         </div>
-        <p className="text-sm text-[#666]">
-          Gérez la structure des entités internes et externes de votre organisation.
+        <p className="text-sm text-[#B0B0B0] leading-relaxed">
+          Les entités représentent <span className="text-white font-medium">qui gère le budget</span> :
+          ta structure (BDA) et ses <em>sous-clubs, pôles, sections</em> — ainsi que les{" "}
+          <em>tiers externes</em> (banque, fournisseurs).
+        </p>
+        <p className="text-xs text-[#666] mt-1 leading-relaxed">
+          Pour classer <span className="text-[#B0B0B0]">la nature</span> des dépenses (matériel,
+          transport…), utilise plutôt{" "}
+          <a href="/categories" className="text-[#F2C48D] hover:underline">Catégories</a>.
         </p>
       </div>
 

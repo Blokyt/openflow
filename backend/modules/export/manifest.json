@@ -1,15 +1,21 @@
 {
   "id": "export",
-  "name": "Export",
-  "description": "Exporter les donnees en CSV et JSON",
+  "name": "Export CSV/JSON",
+  "description": "Exporter les données en CSV ou JSON",
   "help": "Exportez vos donnees en CSV ou JSON. Generez un bilan par categorie avec le detail des recettes, depenses et solde net. Filtrez par date pour des rapports periodiques.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "standard",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Export", "icon": "download", "position": 8},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "category": "core",
+  "dependencies": [
+    "transactions"
+  ],
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je télécharge en CSV toutes les transactions de Janvier pour le rapport."
 }

@@ -35,7 +35,7 @@ def test_admin_can_list_users(authed_client):
 def test_admin_can_create_user(authed_client):
     """Admin can create additional users."""
     resp = authed_client.post("/api/multi_users/", json={
-        "username": "newuser", "password": "pass123", "role": "reader"
+        "username": "newuser", "password": "pass123", "role": "lecteur"
     })
     assert resp.status_code == 201
 

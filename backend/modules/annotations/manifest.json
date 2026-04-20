@@ -5,11 +5,17 @@
   "help": "Ajoutez des notes et commentaires sur vos transactions. Utile pour garder une trace du contexte : pourquoi cette depense, qui a valide, quel projet concerne.",
   "version": "1.0.0",
   "origin": "builtin",
-  "category": "standard",
-  "dependencies": ["transactions"],
-  "menu": {"label": "Annotations", "icon": "message-square", "position": 90},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "category": "core",
+  "dependencies": [
+    "transactions"
+  ],
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Sur la transaction « Virement Mines Paris », j'ajoute la note « Subvention acompte »."
 }

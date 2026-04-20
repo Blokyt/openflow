@@ -1,36 +1,30 @@
-entity:
-  name: Mon Entite
-  type: association
-  currency: EUR
-  logo: ''
-  address: ''
-  siret: ''
-  rna: ''
-
 balance:
   amount: 0.0
   date: '2025-01-01'
-
+entity:
+  address: ''
+  currency: EUR
+  logo: ''
+  name: Mon Entite
+  rna: ''
+  siret: ''
+  type: association
+  vat_enabled: false
 modules:
-  entities: true
-  transactions: true
+  annotations: true
+  attachments: true
+  audit: true
+  backup: true
+  budget: false
   categories: true
   dashboard: true
-  alerts: false
-  annotations: false
-  attachments: false
-  audit: false
-  bank_reconciliation: false
-  budget: false
-  divisions: false
-  export: false
-  fec_export: false
-  forecasting: false
-  grants: false
+  entities: true
+  export: true
+  fec_export: true
   invoices: false
-  multi_accounts: false
-  multi_users: false
-  recurring: false
+  multi_users: true
   reimbursements: false
-  tax_receipts: false
+  smart_import: true
+  system: true
   tiers: false
+  transactions: true

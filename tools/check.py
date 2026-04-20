@@ -67,6 +67,13 @@ def main():
         modules_found.append(manifest.get("id", mod_dir.name))
         parsed_manifests.append(manifest)
 
+    # Warn if 'example' field is missing
+    for manifest in parsed_manifests:
+        if "example" not in manifest:
+            warnings.append(
+                f"Module '{manifest['id']}': champ 'example' manquant (pour empty states et Paramètres)"
+            )
+
     # Check cross-module dependencies (reuse already-parsed manifests)
     for manifest in parsed_manifests:
         for dep in manifest.get("dependencies", []):
@@ -74,6 +81,32 @@ def main():
                 errors.append(
                     f"Module '{manifest['id']}': dependency '{dep}' not found"
                 )
+
+    # Invariant: every module with a "menu" field must have a frontend.
+    # A frontend exists if: (a) the directory frontend/src/modules/<id>/ exists,
+    # or (b) the module id appears as a key in frontend/src/routes.tsx.
+    # Prevents ghost sidebar tabs that lead to blank pages.
+    frontend_modules_dir = project / "frontend" / "src" / "modules"
+    routes_file = project / "frontend" / "src" / "routes.tsx"
+    routes_content = routes_file.read_text(encoding="utf-8") if routes_file.exists() else ""
+
+    # Core shell modules rendered directly by frontend/src/core/ (no module dir)
+    core_shell_modules = {"dashboard"}
+
+    for manifest in parsed_manifests:
+        if "menu" not in manifest:
+            continue
+        mod_id = manifest["id"]
+        if mod_id in core_shell_modules:
+            continue
+        has_dir = (frontend_modules_dir / mod_id).is_dir()
+        has_route = f"{mod_id}:" in routes_content  # matches MODULE_ROUTES key
+        if not has_dir and not has_route:
+            errors.append(
+                f"Module '{mod_id}': 'menu' present in manifest but no frontend "
+                f"(neither {frontend_modules_dir / mod_id} nor MODULE_ROUTES entry "
+                "in routes.tsx). Create the React component or remove 'menu'."
+            )
 
     print_report(errors, warnings, modules_found)
     sys.exit(1 if errors else 0)

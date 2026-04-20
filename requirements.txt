@@ -5,3 +5,4 @@ pyyaml==6.0.2
 jsonschema==4.23.0
 python-multipart==0.0.12
 bcrypt==4.2.1
+fpdf2>=2.7.0

@@ -1,15 +1,24 @@
 {
   "id": "system",
-  "name": "Systeme",
-  "description": "Etat, maintenance et reparation de l'application",
-  "help": "Consultez l'usage disque, g\u00e9rez les sauvegardes automatiques, nettoyez les fichiers temporaires, et r\u00e9parez l'application si un fichier a \u00e9t\u00e9 modifi\u00e9 ou corrompu. Vos donn\u00e9es (transactions, config) sont toujours pr\u00e9serv\u00e9es.",
+  "name": "Système",
+  "description": "État, maintenance et réparation de l'application",
+  "help": "Consultez l'usage disque, gérez les sauvegardes automatiques, nettoyez les fichiers temporaires, et réparez l'application si un fichier a été modifié ou corrompu. Vos données (transactions, config) sont toujours préservées.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "core",
   "dependencies": [],
-  "menu": {"label": "Syst\u00e8me", "icon": "activity", "position": 90},
-  "api_routes": ["api.py"],
-  "db_models": ["models.py"],
+  "menu": {
+    "label": "Système",
+    "icon": "activity",
+    "position": 20
+  },
+  "api_routes": [
+    "api.py"
+  ],
+  "db_models": [
+    "models.py"
+  ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je vérifie l'usage disque et lance une réparation si un fichier a été corrompu."
 }
