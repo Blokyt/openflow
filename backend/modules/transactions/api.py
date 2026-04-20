@@ -25,7 +25,6 @@ class TransactionCreate(BaseModel):
     description: str = ""
     amount: float
     category_id: Optional[int] = None
-    division_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: str = ""
     from_entity_id: Optional[int] = None
@@ -38,7 +37,6 @@ class TransactionUpdate(BaseModel):
     description: Optional[str] = None
     amount: Optional[float] = None
     category_id: Optional[int] = None
-    division_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: Optional[str] = None
     from_entity_id: Optional[int] = None
@@ -112,16 +110,15 @@ def create_transaction(tx: TransactionCreate):
     try:
         cur = conn.execute(
             """INSERT INTO transactions
-               (date, label, description, amount, category_id, division_id, contact_id, created_by,
+               (date, label, description, amount, category_id, contact_id, created_by,
                 from_entity_id, to_entity_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 tx.date,
                 tx.label,
                 tx.description,
                 tx.amount,
                 tx.category_id,
-                tx.division_id,
                 tx.contact_id,
                 tx.created_by,
                 tx.from_entity_id,
