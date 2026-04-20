@@ -30,4 +30,10 @@ export const MODULE_IDS_WITH_ROUTE = new Set(Object.keys(MODULE_ROUTES));
 
 // Table des emplacements intégrés (modules sans onglet dédié).
 // Remplie dans la Task 11.
-export const INTEGRATED_LOCATIONS: Record<string, string> = {};
+export const INTEGRATED_LOCATIONS: Record<string, string> = {
+  annotations: "Détail d'une transaction → section Notes",
+  attachments: "Détail d'une transaction → section Pièces jointes",
+  export: "Page Transactions → boutons CSV/JSON en haut",
+  audit: "Paramètres → section Journal d'audit",
+  fec_export: "Paramètres → section Export FEC",
+};

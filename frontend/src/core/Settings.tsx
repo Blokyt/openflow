@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
-import { Pencil, Check, X, Info, FileSpreadsheet, ShieldCheck, Download } from "lucide-react";
+import { Pencil, Check, X, Info, FileSpreadsheet, ShieldCheck, Download, MapPin, ArrowRight } from "lucide-react";
+import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
 import { useAuth } from "./AuthContext";
 
 // Category labels — modules are classified dynamically via manifest.category.
@@ -21,7 +22,9 @@ interface DisplayModule {
   name: string;
   description?: string;
   help?: string;
+  example?: string;
   category: string;
+  menuLabel?: string;
   active: boolean;
   core: boolean;
 }
@@ -370,6 +373,8 @@ export default function Settings() {
         name: manifest?.name ?? id,
         description: manifest?.description,
         help: manifest?.help,
+        example: (manifest as any)?.example,
+        menuLabel: (manifest as any)?.menu?.label,
         category: (manifest as any)?.category ?? "custom",
         active: active as boolean,
         core: (manifest as any)?.category === "core",
@@ -434,49 +439,83 @@ export default function Settings() {
   function renderModuleRow(mod: DisplayModule, idx: number) {
     const isCore = coreModuleIds.has(mod.id);
     const isExpanded = expandedHelp === mod.id;
+
+    // Compute "where it appears"
+    let location: string | null = null;
+    if (mod.menuLabel) {
+      location = `Barre latérale → ${mod.menuLabel}`;
+    } else if (INTEGRATED_LOCATIONS[mod.id]) {
+      location = INTEGRATED_LOCATIONS[mod.id];
+    }
+
+    // Build "see in action" link
+    let actionPath: string | null = null;
+    if (mod.active) {
+      if (MODULE_ROUTES[mod.id]) actionPath = MODULE_ROUTES[mod.id].path;
+      else if (["annotations", "attachments", "export"].includes(mod.id)) actionPath = "/transactions";
+      else if (["audit", "fec_export"].includes(mod.id)) actionPath = "/settings";
+    }
+
     return (
-      <div
-        key={mod.id}
-        className={`${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
-      >
-        <div className="flex items-center justify-between px-5 py-4">
-          <div className="flex-1 min-w-0 mr-4">
+      <div key={mod.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
+        <div className="px-5 py-4 space-y-2">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-white">{mod.name}</p>
-              {mod.active && <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] flex-shrink-0" />}
+              {mod.active && <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />}
               {mod.help && (
                 <button
                   onClick={() => setExpandedHelp(isExpanded ? null : mod.id)}
-                  className="text-[#666] hover:text-[#F2C48D] transition-colors p-0.5"
+                  className="text-[#666] hover:text-[#F2C48D] p-0.5"
                   aria-label={`Aide pour ${mod.name}`}
                 >
                   <Info size={14} />
                 </button>
               )}
             </div>
-            {mod.description ? <p className="text-xs text-[#666] mt-0.5 truncate">{mod.description}</p> : null}
-          </div>
-          {isCore ? (
-            <span className="text-xs text-[#666] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full flex-shrink-0">
-              Toujours actif
-            </span>
-          ) : (
-            <button
-              onClick={() => handleToggle(mod)}
-              disabled={toggling === mod.id}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                mod.active ? "bg-[#F2C48D]" : "bg-[#333]"
-              }`}
-              aria-label={`Toggle ${mod.name}`}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                  mod.active ? "translate-x-5" : "translate-x-0"
+            {isCore ? (
+              <span className="text-xs text-[#666] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full">
+                Toujours actif
+              </span>
+            ) : (
+              <button
+                onClick={() => handleToggle(mod)}
+                disabled={toggling === mod.id}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
+                  mod.active ? "bg-[#F2C48D]" : "bg-[#333]"
                 }`}
-              />
-            </button>
+              >
+                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  mod.active ? "translate-x-5" : "translate-x-0"
+                }`} />
+              </button>
+            )}
+          </div>
+
+          {location && (
+            <div className="flex items-center gap-1.5 text-xs text-[#B0B0B0]">
+              <MapPin size={11} className="text-[#666]" />
+              <span>{location}</span>
+            </div>
+          )}
+
+          {mod.description && (
+            <p className="text-xs text-[#B0B0B0] leading-relaxed">{mod.description}</p>
+          )}
+
+          {mod.example && (
+            <p className="text-xs text-[#666] italic leading-relaxed">
+              Exemple : {mod.example}
+            </p>
+          )}
+
+          {actionPath && (
+            <a href={actionPath} className="inline-flex items-center gap-1 text-xs text-[#F2C48D] hover:underline">
+              Voir en action <ArrowRight size={11} />
+            </a>
           )}
         </div>
+
         {isExpanded && mod.help && (
           <div className="px-5 pb-4 -mt-1">
             <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3">
