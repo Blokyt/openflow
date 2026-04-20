@@ -16,5 +16,6 @@
     "models.py"
   ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je télécharge en CSV toutes les transactions de Janvier pour le rapport."
 }

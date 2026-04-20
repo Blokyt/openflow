@@ -34,5 +34,6 @@
       "size": "half"
     }
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je regarde le solde total après chaque import banque pour vérifier qu'il colle."
 }

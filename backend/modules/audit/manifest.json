@@ -13,5 +13,6 @@
   "db_models": [
     "models.py"
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Avant mon AG, je consulte le journal pour voir qui a modifié quoi."
 }

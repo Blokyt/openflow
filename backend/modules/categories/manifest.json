@@ -27,5 +27,6 @@
       "size": "half"
     }
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je crée la catégorie « Sponsoring » pour tagger toutes les rentrées de sponsors."
 }

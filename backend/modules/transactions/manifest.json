@@ -27,5 +27,6 @@
       "size": "full"
     }
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je saisis la dépense « 45 € courses Gala » du 14/03 dans la catégorie Matériel."
 }

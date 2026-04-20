@@ -16,5 +16,6 @@
     "models.py"
   ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je joins le ticket de caisse PDF à la transaction correspondante."
 }

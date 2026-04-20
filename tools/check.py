@@ -67,6 +67,13 @@ def main():
         modules_found.append(manifest.get("id", mod_dir.name))
         parsed_manifests.append(manifest)
 
+    # Warn if 'example' field is missing
+    for manifest in parsed_manifests:
+        if "example" not in manifest:
+            warnings.append(
+                f"Module '{manifest['id']}': champ 'example' manquant (pour empty states et Paramètres)"
+            )
+
     # Check cross-module dependencies (reuse already-parsed manifests)
     for manifest in parsed_manifests:
         for dep in manifest.get("dependencies", []):

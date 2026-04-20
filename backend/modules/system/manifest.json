@@ -7,7 +7,11 @@
   "origin": "builtin",
   "category": "core",
   "dependencies": [],
-  "menu": {"label": "Système", "icon": "activity", "position": 20},
+  "menu": {
+    "label": "Système",
+    "icon": "activity",
+    "position": 20
+  },
   "api_routes": [
     "api.py"
   ],
@@ -15,5 +19,6 @@
     "models.py"
   ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je vérifie l'usage disque et lance une réparation si un fichier a été corrompu."
 }

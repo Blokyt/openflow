@@ -20,5 +20,6 @@
   "db_models": [
     "models.py"
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Marie a avancé 45 € pour les courses, je crée l'avance en « En attente »."
 }

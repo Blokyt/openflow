@@ -29,5 +29,6 @@
       "size": "half"
     }
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "J'ajoute le sponsor Schneider Electric comme contact avec email pour relances."
 }

@@ -21,5 +21,6 @@
     "models.py"
   ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je dépose le Excel du relevé bancaire, l'app crée les 23 transactions du mois."
 }

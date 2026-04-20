@@ -30,5 +30,6 @@
       "size": "half"
     }
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Je pose une enveloppe 3000 € pour le Gala 2026, je vois en live si je dépasse."
 }

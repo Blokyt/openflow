@@ -25,5 +25,6 @@
       "size": "half"
     }
   ],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Location d'un vidéoprojecteur à un intervenant : je crée un devis, l'envoie, il accepte, je convertis en facture, je télécharge le PDF."
 }

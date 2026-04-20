@@ -16,5 +16,6 @@
     "models.py"
   ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Pour le contrôle fiscal 2025, je génère le fichier FEC de l'exercice."
 }

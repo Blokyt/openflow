@@ -19,5 +19,6 @@
     "models.py"
   ],
   "dashboard_widgets": [],
-  "settings_schema": {}
+  "settings_schema": {},
+  "example": "Chaque semaine, je télécharge un ZIP complet pour archive externe."
 }
