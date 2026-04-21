@@ -5,63 +5,9 @@ import pytest
 
 
 # ============================================================
-# BUDGET
+# BUDGET — legacy tests removed; budget module rewritten in 1.2.0
+# (see tests/backend/test_budget.py and test_coherence_budget.py)
 # ============================================================
-
-def test_budget_status_spent_matches_transactions(client):
-    """Budget spent must equal sum of matching transactions."""
-    # Create category
-    cat = client.post("/api/categories/", json={"name": "Fournitures", "color": "#ff0000", "icon": "box", "position": 1}).json()
-    cat_id = cat["id"]
-    # Create budget for this category
-    client.post("/api/budget/", json={
-        "category_id": cat_id, "period_start": "2025-01-01",
-        "period_end": "2025-12-31", "amount": 5000,
-    })
-    # Create transactions in this category
-    client.post("/api/transactions/", json={"date": "2025-03-01", "label": "Achat 1", "amount": -200.0, "category_id": cat_id})
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "Achat 2", "amount": -300.0, "category_id": cat_id})
-    # Transaction outside period — should NOT count
-    client.post("/api/transactions/", json={"date": "2024-12-31", "label": "Ancien", "amount": -100.0, "category_id": cat_id})
-
-    status = client.get("/api/budget/status").json()
-    assert len(status) >= 1
-    budget = status[0]
-    # spent should be -500 (sum of -200 + -300, not the 2024 one)
-    assert budget["spent"] == pytest.approx(-500.0)
-    # remaining = 5000 - abs(-500) = 4500
-    assert budget["remaining"] == pytest.approx(4500.0)
-
-
-def test_budget_status_no_transactions(client):
-    """Budget with no matching transactions: spent=0, remaining=full amount."""
-    cat = client.post("/api/categories/", json={"name": "Vide", "color": "#000", "icon": "x", "position": 1}).json()
-    client.post("/api/budget/", json={
-        "category_id": cat["id"], "period_start": "2025-01-01",
-        "period_end": "2025-12-31", "amount": 1000,
-    })
-    status = client.get("/api/budget/status").json()
-    budget = status[0]
-    assert budget["spent"] == pytest.approx(0.0)
-    assert budget["remaining"] == pytest.approx(1000.0)
-
-
-def test_budget_status_ignores_other_categories(client):
-    """Budget for category A must not count transactions in category B."""
-    cat_a = client.post("/api/categories/", json={"name": "A", "color": "#f00", "icon": "a", "position": 1}).json()
-    cat_b = client.post("/api/categories/", json={"name": "B", "color": "#0f0", "icon": "b", "position": 2}).json()
-    client.post("/api/budget/", json={
-        "category_id": cat_a["id"], "period_start": "2025-01-01",
-        "period_end": "2025-12-31", "amount": 1000,
-    })
-    # Transaction in category B — should NOT affect budget A
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "B tx", "amount": -500.0, "category_id": cat_b["id"]})
-    # Transaction in category A
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "A tx", "amount": -100.0, "category_id": cat_a["id"]})
-
-    status = client.get("/api/budget/status").json()
-    budget = [b for b in status if b["category_id"] == cat_a["id"]][0]
-    assert budget["spent"] == pytest.approx(-100.0)
 
 
 # ============================================================
