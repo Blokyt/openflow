@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
-import { Transaction, Category } from "../../types";
+import { Transaction, Category, Entity } from "../../types";
 
 interface TransactionFormProps {
   initial?: Partial<Transaction>;
@@ -16,12 +16,20 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
   const [categoryId, setCategoryId] = useState<string>(
     initial?.category_id !== undefined ? String(initial.category_id) : ""
   );
+  const [fromEntityId, setFromEntityId] = useState<string>(
+    initial?.from_entity_id !== undefined ? String(initial.from_entity_id) : ""
+  );
+  const [toEntityId, setToEntityId] = useState<string>(
+    initial?.to_entity_id !== undefined ? String(initial.to_entity_id) : ""
+  );
   const [categories, setCategories] = useState<Category[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {});
+    api.getEntities().then(setEntities).catch(() => {});
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -30,6 +38,9 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
     const parsedAmount = parseFloat(amount);
     if (!label.trim()) { setError("Le libellé est obligatoire."); return; }
     if (isNaN(parsedAmount)) { setError("Le montant doit être un nombre."); return; }
+    if (!fromEntityId) { setError("L'entité source est obligatoire."); return; }
+    if (!toEntityId) { setError("L'entité destination est obligatoire."); return; }
+    if (fromEntityId === toEntityId) { setError("La source et la destination doivent être différentes."); return; }
     setSubmitting(true);
     try {
       await onSave({
@@ -38,6 +49,8 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         amount: parsedAmount,
         description: description.trim() || undefined,
         category_id: categoryId ? parseInt(categoryId) : undefined,
+        from_entity_id: parseInt(fromEntityId),
+        to_entity_id: parseInt(toEntityId),
       });
     } catch (e: any) {
       setError(e.message);
@@ -89,6 +102,40 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           placeholder="Ex: Loyer, Salaire..."
           className={inputClass}
         />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass}>Source</label>
+          <select
+            value={fromEntityId}
+            onChange={(e) => setFromEntityId(e.target.value)}
+            required
+            className={inputClass}
+          >
+            <option value="">— Choisir —</option>
+            {entities.map((ent) => (
+              <option key={ent.id} value={ent.id}>
+                {ent.name} {ent.type === "external" ? "(externe)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Destination</label>
+          <select
+            value={toEntityId}
+            onChange={(e) => setToEntityId(e.target.value)}
+            required
+            className={inputClass}
+          >
+            <option value="">— Choisir —</option>
+            {entities.map((ent) => (
+              <option key={ent.id} value={ent.id}>
+                {ent.name} {ent.type === "external" ? "(externe)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <div>
         <label className={labelClass}>Catégorie</label>

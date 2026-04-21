@@ -1,6 +1,6 @@
 {
   "id": "backup",
-  "name": "Sauvegarde",
+  "name": "Sauvegarde & Restauration",
   "description": "Exporter et importer une sauvegarde complète de la base de données",
   "help": "Exportez l'integralite de vos donnees (entites, categories, transactions, contacts, config) dans un fichier ZIP portable. Importez une sauvegarde pour restaurer ou migrer vers une autre installation OpenFlow.",
   "version": "1.0.0",
@@ -8,7 +8,7 @@
   "category": "standard",
   "dependencies": [],
   "menu": {
-    "label": "Sauvegarde",
+    "label": "Sauvegarde & Restauration",
     "icon": "archive",
     "position": 20
   },

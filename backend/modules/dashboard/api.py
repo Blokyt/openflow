@@ -148,3 +148,106 @@ def get_summary(entity_id: Optional[int] = None):
         }
     finally:
         conn.close()
+
+
+@router.get("/timeseries")
+def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
+    """Return monthly balance evolution: list of {month: 'YYYY-MM', balance: float}.
+
+    We compute the current balance, then walk backwards in time to reconstruct
+    balance at the end of each past month. This avoids any reference-amount
+    accounting ambiguity for consolidated views.
+    """
+    conn = get_conn()
+    try:
+        # Current balance
+        if entity_id is not None:
+            current_balance = compute_entity_balance(conn, entity_id)["balance"]
+            net_rows = conn.execute(
+                """SELECT substr(date,1,7) AS month,
+                          SUM(CASE WHEN to_entity_id = ? THEN amount
+                                   WHEN from_entity_id = ? THEN -amount
+                                   ELSE 0 END) AS net
+                   FROM transactions
+                   WHERE from_entity_id = ? OR to_entity_id = ?
+                   GROUP BY month ORDER BY month""",
+                (entity_id, entity_id, entity_id, entity_id),
+            ).fetchall()
+        else:
+            root = conn.execute(
+                "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
+            ).fetchone()
+            if root:
+                current_balance = compute_consolidated_balance(conn, root["id"])["consolidated_balance"]
+            else:
+                current_balance = compute_legacy_balance(conn, str(CONFIG_PATH))["balance"]
+            net_rows = conn.execute(
+                """SELECT substr(date,1,7) AS month, SUM(amount) AS net
+                   FROM transactions GROUP BY month ORDER BY month"""
+            ).fetchall()
+
+        nets = [(r["month"], r["net"] or 0.0) for r in net_rows]
+        # Build cumulative-at-end-of-month series by forward sum, anchored so
+        # that the last month equals current_balance.
+        forward = []
+        running = 0.0
+        for m, n in nets:
+            running += n
+            forward.append((m, running))
+        offset = current_balance - (forward[-1][1] if forward else 0.0)
+        series = [{"month": m, "balance": round(v + offset, 2)} for m, v in forward]
+        return series[-months:]
+    finally:
+        conn.close()
+
+
+@router.get("/top-categories")
+def top_categories(entity_id: Optional[int] = None, limit: int = 5):
+    """Top categories by expense magnitude."""
+    conn = get_conn()
+    try:
+        if entity_id is not None:
+            rows = conn.execute(
+                """SELECT c.name AS name, c.color AS color, SUM(ABS(t.amount)) AS total
+                   FROM transactions t
+                   LEFT JOIN categories c ON t.category_id = c.id
+                   WHERE t.amount < 0 AND (t.from_entity_id = ? OR t.to_entity_id = ?)
+                   GROUP BY t.category_id ORDER BY total DESC LIMIT ?""",
+                (entity_id, entity_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT c.name AS name, c.color AS color, SUM(ABS(t.amount)) AS total
+                   FROM transactions t
+                   LEFT JOIN categories c ON t.category_id = c.id
+                   WHERE t.amount < 0
+                   GROUP BY t.category_id ORDER BY total DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [{"name": r["name"] or "— Sans catégorie —", "color": r["color"] or "#6B7280", "total": r["total"]} for r in rows]
+    finally:
+        conn.close()
+
+
+@router.get("/recent")
+def recent_transactions(entity_id: Optional[int] = None, limit: int = 5):
+    """Return the N most recent transactions with entity names."""
+    conn = get_conn()
+    try:
+        query = """SELECT t.id, t.date, t.label, t.amount,
+                          ef.name AS from_entity_name, et.name AS to_entity_name,
+                          c.name AS category_name, c.color AS category_color
+                   FROM transactions t
+                   LEFT JOIN entities ef ON t.from_entity_id = ef.id
+                   LEFT JOIN entities et ON t.to_entity_id = et.id
+                   LEFT JOIN categories c ON t.category_id = c.id"""
+        params: list = []
+        if entity_id is not None:
+            query += " WHERE t.from_entity_id = ? OR t.to_entity_id = ?"
+            params += [entity_id, entity_id]
+        query += " ORDER BY t.date DESC, t.id DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(query, params).fetchall()
+        return [row_to_dict(r) for r in rows]
+    finally:
+        conn.close()

@@ -135,6 +135,23 @@ def main():
         shutil.copy2(str(db_path), str(backup_path))
         print(f"Backup created: {backup_path.name}")
 
+        # Rotation: honour max_backups from system settings (default 5)
+        max_backups = 5
+        settings_file = data_dir / "system_settings.json"
+        if settings_file.exists():
+            try:
+                import json as _json
+                max_backups = int(_json.loads(settings_file.read_text()).get("max_backups", 5))
+            except Exception:
+                pass
+        backups = sorted(data_dir.glob("openflow.db.backup*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in backups[max_backups:]:
+            try:
+                old.unlink()
+                print(f"Backup pruned: {old.name}")
+            except OSError:
+                pass
+
     # Step 3: Connect and create system tables
     conn = sqlite3.connect(str(db_path))
     try:

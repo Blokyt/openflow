@@ -47,7 +47,12 @@ export default function ModuleDiscoveryHint() {
             Tu n'as pas encore activé{" "}
             {inactiveModules.map((m, i) => (
               <span key={m.id}>
-                <span className="text-white font-medium">{m.name}</span>
+                <a
+                  href={`/settings#module-${m.id}`}
+                  className="text-white font-medium hover:text-[#F2C48D] underline decoration-[#F2C48D]/40 decoration-dotted underline-offset-2"
+                >
+                  {m.name}
+                </a>
                 {i < inactiveModules.length - 2 && ", "}
                 {i === inactiveModules.length - 2 && " et "}
               </span>

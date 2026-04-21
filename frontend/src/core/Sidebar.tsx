@@ -173,7 +173,7 @@ function EntitySelector() {
 
 // ─── Nav item component ─────────────────────────────────────────────────────
 
-function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: any }) {
+function NavItem({ to, label, icon: Icon, badge }: { to: string; label: string; icon: any; badge?: number }) {
   return (
     <NavLink
       to={to}
@@ -191,7 +191,12 @@ function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: a
             <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
           )}
           <Icon size={17} strokeWidth={1.5} />
-          {label}
+          <span className="flex-1">{label}</span>
+          {badge !== undefined && badge > 0 && (
+            <span className="text-[10px] font-semibold text-black bg-[#F2C48D] rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+              {badge}
+            </span>
+          )}
         </>
       )}
     </NavLink>
@@ -206,6 +211,22 @@ interface SidebarProps {
 
 export default function Sidebar({ activeModules }: SidebarProps) {
   const { user, logout } = useAuth();
+  const [pendingReimbursements, setPendingReimbursements] = useState(0);
+
+  const reimbursementsActive = activeModules.some((m) => m.id === "reimbursements");
+  useEffect(() => {
+    if (!reimbursementsActive) return;
+    let cancelled = false;
+    fetch("/api/reimbursements/?status=pending")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => {
+        if (!cancelled) setPendingReimbursements(Array.isArray(d) ? d.length : 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [reimbursementsActive]);
 
   // Build core nav items (fixed, always shown)
   const coreManifests = CORE_IDS
@@ -228,9 +249,11 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     .sort((a, b) => (a.menu?.position ?? 99) - (b.menu?.position ?? 99));
 
   const optionalItems = optionalModules.map((m: any) => ({
+    id: m.id,
     to: MODULE_PATH_MAP[m.id] || `/${m.id}`,
     label: m.menu?.label || m.name,
     icon: ICON_MAP[m.menu?.icon] || LayoutDashboard,
+    badge: m.id === "reimbursements" ? pendingReimbursements : undefined,
   }));
 
   // Multi-users shown only for admins, at the bottom

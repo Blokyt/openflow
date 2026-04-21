@@ -3,6 +3,7 @@ import {
   Activity, HardDrive, Database, FileUp, Archive, AlertTriangle,
   Check, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
 } from "lucide-react";
+import AuditSection from "../audit/AuditSection";
 
 interface SystemStatus {
   version: string;
@@ -401,6 +402,8 @@ export default function SystemPage() {
           </button>
         </div>
       </section>
+
+      <AuditSection />
     </div>
   );
 }

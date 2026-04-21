@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from backend.core.audit import record_audit
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
 
@@ -27,8 +28,8 @@ class TransactionCreate(BaseModel):
     category_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: str = ""
-    from_entity_id: Optional[int] = None
-    to_entity_id: Optional[int] = None
+    from_entity_id: int
+    to_entity_id: int
 
 
 class TransactionUpdate(BaseModel):
@@ -108,6 +109,10 @@ def create_transaction(tx: TransactionCreate):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
+        for field, value in (("from_entity_id", tx.from_entity_id), ("to_entity_id", tx.to_entity_id)):
+            exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (value,)).fetchone()
+            if exists is None:
+                raise HTTPException(status_code=400, detail=f"{field}={value} does not reference an existing entity")
         cur = conn.execute(
             """INSERT INTO transactions
                (date, label, description, amount, category_id, contact_id, created_by,
@@ -127,9 +132,10 @@ def create_transaction(tx: TransactionCreate):
                 now,
             ),
         )
+        new_row = conn.execute("SELECT * FROM transactions WHERE id = ?", (cur.lastrowid,)).fetchone()
+        record_audit(conn, "create", "transactions", cur.lastrowid, None, row_to_dict(new_row), tx.created_by)
         conn.commit()
-        row = conn.execute("SELECT * FROM transactions WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return row_to_dict(row)
+        return row_to_dict(new_row)
     finally:
         conn.close()
 
@@ -170,6 +176,14 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
         if not updates:
             return row_to_dict(existing)
 
+        for field in ("from_entity_id", "to_entity_id"):
+            if field in updates:
+                if updates[field] is None:
+                    raise HTTPException(status_code=400, detail=f"{field} cannot be null")
+                exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (updates[field],)).fetchone()
+                if exists is None:
+                    raise HTTPException(status_code=400, detail=f"{field}={updates[field]} does not reference an existing entity")
+
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         set_clauses += ", updated_at = ?"
         values = list(updates.values()) + [now, tx_id]
@@ -178,8 +192,9 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
             f"UPDATE transactions SET {set_clauses} WHERE id = ?",
             values,
         )
-        conn.commit()
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        record_audit(conn, "update", "transactions", tx_id, row_to_dict(existing), row_to_dict(row))
+        conn.commit()
         return row_to_dict(row)
     finally:
         conn.close()
@@ -193,6 +208,7 @@ def delete_transaction(tx_id: int):
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
         conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+        record_audit(conn, "delete", "transactions", tx_id, row_to_dict(existing), None)
         conn.commit()
         return {"deleted": tx_id}
     finally:

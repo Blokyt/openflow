@@ -183,14 +183,26 @@ def commit(req: CommitRequest):
                 else:
                     from_id, to_id = default_external, default_entity
 
-                conn.execute(
+                cur = conn.execute(
                     """INSERT INTO transactions (date, label, description, amount,
                        from_entity_id, to_entity_id, created_by, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, 'smart_import', ?, ?)""",
                     (draft["date"], draft["label"], draft.get("description", ""),
                      draft["amount"], from_id, to_id, now, now),
                 )
+                tx_id = cur.lastrowid
                 created += 1
+
+                reimb = draft.get("reimbursement")
+                if reimb and reimb.get("person_name"):
+                    status = reimb.get("status", "pending")
+                    reimbursed_date = draft["date"] if status == "reimbursed" else None
+                    conn.execute(
+                        """INSERT INTO reimbursements
+                           (transaction_id, person_name, amount, status, reimbursed_date, notes, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, '', ?, ?)""",
+                        (tx_id, reimb["person_name"], abs(draft["amount"]), status, reimbursed_date, now, now),
+                    )
 
             elif item["status"] == "modified" and req.apply_modifications:
                 existing_id = item["existing"]["id"]

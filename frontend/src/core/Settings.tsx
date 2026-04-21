@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
-import { Pencil, Check, X, Info, FileSpreadsheet, ShieldCheck, Download, MapPin, ArrowRight } from "lucide-react";
+import { Pencil, Check, X, Info, FileSpreadsheet, Download, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
 import { useAuth } from "./AuthContext";
 
@@ -150,96 +150,6 @@ function FecExportSection() {
   );
 }
 
-interface AuditEntry {
-  id: number;
-  timestamp: string;
-  user_id: number | null;
-  action: string;
-  table_name: string;
-  record_id: number | null;
-  before_value: string | null;
-  after_value: string | null;
-}
-
-function AuditSection() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/audit/?limit=200")
-      .then((r) => {
-        if (!r.ok) throw new Error(r.statusText);
-        return r.json();
-      })
-      .then(setEntries)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const shown = expanded ? entries : entries.slice(0, 20);
-
-  return (
-    <section className="mb-8">
-      <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-        <ShieldCheck size={16} className="text-[#F2C48D]" />
-        Journal d'audit
-      </h2>
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="py-8 text-center text-sm text-[#666]">Chargement…</div>
-        ) : error ? (
-          <div className="p-4 text-sm text-[#FF5252]">{error}</div>
-        ) : entries.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[#666]">Aucun événement enregistré.</div>
-        ) : (
-          <>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[#1a1a1a]">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#666] uppercase tracking-wider">Date</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#666] uppercase tracking-wider">Action</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#666] uppercase tracking-wider">Table</th>
-                  <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#666] uppercase tracking-wider">ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((e, idx) => (
-                  <tr key={e.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
-                    <td className="px-4 py-2 text-[#B0B0B0] whitespace-nowrap">
-                      {new Date(e.timestamp).toLocaleString("fr-FR")}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="inline-block px-1.5 py-0.5 rounded bg-[#222] text-[#B0B0B0] text-[10px] font-mono">
-                        {e.action}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-[#B0B0B0]">{e.table_name}</td>
-                    <td className="px-4 py-2 text-right text-[#666]">
-                      {e.record_id !== null ? `#${e.record_id}` : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {entries.length > 20 && (
-              <div className="border-t border-[#1a1a1a] p-3 text-center">
-                <button
-                  onClick={() => setExpanded(!expanded)}
-                  className="text-xs text-[#F2C48D] hover:underline"
-                >
-                  {expanded ? "Réduire" : `Afficher les ${entries.length} entrées`}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function PasswordSection() {
   const { user } = useAuth();
   const [oldPassword, setOldPassword] = useState("");
@@ -336,6 +246,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [expandedHelp, setExpandedHelp] = useState<string | null>(null);
+  const [showCoreModules, setShowCoreModules] = useState(false);
   const [rootEntityId, setRootEntityId] = useState<number | null>(null);
   const [balanceRef, setBalanceRef] = useState<{ date: string; amount: number }>({ date: "2025-01-01", amount: 0 });
 
@@ -457,7 +368,7 @@ export default function Settings() {
     }
 
     return (
-      <div key={mod.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
+      <div id={`module-${mod.id}`} key={mod.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
         <div className="px-5 py-4 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -590,7 +501,6 @@ export default function Settings() {
       <PasswordSection />
 
       {moduleMap.get("fec_export")?.active && <FecExportSection />}
-      {moduleMap.get("audit")?.active && <AuditSection />}
 
       <section className="space-y-6">
         <h2 className="text-base font-semibold text-white">Modules</h2>
@@ -604,15 +514,29 @@ export default function Settings() {
           if (catModules.length === 0) return null;
           const activeCount = catModules.filter((m) => m.active).length;
           const label = CATEGORY_LABELS[catKey] ?? catKey;
+          const isCoreGroup = catKey === "core";
+          const collapsed = isCoreGroup && !showCoreModules;
           return (
             <div key={catKey}>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">{label}</h3>
-                <span className="text-xs text-[#666]">{activeCount}/{catModules.length} actifs</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-[#666]">{activeCount}/{catModules.length} actifs</span>
+                  {isCoreGroup && (
+                    <button
+                      onClick={() => setShowCoreModules((v) => !v)}
+                      className="text-xs text-[#F2C48D] hover:underline"
+                    >
+                      {collapsed ? "Afficher" : "Masquer"}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-                {catModules.map((mod, idx) => renderModuleRow(mod, idx))}
-              </div>
+              {!collapsed && (
+                <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+                  {catModules.map((mod, idx) => renderModuleRow(mod, idx))}
+                </div>
+              )}
             </div>
           );
         })}

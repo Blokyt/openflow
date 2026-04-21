@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../../api";
-import { Transaction } from "../../types";
+import { Transaction, Category } from "../../types";
 import { useEntity } from "../../core/EntityContext";
 import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
@@ -17,6 +17,11 @@ export default function TransactionList() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [sortBy, setSortBy] = useState<"date" | "amount" | "label">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [undoTx, setUndoTx] = useState<Transaction | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -28,6 +33,7 @@ export default function TransactionList() {
     api.getModules()
       .then((mods: any[]) => setActiveModuleIds(new Set(mods.map((m) => m.id))))
       .catch(() => {});
+    api.getCategories().then(setCategories).catch(() => {});
   }, []);
 
   const hasAttachments = activeModuleIds.has("attachments");
@@ -39,6 +45,7 @@ export default function TransactionList() {
     if (search) p.set("search", search);
     if (dateFrom) p.set("date_from", dateFrom);
     if (dateTo) p.set("date_to", dateTo);
+    if (categoryFilter) p.set("category_id", categoryFilter);
     if (selectedEntityId) {
       p.set("entity_id", String(selectedEntityId));
       p.set("include_children", "true");
@@ -53,6 +60,7 @@ export default function TransactionList() {
     if (search) params.search = search;
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
+    if (categoryFilter) params.category_id = categoryFilter;
     if (selectedEntityId) {
       params.entity_id = String(selectedEntityId);
       params.include_children = "true";
@@ -62,7 +70,7 @@ export default function TransactionList() {
       .then(setTransactions)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [search, dateFrom, dateTo, selectedEntityId]);
+  }, [search, dateFrom, dateTo, categoryFilter, selectedEntityId]);
 
   useEffect(() => {
     fetchTransactions();
@@ -82,10 +90,17 @@ export default function TransactionList() {
   }
 
   async function handleDelete(id: number) {
+    const target = transactions.find((t) => t.id === id) ?? null;
     setDeletingId(id);
     try {
       await api.deleteTransaction(id);
       setConfirmDelete(null);
+      if (target) {
+        setUndoTx(target);
+        setTimeout(() => {
+          setUndoTx((current) => (current && current.id === target.id ? null : current));
+        }, 6000);
+      }
       fetchTransactions();
     } catch (e: any) {
       setError(e.message);
@@ -93,6 +108,40 @@ export default function TransactionList() {
       setDeletingId(null);
     }
   }
+
+  async function handleUndoDelete() {
+    if (!undoTx) return;
+    try {
+      await api.createTransaction({
+        date: undoTx.date,
+        label: undoTx.label,
+        amount: undoTx.amount,
+        description: undoTx.description,
+        category_id: undoTx.category_id,
+        from_entity_id: undoTx.from_entity_id,
+        to_entity_id: undoTx.to_entity_id,
+      });
+      setUndoTx(null);
+      fetchTransactions();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  function toggleSort(col: "date" | "amount" | "label") {
+    if (sortBy === col) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else {
+      setSortBy(col);
+      setSortDir(col === "date" ? "desc" : "asc");
+    }
+  }
+
+  const sortedTransactions = [...transactions].sort((a: any, b: any) => {
+    const sign = sortDir === "asc" ? 1 : -1;
+    if (sortBy === "amount") return (a.amount - b.amount) * sign;
+    if (sortBy === "label") return String(a.label).localeCompare(String(b.label)) * sign;
+    return String(a.date).localeCompare(String(b.date)) * sign || (a.id - b.id) * sign;
+  });
 
   return (
     <div className="p-8">
@@ -188,9 +237,20 @@ export default function TransactionList() {
             className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors [color-scheme:dark]"
           />
         </div>
-        {(search || dateFrom || dateTo) && (
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+          title="Filtrer par catégorie"
+        >
+          <option value="">Toutes catégories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {(search || dateFrom || dateTo || categoryFilter) && (
           <button
-            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setCategoryFilter(""); }}
             className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
           >
             <X size={14} /> Effacer
@@ -212,16 +272,31 @@ export default function TransactionList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Libellé</th>
+                <th
+                  onClick={() => toggleSort("date")}
+                  className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
+                >
+                  Date {sortBy === "date" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                </th>
+                <th
+                  onClick={() => toggleSort("label")}
+                  className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
+                >
+                  Libellé {sortBy === "label" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                </th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Flux</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
-                <th className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
+                <th
+                  onClick={() => toggleSort("amount")}
+                  className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
+                >
+                  Montant {sortBy === "amount" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                </th>
                 <th className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {transactions.map((tx: any, idx) => (
+              {sortedTransactions.map((tx: any, idx) => (
                 <tr
                   key={tx.id}
                   className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
@@ -332,6 +407,25 @@ export default function TransactionList() {
           </table>
         )}
       </div>
+
+      {undoTx && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#111] border border-[#333] rounded-full px-5 py-3 shadow-xl">
+          <span className="text-sm text-white">Transaction supprimée</span>
+          <button
+            onClick={handleUndoDelete}
+            className="text-sm font-semibold text-[#F2C48D] hover:underline"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={() => setUndoTx(null)}
+            className="text-[#666] hover:text-white"
+            aria-label="Fermer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {detailTx && (
         <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setDetailTx(null)}>

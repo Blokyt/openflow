@@ -57,6 +57,7 @@ def compute_diff(conn: sqlite3.Connection, drafts: list) -> dict:
             "amount": round(draft.amount, 2),
             "description": draft.description,
             "category_hint": draft.category_hint,
+            "reimbursement": getattr(draft, "reimbursement", None),
         }
 
         if match is None:

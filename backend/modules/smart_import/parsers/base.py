@@ -25,6 +25,9 @@ class TransactionDraft:
     from_entity_hint: str = ""
     to_entity_hint: str = ""
     raw: dict = field(default_factory=dict)  # original row data
+    # Optional reimbursement hint: {"person_name": str, "status": "pending"|"reimbursed"}.
+    # When present, the commit step creates a reimbursements row linked to the tx.
+    reimbursement: Optional[dict] = None
 
 
 @dataclass

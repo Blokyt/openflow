@@ -48,16 +48,38 @@ def test_create_transaction_with_entity_ids(client):
 
 
 def test_create_transaction_without_entity_ids(client):
-    """Create transaction without from/to entity IDs → 201, fields are null (backward compat)."""
+    """Create transaction without from/to entity IDs → 422 (rule: JAMAIS null)."""
+    # Pass explicit None so the conftest auto-injection doesn't fill defaults.
     resp = client.post("/api/transactions/", json={
         "date": "2025-06-01",
         "label": "Legacy TX",
         "amount": 100.0,
+        "from_entity_id": None,
+        "to_entity_id": None,
     })
-    assert resp.status_code == 201
-    data = resp.json()
-    assert data["from_entity_id"] is None
-    assert data["to_entity_id"] is None
+    assert resp.status_code == 422
+
+
+def test_create_transaction_with_unknown_entity(client):
+    """Create transaction with non-existing entity → 400."""
+    root = _create_entity(client, "RootUnknown")
+    resp = client.post("/api/transactions/", json={
+        "date": "2025-06-01",
+        "label": "Bad",
+        "amount": 1.0,
+        "from_entity_id": root["id"],
+        "to_entity_id": 99999,
+    })
+    assert resp.status_code == 400
+
+
+def test_update_transaction_to_null_entity_rejected(client):
+    """PUT with explicit null for from/to entity → 400."""
+    root = _create_entity(client, "RootNullUpd")
+    ext = _create_entity(client, "ExtNullUpd", type_="external")
+    tx = _create_tx(client, label="NoNull", from_entity_id=ext["id"], to_entity_id=root["id"])
+    resp = client.put(f"/api/transactions/{tx['id']}", json={"from_entity_id": None})
+    assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +168,8 @@ def test_update_transaction_entity_ids(client):
     root = _create_entity(client, "RootUpdate")
     ext = _create_entity(client, "ExtUpdate", type_="external")
 
-    tx = _create_tx(client, label="ToUpdate")
+    tmp = _create_entity(client, "TmpUpdate", type_="external")
+    tx = _create_tx(client, label="ToUpdate", from_entity_id=tmp["id"], to_entity_id=root["id"])
 
     resp = client.put(f"/api/transactions/{tx['id']}", json={
         "from_entity_id": ext["id"],
@@ -183,20 +206,19 @@ def test_migration_helper_backfill(client_and_db):
     client, db_path = client_and_db
     from backend.modules.entities.migration_helper import run_backfill
 
-    # Create some transactions without entity IDs
-    resp1 = client.post("/api/transactions/", json={
-        "date": "2025-01-15",
-        "label": "Income",
-        "amount": 500.0,
-    })
-    assert resp1.status_code == 201
-
-    resp2 = client.post("/api/transactions/", json={
-        "date": "2025-01-20",
-        "label": "Expense",
-        "amount": -200.0,
-    })
-    assert resp2.status_code == 201
+    # Insert legacy transactions directly (API now enforces from/to — we simulate pre-migration rows)
+    now = "2025-01-15T00:00:00"
+    conn_seed = sqlite3.connect(str(db_path))
+    conn_seed.execute(
+        "INSERT INTO transactions (date, label, description, amount, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        ("2025-01-15", "Income", "", 500.0, now, now),
+    )
+    conn_seed.execute(
+        "INSERT INTO transactions (date, label, description, amount, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        ("2025-01-20", "Expense", "", -200.0, now, now),
+    )
+    conn_seed.commit()
+    conn_seed.close()
 
     # Run backfill
     conn = sqlite3.connect(str(db_path))

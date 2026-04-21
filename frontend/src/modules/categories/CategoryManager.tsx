@@ -31,6 +31,11 @@ function CategoryNode({
             <span className="w-3" />
           )}
         </button>
+        <span
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: cat.color || "#6B7280" }}
+          title={cat.color || "#6B7280"}
+        />
         <span className="flex-1 text-sm text-white font-medium">{cat.name}</span>
         <span className="hidden group-hover:inline-flex items-center gap-1">
           <button

@@ -102,14 +102,14 @@ class BdaExcelParser(Parser):
                 continue
 
             desc_parts = []
+            reimbursement = None
             if payeur:
                 p = str(payeur).strip()
                 if p.lower() not in ("oui", "non", ""):
-                    desc_parts.append(f"Payeur: {p}")
-            if rembourse:
-                r = str(rembourse).strip().lower()
-                if r in ("oui", "non"):
-                    desc_parts.append(f"Remboursé: {rembourse}")
+                    status = "pending"
+                    if rembourse and str(rembourse).strip().lower() == "oui":
+                        status = "reimbursed"
+                    reimbursement = {"person_name": p, "status": status}
             if facture:
                 f = str(facture).strip()
                 if f:
@@ -122,6 +122,7 @@ class BdaExcelParser(Parser):
                 description=" | ".join(desc_parts),
                 category_hint=cat_str,
                 raw={"row": row_idx, "payeur": str(payeur) if payeur else None},
+                reimbursement=reimbursement,
             ))
 
         result.meta = {"sheet": "Suivi", "rows_read": len(result.transactions)}

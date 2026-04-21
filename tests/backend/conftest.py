@@ -53,18 +53,87 @@ def db_path(tmp_path, _db_template):
     return db_file
 
 
+def _install_default_entity_injection(client: TestClient, db_path: Path) -> None:
+    """Ensure POST/PUT /api/transactions/ calls that omit from/to get a default pair.
+
+    The API enforces non-null from_entity_id/to_entity_id (see bug #1 fix). Many
+    legacy tests seed transactions via the API without caring about entity
+    structure; rather than rewriting each call site, we transparently inject a
+    default pair of entities when omitted. Tests that pass explicit IDs are
+    untouched.
+    """
+    import sqlite3 as _sqlite3
+    from datetime import datetime, timezone as _tz
+
+    state = {"from_id": None, "to_id": None}
+
+    def _ensure_default_pair():
+        if state["from_id"] is not None:
+            return state["from_id"], state["to_id"]
+        conn = _sqlite3.connect(str(db_path))
+        try:
+            now = datetime.now(_tz.utc).isoformat()
+            cur = conn.execute(
+                "INSERT INTO entities (name, type, parent_id, is_default, color, position, created_at, updated_at) "
+                "VALUES (?, 'internal', NULL, 0, '#6B7280', 900, ?, ?)",
+                ("_TestDefaultFrom", now, now),
+            )
+            from_id = cur.lastrowid
+            cur = conn.execute(
+                "INSERT INTO entities (name, type, parent_id, is_default, color, position, created_at, updated_at) "
+                "VALUES (?, 'external', NULL, 0, '#6B7280', 901, ?, ?)",
+                ("_TestDefaultTo", now, now),
+            )
+            to_id = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+        state["from_id"] = from_id
+        state["to_id"] = to_id
+        return from_id, to_id
+
+    original_post = client.post
+    original_put = client.put
+
+    def _inject(payload):
+        if not isinstance(payload, dict):
+            return payload
+        if "from_entity_id" in payload and "to_entity_id" in payload:
+            return payload
+        from_id, to_id = _ensure_default_pair()
+        payload = dict(payload)
+        payload.setdefault("from_entity_id", from_id)
+        payload.setdefault("to_entity_id", to_id)
+        return payload
+
+    def patched_post(url, *args, **kwargs):
+        if url == "/api/transactions/" and "json" in kwargs:
+            kwargs["json"] = _inject(kwargs["json"])
+        return original_post(url, *args, **kwargs)
+
+    def patched_put(url, *args, **kwargs):
+        return original_put(url, *args, **kwargs)
+
+    client.post = patched_post  # type: ignore[method-assign]
+    client.put = patched_put  # type: ignore[method-assign]
+
+
 @pytest.fixture
 def client(db_path):
     """TestClient backed by the same isolated DB as db_path."""
     app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
-    return TestClient(app)
+    tc = TestClient(app)
+    _install_default_entity_injection(tc, db_path)
+    return tc
 
 
 @pytest.fixture
 def client_and_db(db_path):
     """TestClient + raw DB path for tests that need both."""
     app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
-    return TestClient(app), db_path
+    tc = TestClient(app)
+    _install_default_entity_injection(tc, db_path)
+    return tc, db_path
 
 
 @pytest.fixture

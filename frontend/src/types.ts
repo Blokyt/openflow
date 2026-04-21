@@ -7,8 +7,8 @@ export interface Transaction {
   category_id?: number;
   division_id?: number;
   contact_id?: number;
-  from_entity_id?: number;
-  to_entity_id?: number;
+  from_entity_id: number;
+  to_entity_id: number;
   category?: Category;
 }
 
@@ -16,6 +16,8 @@ export interface Category {
   id: number;
   name: string;
   parent_id?: number;
+  color?: string;
+  icon?: string;
   children?: Category[];
 }
 

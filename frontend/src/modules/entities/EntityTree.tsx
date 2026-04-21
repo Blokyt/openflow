@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
-import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X } from "lucide-react";
+import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -234,6 +235,19 @@ function EntityBalancePanel({
   const [balance, setBalance] = useState<EntityBalance | null>(null);
   const [consolidated, setConsolidated] = useState<ConsolidatedBalance | null>(null);
   const [loading, setLoading] = useState(true);
+  const { entities: entityTree, setSelectedEntityId } = useEntity();
+  const navigate = useNavigate();
+
+  function findName(tree: typeof entityTree, id: number): string | null {
+    for (const e of tree) {
+      if (e.id === id) return e.name;
+      if (e.children) {
+        const n = findName(e.children, id);
+        if (n) return n;
+      }
+    }
+    return null;
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -250,9 +264,18 @@ function EntityBalancePanel({
     <div className="bg-[#0d0d0d] border border-[#222] rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-white">{entityName}</h3>
-        <button onClick={onClose} className="text-[#666] hover:text-white">
-          <X size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setSelectedEntityId(entityId); navigate("/transactions"); }}
+            className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-1"
+            title="Voir les transactions de cette entité"
+          >
+            Transactions <ArrowRight size={11} />
+          </button>
+          <button onClick={onClose} className="text-[#666] hover:text-white">
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -284,7 +307,7 @@ function EntityBalancePanel({
               <div className="mt-3 space-y-1">
                 {consolidated.children.map((child) => (
                   <div key={child.entity_id} className="flex justify-between text-xs">
-                    <span className="text-[#666]">Entité #{child.entity_id}</span>
+                    <span className="text-[#B0B0B0]">{findName(entityTree, child.entity_id) ?? `Entité #${child.entity_id}`}</span>
                     <span className={child.balance >= 0 ? "text-[#B0B0B0]" : "text-[#FF5252]"}>
                       {eurFormatter.format(child.balance)}
                     </span>

@@ -51,6 +51,7 @@ function AppContent() {
                 ) : null
               )}
               <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </main>
         </div>

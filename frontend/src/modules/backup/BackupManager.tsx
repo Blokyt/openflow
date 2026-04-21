@@ -113,10 +113,16 @@ export default function BackupManager() {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-3">
         <Archive className="w-7 h-7 text-[#F2C48D]" />
-        <h1 className="text-2xl font-bold text-white">Sauvegarde</h1>
+        <h1 className="text-2xl font-bold text-white">Sauvegarde &amp; Restauration</h1>
       </div>
+      <p className="text-sm text-[#B0B0B0] mb-8 leading-relaxed">
+        Exporte ou restaure <strong>l'intégralité</strong> de la base (toutes les entités,
+        catégories, transactions, contacts, etc.) dans un fichier ZIP. Pour ajouter de
+        nouvelles transactions à partir d'un fichier Excel ou CSV,
+        utilise plutôt <a href="/smart-import" className="text-[#F2C48D] hover:underline">Import intelligent</a>.
+      </p>
 
       {/* Error */}
       {error && (

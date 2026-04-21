@@ -35,6 +35,24 @@ export const api = {
   getBudget: (id: number) => request<any>(`/budget/${id}`),
   updateBudget: (id: number, b: any) => request<any>(`/budget/${id}`, { method: "PUT", body: JSON.stringify(b) }),
   deleteBudget: (id: number) => request<any>(`/budget/${id}`, { method: "DELETE" }),
+  getTimeseries: (entityId?: number, months = 12) => {
+    const q = new URLSearchParams();
+    q.set("months", String(months));
+    if (entityId) q.set("entity_id", String(entityId));
+    return request<any[]>(`/dashboard/timeseries?${q.toString()}`);
+  },
+  getTopCategories: (entityId?: number, limit = 5) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(limit));
+    if (entityId) q.set("entity_id", String(entityId));
+    return request<any[]>(`/dashboard/top-categories?${q.toString()}`);
+  },
+  getRecentTransactions: (entityId?: number, limit = 5) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(limit));
+    if (entityId) q.set("entity_id", String(entityId));
+    return request<any[]>(`/dashboard/recent?${q.toString()}`);
+  },
   getSummary: (entityId?: number) => {
     const query = entityId ? `?entity_id=${entityId}` : "";
     return request<any>(`/dashboard/summary${query}`);
