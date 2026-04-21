@@ -131,3 +131,36 @@ def compute_consolidated_balance(
         "consolidated_balance": consolidated,
         "children": children,
     }
+
+
+def compute_entity_balance_for_period(
+    conn: sqlite3.Connection,
+    entity_id: int,
+    start_date: str,
+    end_date: str,
+    opening: float = 0.0,
+) -> dict:
+    """Realized flow and closing balance for an entity on a date interval.
+
+    Uses the same sign convention as compute_entity_balance:
+        net = SUM(amount when to_entity=entity) + SUM(amount when from_entity=entity AND amount<0)
+
+    Returns {opening, realized, closing}.
+    """
+    row = conn.execute(
+        """SELECT COALESCE(SUM(CASE
+                WHEN to_entity_id = ? THEN amount
+                WHEN from_entity_id = ? AND amount < 0 THEN amount
+                ELSE 0
+            END), 0) AS realized
+           FROM transactions
+           WHERE date BETWEEN ? AND ?
+             AND (from_entity_id = ? OR to_entity_id = ?)""",
+        (entity_id, entity_id, start_date, end_date, entity_id, entity_id),
+    ).fetchone()
+    realized = row[0] if not hasattr(row, "keys") else row["realized"]
+    return {
+        "opening": opening,
+        "realized": realized,
+        "closing": opening + realized,
+    }
