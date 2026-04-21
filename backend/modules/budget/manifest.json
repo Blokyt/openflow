@@ -1,35 +1,24 @@
 {
   "id": "budget",
-  "name": "Budget prévisionnel",
-  "description": "Enveloppes budgétaires par catégorie",
-  "help": "Definissez des enveloppes budgetaires par categorie et par periode. Le module calcule automatiquement le depense vs. budgete et le reste disponible. Ideal pour controler vos postes de depenses.",
-  "version": "1.1.0",
+  "name": "Budget & Exercices",
+  "description": "Allocations budgétaires par entité et catégorie, suivi du réalisé et comparaison inter-exercices",
+  "help": "Définis des exercices budgétaires (ex: année universitaire), alloue un budget par pôle/club et par catégorie, suis le réalisé en temps réel et compare à l'exercice précédent.",
+  "version": "1.2.0",
   "origin": "builtin",
   "category": "standard",
-  "dependencies": [
-    "transactions",
-    "categories"
-  ],
-  "menu": {
-    "label": "Budget",
-    "icon": "piggy-bank",
-    "position": 6
-  },
-  "api_routes": [
-    "api.py"
-  ],
-  "db_models": [
-    "models.py"
-  ],
+  "dependencies": ["entities", "categories", "transactions"],
+  "menu": { "label": "Budget", "icon": "piggy-bank", "position": 15 },
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
   "dashboard_widgets": [
     {
-      "id": "budget_progress",
-      "name": "Suivi budgetaire",
-      "component": "widgets/BudgetProgress.tsx",
-      "default_visible": false,
+      "id": "budget_overview",
+      "name": "Budget en cours",
+      "component": "widgets/BudgetOverview.tsx",
+      "default_visible": true,
       "size": "half"
     }
   ],
   "settings_schema": {},
-  "example": "Je pose une enveloppe 3000 € pour le Gala 2026, je vois en live si je dépasse."
+  "example": "Je définis l'exercice 2025-2026 (sept→août), j'alloue 2 000 € à Gastronomine dont 1 500 € Nourriture, et je vois en temps réel que 40 % a été consommé vs 55 % l'an dernier à la même date."
 }
