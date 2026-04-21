@@ -391,3 +391,27 @@ def test_view_remaining_handles_recettes(client):
     data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
     # remaining = allocated + realized = 1000 + 300 = 1300
     assert round(data["totals"]["remaining"], 2) == 1300.0
+
+
+def test_entity_delete_cascades_budget(client):
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Doomed", "type": "internal"}).json()
+    client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances", json=[
+        {"entity_id": e["id"], "amount": 100.0},
+    ])
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "amount": 50.0,
+    })
+
+    # Precondition
+    assert len(client.get(f"/api/budget/fiscal-years/{fy['id']}/opening-balances").json()) == 1
+    assert len(client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()) == 1
+
+    r = client.delete(f"/api/entities/{e['id']}")
+    assert r.status_code == 200
+
+    # Cascade removed the budget rows
+    assert len(client.get(f"/api/budget/fiscal-years/{fy['id']}/opening-balances").json()) == 0
+    assert len(client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()) == 0

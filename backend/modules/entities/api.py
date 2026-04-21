@@ -197,6 +197,9 @@ def delete_entity(entity_id: int):
 
         conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
         conn.execute("DELETE FROM user_entities WHERE entity_id = ?", (entity_id,))
+        # Cascade to budget module (PRAGMA foreign_keys OFF)
+        conn.execute("DELETE FROM fiscal_year_opening_balances WHERE entity_id = ?", (entity_id,))
+        conn.execute("DELETE FROM budget_allocations WHERE entity_id = ?", (entity_id,))
         conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
         conn.commit()
         return {"deleted": entity_id}
