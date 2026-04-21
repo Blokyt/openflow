@@ -210,3 +210,56 @@ def test_suggested_opening(client):
     data = r.json()
     me_row = next(x for x in data if x["entity_id"] == me["id"])
     assert me_row["suggested_amount"] == 1200.0  # 1000 ref + 200 flow
+
+
+def test_allocation_crud(client):
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c = client.post("/api/categories/", json={"name": "Food"}).json()
+
+    # Create global (no category)
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "amount": 2000.0, "notes": "enveloppe globale",
+    })
+    assert r.status_code == 201
+    global_alloc = r.json()
+    assert global_alloc["category_id"] is None
+
+    # Create categorized
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": c["id"], "amount": 1500.0,
+    })
+    assert r.status_code == 201
+
+    # List
+    rows = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    assert len(rows) == 2
+
+    # Update
+    r = client.put(f"/api/budget/allocations/{global_alloc['id']}", json={"amount": 2500.0})
+    assert r.status_code == 200
+    assert r.json()["amount"] == 2500.0
+
+    # Delete
+    r = client.delete(f"/api/budget/allocations/{global_alloc['id']}")
+    assert r.status_code == 200
+    rows = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    assert len(rows) == 1
+
+
+def test_allocation_unique_triplet(client):
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c = client.post("/api/categories/", json={"name": "Food"}).json()
+
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": c["id"], "amount": 100.0,
+    })
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": c["id"], "amount": 200.0,
+    })
+    assert r.status_code in (400, 409)

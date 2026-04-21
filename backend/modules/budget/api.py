@@ -237,3 +237,112 @@ def suggested_opening(fy_id: int):
         return result
     finally:
         conn.close()
+
+
+# ─── Budget allocations CRUD ─────────────────────────────────────────────────
+
+class AllocationCreate(BaseModel):
+    entity_id: int
+    category_id: Optional[int] = None
+    amount: float
+    notes: str = ""
+
+
+class AllocationUpdate(BaseModel):
+    entity_id: Optional[int] = None
+    category_id: Optional[int] = None
+    amount: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.get("/fiscal-years/{fy_id}/allocations")
+def list_allocations(fy_id: int):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM budget_allocations WHERE fiscal_year_id = ? ORDER BY entity_id, category_id",
+            (fy_id,),
+        ).fetchall()
+        return [row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.post("/fiscal-years/{fy_id}/allocations", status_code=201)
+def create_allocation(fy_id: int, body: AllocationCreate):
+    conn = get_conn()
+    try:
+        fy = conn.execute("SELECT id FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone()
+        if fy is None:
+            raise HTTPException(404, f"Exercice {fy_id} introuvable")
+        ent = conn.execute("SELECT id FROM entities WHERE id = ?", (body.entity_id,)).fetchone()
+        if ent is None:
+            raise HTTPException(400, f"Entité {body.entity_id} introuvable")
+        if body.category_id is not None:
+            cat = conn.execute("SELECT id FROM categories WHERE id = ?", (body.category_id,)).fetchone()
+            if cat is None:
+                raise HTTPException(400, f"Catégorie {body.category_id} introuvable")
+
+        # Check unique triplet at app layer (SQLite UNIQUE treats NULLs as distinct)
+        if body.category_id is None:
+            dup = conn.execute(
+                """SELECT id FROM budget_allocations
+                   WHERE fiscal_year_id = ? AND entity_id = ? AND category_id IS NULL""",
+                (fy_id, body.entity_id),
+            ).fetchone()
+        else:
+            dup = conn.execute(
+                """SELECT id FROM budget_allocations
+                   WHERE fiscal_year_id = ? AND entity_id = ? AND category_id = ?""",
+                (fy_id, body.entity_id, body.category_id),
+            ).fetchone()
+        if dup is not None:
+            raise HTTPException(409, "Une allocation existe déjà pour ce triplet")
+
+        now = _now()
+        cur = conn.execute(
+            """INSERT INTO budget_allocations
+               (fiscal_year_id, entity_id, category_id, amount, notes, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (fy_id, body.entity_id, body.category_id, body.amount, body.notes, now, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return row_to_dict(row)
+    finally:
+        conn.close()
+
+
+@router.put("/allocations/{alloc_id}")
+def update_allocation(alloc_id: int, body: AllocationUpdate):
+    conn = get_conn()
+    try:
+        existing = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (alloc_id,)).fetchone()
+        if existing is None:
+            raise HTTPException(404, f"Allocation {alloc_id} introuvable")
+        updates = body.model_dump(exclude_unset=True)
+        if not updates:
+            return row_to_dict(existing)
+        now = _now()
+        set_clause = ", ".join(f"{k} = ?" for k in updates) + ", updated_at = ?"
+        values = list(updates.values()) + [now, alloc_id]
+        conn.execute(f"UPDATE budget_allocations SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+        row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (alloc_id,)).fetchone()
+        return row_to_dict(row)
+    finally:
+        conn.close()
+
+
+@router.delete("/allocations/{alloc_id}")
+def delete_allocation(alloc_id: int):
+    conn = get_conn()
+    try:
+        existing = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (alloc_id,)).fetchone()
+        if existing is None:
+            raise HTTPException(404, f"Allocation {alloc_id} introuvable")
+        conn.execute("DELETE FROM budget_allocations WHERE id = ?", (alloc_id,))
+        conn.commit()
+        return {"deleted": alloc_id}
+    finally:
+        conn.close()
