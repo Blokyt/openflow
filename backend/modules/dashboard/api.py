@@ -163,11 +163,18 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
         # Current balance
         if entity_id is not None:
             current_balance = compute_entity_balance(conn, entity_id)["balance"]
+            # Net flow for the entity = incoming - outgoing (same convention as
+            # compute_entity_balance). Incoming = amount when the entity is the
+            # destination. Outgoing = amount (already negative) when the entity
+            # is the source on an expense. Matches the signed-amount convention
+            # used by smart_import and the transactions API.
             net_rows = conn.execute(
                 """SELECT substr(date,1,7) AS month,
-                          SUM(CASE WHEN to_entity_id = ? THEN amount
-                                   WHEN from_entity_id = ? THEN -amount
-                                   ELSE 0 END) AS net
+                          COALESCE(SUM(CASE
+                              WHEN to_entity_id = ? THEN amount
+                              WHEN from_entity_id = ? AND amount < 0 THEN amount
+                              ELSE 0
+                          END), 0) AS net
                    FROM transactions
                    WHERE from_entity_id = ? OR to_entity_id = ?
                    GROUP BY month ORDER BY month""",
