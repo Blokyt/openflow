@@ -263,3 +263,86 @@ def test_allocation_unique_triplet(client):
         "entity_id": e["id"], "category_id": c["id"], "amount": 200.0,
     })
     assert r.status_code in (400, 409)
+
+
+def test_view_realized_and_categories(client):
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+        "is_current": True,
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    cat = client.post("/api/categories/", json={"name": "Food"}).json()
+
+    client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances", json=[
+        {"entity_id": e["id"], "amount": 1000.0},
+    ])
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "amount": 500.0,  # global
+    })
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": cat["id"], "amount": 300.0,
+    })
+    # Two tx inside the year (one categorized, one not)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-15", "label": "buy food", "amount": -120.0,
+        "from_entity_id": e["id"], "to_entity_id": ext["id"],
+        "category_id": cat["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-11-05", "label": "cash in", "amount": 50.0,
+        "from_entity_id": ext["id"], "to_entity_id": e["id"],
+    })
+    # tx outside the year (ignored)
+    client.post("/api/transactions/", json={
+        "date": "2024-08-15", "label": "old", "amount": -200.0,
+        "from_entity_id": e["id"], "to_entity_id": ext["id"],
+    })
+
+    r = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fiscal_year"]["id"] == fy["id"]
+    assert data["previous_fiscal_year_id"] is None  # no N-1
+    club = next(x for x in data["entities"] if x["entity_id"] == e["id"])
+    assert club["opening_balance"] == 1000.0
+    assert club["allocated_total"] == 500.0
+    # realized = -120 + 50 = -70
+    assert round(club["realized_total"], 2) == -70.0
+    # Category breakdown
+    food = next(c for c in club["categories"] if c["category_id"] == cat["id"])
+    assert food["allocated"] == 300.0
+    assert round(food["realized"], 2) == -120.0
+
+
+def test_view_with_previous_year(client):
+    """With a prior fiscal year, realized_n_minus_1 is populated."""
+    # N-1
+    fy_prev = client.post("/api/budget/fiscal-years", json={
+        "name": "2024-2025", "start_date": "2024-09-01", "end_date": "2025-08-31",
+    }).json()
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+
+    client.post("/api/transactions/", json={
+        "date": "2024-10-15", "label": "prev year buy", "amount": -100.0,
+        "from_entity_id": e["id"], "to_entity_id": ext["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-15", "label": "this year buy", "amount": -140.0,
+        "from_entity_id": e["id"], "to_entity_id": ext["id"],
+    })
+
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    assert data["previous_fiscal_year_id"] == fy_prev["id"]
+    club = next(x for x in data["entities"] if x["entity_id"] == e["id"])
+    assert round(club["realized_total"], 2) == -140.0
+    assert round(club["realized_n_minus_1"], 2) == -100.0
+
+
+def test_view_no_fiscal_year(client):
+    r = client.get("/api/budget/view?fiscal_year_id=999")
+    assert r.status_code == 404

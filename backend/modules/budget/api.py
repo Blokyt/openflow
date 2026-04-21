@@ -346,3 +346,159 @@ def delete_allocation(alloc_id: int):
         return {"deleted": alloc_id}
     finally:
         conn.close()
+
+
+# ─── Composite view endpoint ─────────────────────────────────────────────────
+
+from datetime import date as _date, timedelta as _timedelta
+
+
+def _find_previous_fiscal_year(conn, current_start: str) -> Optional[int]:
+    """Find the previous fiscal year: the one whose start_date is closest to
+    (current_start - 1 year), within a ±31 day tolerance.
+    """
+    d = _date.fromisoformat(current_start)
+    target = _date(d.year - 1, d.month, d.day).isoformat()
+    window_low = (_date.fromisoformat(target) - _timedelta(days=31)).isoformat()
+    window_high = (_date.fromisoformat(target) + _timedelta(days=31)).isoformat()
+    row = conn.execute(
+        """SELECT id FROM fiscal_years
+           WHERE start_date BETWEEN ? AND ?
+             AND start_date < ?
+           ORDER BY ABS(julianday(start_date) - julianday(?)) ASC
+           LIMIT 1""",
+        (window_low, window_high, current_start, target),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+@router.get("/view")
+def get_budget_view(fiscal_year_id: int):
+    conn = get_conn()
+    try:
+        fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
+        if fy is None:
+            raise HTTPException(404, f"Exercice {fiscal_year_id} introuvable")
+
+        prev_id = _find_previous_fiscal_year(conn, fy["start_date"])
+        prev = None
+        if prev_id is not None:
+            prev = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (prev_id,)).fetchone()
+
+        # Entities to report: all internal + any that have an allocation/opening in this FY
+        entity_ids = {r["id"] for r in conn.execute(
+            "SELECT id FROM entities WHERE type = 'internal'"
+        ).fetchall()}
+        for tbl in ("fiscal_year_opening_balances", "budget_allocations"):
+            extras = conn.execute(
+                f"SELECT DISTINCT entity_id FROM {tbl} WHERE fiscal_year_id = ?",
+                (fiscal_year_id,),
+            ).fetchall()
+            entity_ids.update(r["entity_id"] for r in extras)
+
+        result_entities = []
+        total_allocated = 0.0
+        total_realized = 0.0
+
+        def _sum_realized(entity_id: int, start: str, end: str, category_id: Optional[int]):
+            if category_id is None:
+                row = conn.execute(
+                    """SELECT COALESCE(SUM(CASE
+                            WHEN to_entity_id = ? THEN amount
+                            WHEN from_entity_id = ? AND amount < 0 THEN amount
+                            ELSE 0
+                        END), 0) AS net
+                       FROM transactions
+                       WHERE date BETWEEN ? AND ?
+                         AND (from_entity_id = ? OR to_entity_id = ?)""",
+                    (entity_id, entity_id, start, end, entity_id, entity_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """SELECT COALESCE(SUM(CASE
+                            WHEN to_entity_id = ? THEN amount
+                            WHEN from_entity_id = ? AND amount < 0 THEN amount
+                            ELSE 0
+                        END), 0) AS net
+                       FROM transactions
+                       WHERE date BETWEEN ? AND ?
+                         AND (from_entity_id = ? OR to_entity_id = ?)
+                         AND category_id = ?""",
+                    (entity_id, entity_id, start, end, entity_id, entity_id, category_id),
+                ).fetchone()
+            return row["net"] if row else 0.0
+
+        for eid in sorted(entity_ids):
+            ent = conn.execute("SELECT id, name FROM entities WHERE id = ?", (eid,)).fetchone()
+            if ent is None:
+                continue
+
+            ob = conn.execute(
+                "SELECT amount FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? AND entity_id = ?",
+                (fiscal_year_id, eid),
+            ).fetchone()
+            opening = ob["amount"] if ob else 0.0
+
+            allocs = conn.execute(
+                """SELECT a.*, c.name AS category_name
+                   FROM budget_allocations a
+                   LEFT JOIN categories c ON a.category_id = c.id
+                   WHERE a.fiscal_year_id = ? AND a.entity_id = ?""",
+                (fiscal_year_id, eid),
+            ).fetchall()
+
+            allocated_global = sum(a["amount"] for a in allocs if a["category_id"] is None)
+            cats_out = []
+            for a in allocs:
+                if a["category_id"] is None:
+                    continue
+                realized = _sum_realized(eid, fy["start_date"], fy["end_date"], a["category_id"])
+                realized_n1 = 0.0
+                if prev:
+                    realized_n1 = _sum_realized(eid, prev["start_date"], prev["end_date"], a["category_id"])
+                pct_consumed = (
+                    abs(realized) / a["amount"] * 100.0 if a["amount"] != 0 else 0.0
+                )
+                cats_out.append({
+                    "category_id": a["category_id"],
+                    "category_name": a["category_name"] or "— Catégorie supprimée —",
+                    "allocation_id": a["id"],
+                    "allocated": a["amount"],
+                    "realized": realized,
+                    "realized_n_minus_1": realized_n1,
+                    "percent_consumed": round(pct_consumed, 1),
+                })
+
+            realized_total = _sum_realized(eid, fy["start_date"], fy["end_date"], None)
+            realized_n1_total = 0.0
+            if prev:
+                realized_n1_total = _sum_realized(eid, prev["start_date"], prev["end_date"], None)
+
+            result_entities.append({
+                "entity_id": eid,
+                "entity_name": ent["name"],
+                "opening_balance": opening,
+                "allocated_total": allocated_global,
+                "realized_total": realized_total,
+                "realized_n_minus_1": realized_n1_total,
+                "variation_pct": (
+                    round((realized_total - realized_n1_total) / abs(realized_n1_total) * 100.0, 1)
+                    if realized_n1_total != 0 else None
+                ),
+                "categories": cats_out,
+            })
+            total_allocated += allocated_global
+            total_realized += realized_total
+
+        return {
+            "fiscal_year": row_to_dict(fy),
+            "previous_fiscal_year_id": prev["id"] if prev else None,
+            "entities": result_entities,
+            "totals": {
+                "allocated": total_allocated,
+                "realized": total_realized,
+                "remaining": total_allocated - abs(total_realized),
+            },
+        }
+    finally:
+        conn.close()
