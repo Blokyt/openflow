@@ -146,3 +146,67 @@ def test_fiscal_year_dates_validated(client):
         "name": "broken", "start_date": "2026-09-01", "end_date": "2025-08-31",
     })
     assert r.status_code == 400
+
+
+def test_opening_balance_upsert(client):
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e1 = client.post("/api/entities/", json={"name": "Club1", "type": "internal"}).json()
+    e2 = client.post("/api/entities/", json={"name": "Club2", "type": "internal"}).json()
+
+    # Upsert two rows
+    r = client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances", json=[
+        {"entity_id": e1["id"], "amount": 1000.0, "source": "CE IDF"},
+        {"entity_id": e2["id"], "amount": 500.0, "source": ""},
+    ])
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 2
+    assert sum(o["amount"] for o in data) == 1500.0
+
+    # Re-upsert with an updated value (replaces)
+    r = client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances", json=[
+        {"entity_id": e1["id"], "amount": 1200.0, "source": "CE IDF au 31/08"},
+    ])
+    assert r.status_code == 200
+    ob = client.get(f"/api/budget/fiscal-years/{fy['id']}/opening-balances").json()
+    assert len(ob) == 1  # e2 removed
+    assert ob[0]["amount"] == 1200.0
+
+
+def test_opening_balance_rejects_external_entity(client):
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    ext = client.post("/api/entities/", json={"name": "Bank", "type": "external"}).json()
+
+    r = client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances", json=[
+        {"entity_id": ext["id"], "amount": 1000.0},
+    ])
+    assert r.status_code == 400
+
+
+def test_suggested_opening(client):
+    # Internal entity with some history
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    me = client.post("/api/entities/", json={"name": "Me", "type": "internal"}).json()
+    # Adjust its reference so we have a known baseline
+    client.put(f"/api/entities/{me['id']}/balance-ref", json={
+        "reference_date": "2025-01-01", "reference_amount": 1000.0,
+    })
+    # One tx before the fiscal year start
+    client.post("/api/transactions/", json={
+        "date": "2025-06-15", "label": "paid", "amount": 200.0,
+        "from_entity_id": ext["id"], "to_entity_id": me["id"],
+    })
+
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+
+    r = client.get(f"/api/budget/fiscal-years/{fy['id']}/suggested-opening")
+    assert r.status_code == 200
+    data = r.json()
+    me_row = next(x for x in data if x["entity_id"] == me["id"])
+    assert me_row["suggested_amount"] == 1200.0  # 1000 ref + 200 flow

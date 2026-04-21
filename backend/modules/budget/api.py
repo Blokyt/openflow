@@ -143,3 +143,97 @@ def delete_fiscal_year(fy_id: int):
         return {"deleted": fy_id}
     finally:
         conn.close()
+
+
+class OpeningBalanceEntry(BaseModel):
+    entity_id: int
+    amount: float
+    source: str = ""
+    notes: str = ""
+
+
+@router.get("/fiscal-years/{fy_id}/opening-balances")
+def list_opening_balances(fy_id: int):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? ORDER BY entity_id",
+            (fy_id,),
+        ).fetchall()
+        return [row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.put("/fiscal-years/{fy_id}/opening-balances")
+def upsert_opening_balances(fy_id: int, entries: list[OpeningBalanceEntry]):
+    conn = get_conn()
+    try:
+        fy = conn.execute("SELECT id FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone()
+        if fy is None:
+            raise HTTPException(404, f"Exercice {fy_id} introuvable")
+
+        # Validate each entity is internal
+        for entry in entries:
+            ent = conn.execute(
+                "SELECT type FROM entities WHERE id = ?", (entry.entity_id,)
+            ).fetchone()
+            if ent is None:
+                raise HTTPException(400, f"Entité {entry.entity_id} introuvable")
+            if ent["type"] != "internal":
+                raise HTTPException(
+                    400, f"Entité {entry.entity_id} est externe: pas de solde d'ouverture"
+                )
+
+        now = _now()
+        conn.execute("DELETE FROM fiscal_year_opening_balances WHERE fiscal_year_id = ?", (fy_id,))
+        for entry in entries:
+            conn.execute(
+                """INSERT INTO fiscal_year_opening_balances
+                   (fiscal_year_id, entity_id, amount, source, notes, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (fy_id, entry.entity_id, entry.amount, entry.source, entry.notes, now, now),
+            )
+        conn.commit()
+        rows = conn.execute(
+            "SELECT * FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? ORDER BY entity_id",
+            (fy_id,),
+        ).fetchall()
+        return [row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.get("/fiscal-years/{fy_id}/suggested-opening")
+def suggested_opening(fy_id: int):
+    """For each internal entity, suggest the balance as of start_date - 1 day."""
+    from datetime import date as _date, timedelta
+    from backend.core.balance import compute_entity_balance
+
+    conn = get_conn()
+    try:
+        fy = conn.execute(
+            "SELECT id, start_date FROM fiscal_years WHERE id = ?", (fy_id,)
+        ).fetchone()
+        if fy is None:
+            raise HTTPException(404, f"Exercice {fy_id} introuvable")
+
+        d = _date.fromisoformat(fy["start_date"]) - timedelta(days=1)
+        as_of = d.isoformat()
+
+        internals = conn.execute(
+            "SELECT id, name FROM entities WHERE type = 'internal' ORDER BY position, id"
+        ).fetchall()
+
+        result = []
+        for ent in internals:
+            bal = compute_entity_balance(conn, ent["id"], as_of_date=as_of)
+            result.append({
+                "entity_id": ent["id"],
+                "entity_name": ent["name"],
+                "suggested_amount": round(bal["balance"], 2),
+                "as_of_date": as_of,
+            })
+        return result
+    finally:
+        conn.close()
