@@ -346,3 +346,48 @@ def test_view_with_previous_year(client):
 def test_view_no_fiscal_year(client):
     r = client.get("/api/budget/view?fiscal_year_id=999")
     assert r.status_code == 404
+
+
+def test_view_allocated_total_uses_detail_when_no_global(client):
+    """When only category allocations exist (no global), allocated_total reflects them."""
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c1 = client.post("/api/categories/", json={"name": "A"}).json()
+    c2 = client.post("/api/categories/", json={"name": "B"}).json()
+
+    # Only category-level allocations, no global
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": c1["id"], "amount": 300.0,
+    })
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": c2["id"], "amount": 200.0,
+    })
+
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club = next(x for x in data["entities"] if x["entity_id"] == e["id"])
+    assert club["allocated_total"] == 500.0  # sum of details, not 0
+    assert data["totals"]["allocated"] == 500.0
+
+
+def test_view_remaining_handles_recettes(client):
+    """totals.remaining treats realized as signed (recette increases, expense decreases)."""
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "2025-2026", "start_date": "2025-09-01", "end_date": "2026-08-31",
+    }).json()
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+
+    # Allocated 1000, but received 300 as recette
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "amount": 1000.0,
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-10", "label": "recette", "amount": 300.0,
+        "from_entity_id": ext["id"], "to_entity_id": e["id"],
+    })
+
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    # remaining = allocated + realized = 1000 + 300 = 1300
+    assert round(data["totals"]["remaining"], 2) == 1300.0

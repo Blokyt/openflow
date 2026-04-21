@@ -448,6 +448,10 @@ def get_budget_view(fiscal_year_id: int):
             ).fetchall()
 
             allocated_global = sum(a["amount"] for a in allocs if a["category_id"] is None)
+            allocated_detailed = sum(a["amount"] for a in allocs if a["category_id"] is not None)
+            # Effective envelope = global if defined, else sum of category allocations.
+            # When both exist, keep the global (it acts as the umbrella) but surface both for UI warnings.
+            allocated_effective = allocated_global if allocated_global > 0 else allocated_detailed
             cats_out = []
             for a in allocs:
                 if a["category_id"] is None:
@@ -478,7 +482,7 @@ def get_budget_view(fiscal_year_id: int):
                 "entity_id": eid,
                 "entity_name": ent["name"],
                 "opening_balance": opening,
-                "allocated_total": allocated_global,
+                "allocated_total": allocated_effective,
                 "realized_total": realized_total,
                 "realized_n_minus_1": realized_n1_total,
                 "variation_pct": (
@@ -487,7 +491,7 @@ def get_budget_view(fiscal_year_id: int):
                 ),
                 "categories": cats_out,
             })
-            total_allocated += allocated_global
+            total_allocated += allocated_effective
             total_realized += realized_total
 
         return {
@@ -497,7 +501,7 @@ def get_budget_view(fiscal_year_id: int):
             "totals": {
                 "allocated": total_allocated,
                 "realized": total_realized,
-                "remaining": total_allocated - abs(total_realized),
+                "remaining": total_allocated + total_realized,
             },
         }
     finally:
