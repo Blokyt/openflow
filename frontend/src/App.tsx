@@ -7,6 +7,7 @@ import Settings from "./core/Settings";
 import Login from "./core/Login";
 import { AuthProvider, useAuth } from "./core/AuthContext";
 import { EntityProvider } from "./core/EntityContext";
+import { FiscalYearProvider } from "./core/FiscalYearContext";
 import { MODULE_ROUTES } from "./routes";
 
 function Spinner() {
@@ -38,24 +39,26 @@ function AppContent() {
 
   return (
     <BrowserRouter>
-      <EntityProvider>
-        <div className="flex h-screen bg-black">
-          <Sidebar activeModules={activeModules} />
-          <main className="flex-1 overflow-auto bg-black">
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              {Object.entries(MODULE_ROUTES).map(([moduleId, route]) =>
-                activeModuleIds.includes(moduleId) ? (
-                  <Route key={moduleId} path={route.path} element={route.element} />
-                ) : null
-              )}
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </main>
-        </div>
-      </EntityProvider>
+      <FiscalYearProvider>
+        <EntityProvider>
+          <div className="flex h-screen bg-black">
+            <Sidebar activeModules={activeModules} />
+            <main className="flex-1 overflow-auto bg-black">
+              <Routes>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                {Object.entries(MODULE_ROUTES).map(([moduleId, route]) =>
+                  activeModuleIds.includes(moduleId) ? (
+                    <Route key={moduleId} path={route.path} element={route.element} />
+                  ) : null
+                )}
+                <Route path="/settings" element={<Settings />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </main>
+          </div>
+        </EntityProvider>
+      </FiscalYearProvider>
     </BrowserRouter>
   );
 }
