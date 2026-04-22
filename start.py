@@ -27,7 +27,7 @@ def run_migrations():
 
 def main():
     port = 8001
-    host = "127.0.0.1"
+    host = "0.0.0.0"
 
     config_file = PROJECT_ROOT / "config.yaml"
     if not config_file.exists():
@@ -43,15 +43,25 @@ def main():
     run_migrations()
     check_frontend_build()
 
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "localhost"
+
     print(f"\n{'=' * 50}")
     print(f"  OpenFlow")
-    print(f"  http://{host}:{port}")
+    print(f"  Local  : http://localhost:{port}")
+    print(f"  Réseau : http://{local_ip}:{port}")
     print(f"{'=' * 50}\n")
 
     import threading
     def open_browser():
         time.sleep(1.5)
-        webbrowser.open(f"http://{host}:{port}")
+        webbrowser.open(f"http://localhost:{port}")
     threading.Thread(target=open_browser, daemon=True).start()
 
     import uvicorn

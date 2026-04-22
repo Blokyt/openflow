@@ -32,52 +32,57 @@ export default function BudgetProgress() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#F2C48D]" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 text-sm text-red-600 bg-red-50 rounded-lg">{error}</div>
+      <div className="p-4 text-sm text-[#FF5252] bg-[#1a0a0a] border border-[#FF5252]/30 rounded-lg">{error}</div>
     );
   }
 
   if (items.length === 0) {
     return (
-      <div className="p-4 text-sm text-gray-500 text-center">
-        Aucune enveloppe budgetaire.
+      <div className="p-4 text-sm text-[#888] text-center">
+        Aucune enveloppe budgétaire.
       </div>
     );
   }
 
   return (
     <div className="p-4 space-y-4">
-      <h3 className="text-sm font-semibold text-gray-700">Suivi budgetaire</h3>
+      <h3 className="text-sm font-semibold text-white">Suivi budgétaire</h3>
       {items.map((item) => {
-        const pct = item.budgeted > 0 ? Math.min(100, (Math.abs(item.spent) / item.budgeted) * 100) : 0;
-        const isOver = Math.abs(item.spent) > item.budgeted;
+        const spentAbs = Math.abs(item.spent);
+        const pct = item.budgeted > 0 ? Math.min(100, (spentAbs / item.budgeted) * 100) : 0;
+        const isOver = spentAbs > item.budgeted;
         return (
           <div key={item.id}>
-            <div className="flex justify-between text-xs text-gray-600 mb-1">
-              <span className="font-medium truncate max-w-[60%]">
+            <div className="flex justify-between text-xs text-[#666] mb-1">
+              <span className="font-medium text-[#B0B0B0] truncate max-w-[60%]">
                 {item.label || `Budget #${item.id}`}
               </span>
-              <span>
-                {eurFormatter.format(Math.abs(item.spent))} / {eurFormatter.format(item.budgeted)}
+              <span className="text-[#B0B0B0]">
+                {eurFormatter.format(spentAbs)} / {eurFormatter.format(item.budgeted)}
               </span>
             </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${isOver ? "bg-red-500" : "bg-indigo-500"}`}
-                style={{ width: `${pct}%` }}
+                className="h-full rounded-full transition-all"
+                style={{ width: `${pct}%`, backgroundColor: isOver ? "#FF5252" : "#F2C48D" }}
               />
             </div>
-            <p className={`text-xs mt-0.5 text-right ${isOver ? "text-red-500" : "text-gray-400"}`}>
-              {isOver
-                ? `Depassement de ${eurFormatter.format(Math.abs(item.spent) - item.budgeted)}`
-                : `Restant : ${eurFormatter.format(item.remaining)}`}
-            </p>
+            {isOver ? (
+              <p className="text-xs text-[#FF5252] mt-1">
+                Dépassement : +{eurFormatter.format(spentAbs - item.budgeted)}
+              </p>
+            ) : (
+              <p className="text-xs mt-0.5 text-right text-[#888]">
+                Restant : {eurFormatter.format(item.remaining)}
+              </p>
+            )}
           </div>
         );
       })}

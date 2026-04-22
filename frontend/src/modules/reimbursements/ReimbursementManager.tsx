@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, CheckCircle2, Clock, RotateCcw } from "lucide-react";
+import { api } from "../../api";
 import EmptyState from "../../core/EmptyState";
 
 const BASE_URL = "/api";
@@ -28,6 +29,16 @@ interface Reimbursement {
   notes: string;
   created_at: string;
   updated_at: string;
+  transaction_label?: string;
+  transaction_date?: string;
+  transaction_amount?: number;
+}
+
+interface TxOption {
+  id: number;
+  label: string;
+  date: string;
+  amount: number;
 }
 
 interface SummaryRow {
@@ -76,6 +87,13 @@ export default function ReimbursementManager() {
   const [form, setForm] = useState<ReimbForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [txOptions, setTxOptions] = useState<TxOption[]>([]);
+
+  useEffect(() => {
+    api.getTransactions().then((txs: any[]) =>
+      setTxOptions(txs.map((t: any) => ({ id: t.id, label: t.label, date: t.date, amount: t.amount })))
+    ).catch(() => {});
+  }, []);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -298,14 +316,19 @@ export default function ReimbursementManager() {
               />
             </div>
             <div>
-              <label className={labelClass}>ID Transaction liée</label>
-              <input
-                type="number"
+              <label className={labelClass}>Transaction liée</label>
+              <select
                 value={form.transaction_id}
                 onChange={(e) => setForm({ ...form, transaction_id: e.target.value })}
                 className={inputClass}
-                placeholder="(optionnel)"
-              />
+              >
+                <option value="">— Aucune —</option>
+                {txOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label} — {t.date} — {eurFormatter.format(t.amount)}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Notes</label>
@@ -381,8 +404,17 @@ export default function ReimbursementManager() {
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">
-                    {r.transaction_id ? `#${r.transaction_id}` : <span className="text-[#444]">—</span>}
+                  <td className="px-5 py-3.5">
+                    {r.transaction_id ? (
+                      <div>
+                        <span className="text-white text-sm">{r.transaction_label || `#${r.transaction_id}`}</span>
+                        {r.transaction_date && (
+                          <span className="text-[#555] text-xs ml-2">{r.transaction_date}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[#444]">—</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right font-semibold text-[#F2C48D] whitespace-nowrap">
                     {eurFormatter.format(r.amount)}

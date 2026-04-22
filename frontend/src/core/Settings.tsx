@@ -303,12 +303,10 @@ export default function Settings() {
     setToggling(mod.id);
     try {
       await api.toggleModule(mod.id, !mod.active);
-      setModules((prev) =>
-        prev.map((m) => (m.id === mod.id ? { ...m, active: !m.active } : m))
-      );
+      // Full reload so Sidebar, routes, and module list are refreshed
+      window.location.reload();
     } catch (e: any) {
       setError(e.message);
-    } finally {
       setToggling(null);
     }
   }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
-import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight } from "lucide-react";
+import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -238,6 +238,16 @@ function EntityBalancePanel({
   const { entities: entityTree, setSelectedEntityId } = useEntity();
   const navigate = useNavigate();
 
+  // Ref edition form state
+  const [editingRef, setEditingRef] = useState(false);
+  const [refDate, setRefDate] = useState("");
+  const [refAmount, setRefAmount] = useState("");
+  const [refSaving, setRefSaving] = useState(false);
+  const [refError, setRefError] = useState<string | null>(null);
+
+  // Bank total calculator state
+  const [bankTotal, setBankTotal] = useState("");
+
   function findName(tree: typeof entityTree, id: number): string | null {
     for (const e of tree) {
       if (e.id === id) return e.name;
@@ -249,16 +259,52 @@ function EntityBalancePanel({
     return null;
   }
 
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
+  async function loadBalances() {
+    return Promise.all([
       api.getEntityBalance(entityId).catch(() => null),
       api.getConsolidatedBalance(entityId).catch(() => null),
     ]).then(([b, c]) => {
       setBalance(b);
       setConsolidated(c);
-    }).finally(() => setLoading(false));
+    });
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    loadBalances().finally(() => setLoading(false));
   }, [entityId]);
+
+  function openEditForm() {
+    setRefDate(balance?.reference_date ?? new Date().toISOString().slice(0, 10));
+    setRefAmount(balance?.reference_amount != null ? String(balance.reference_amount) : "");
+    setRefError(null);
+    setEditingRef(true);
+  }
+
+  async function handleSaveRef(e: React.FormEvent) {
+    e.preventDefault();
+    setRefSaving(true);
+    setRefError(null);
+    try {
+      await api.updateBalanceRef(entityId, {
+        reference_date: refDate,
+        reference_amount: parseFloat(refAmount),
+      });
+      await loadBalances();
+      setEditingRef(false);
+    } catch (err: any) {
+      setRefError(err.message || "Erreur lors de la sauvegarde");
+    } finally {
+      setRefSaving(false);
+    }
+  }
+
+  const hasChildren = consolidated && consolidated.children && consolidated.children.length > 0;
+  const sumChildren = hasChildren
+    ? consolidated!.children.reduce((acc, c) => acc + c.balance, 0)
+    : 0;
+  const bankTotalNum = bankTotal !== "" ? parseFloat(bankTotal) : null;
+  const calculatedOwn = bankTotalNum !== null ? bankTotalNum - sumChildren : null;
 
   return (
     <div className="bg-[#0d0d0d] border border-[#222] rounded-2xl p-5">
@@ -286,7 +332,18 @@ function EntityBalancePanel({
         <div className="space-y-3">
           {balance && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-              <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Solde propre</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-[#666] uppercase tracking-wider">Solde propre</p>
+                {!editingRef && (
+                  <button
+                    onClick={openEditForm}
+                    className="text-[#666] hover:text-[#F2C48D] transition-colors"
+                    title="Modifier le solde de référence"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
+              </div>
               <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-[#FF5252]"}`}>
                 {eurFormatter.format(balance.balance)}
               </p>
@@ -295,17 +352,59 @@ function EntityBalancePanel({
                   Réf. {balance.reference_date} : {eurFormatter.format(balance.reference_amount)}
                 </p>
               )}
+
+              {editingRef && (
+                <form onSubmit={handleSaveRef} className="mt-3 space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={refDate}
+                      onChange={(e) => setRefDate(e.target.value)}
+                      className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D]/50"
+                      required
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={refAmount}
+                      onChange={(e) => setRefAmount(e.target.value)}
+                      placeholder="Montant"
+                      className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#F2C48D]/50"
+                      required
+                    />
+                  </div>
+                  {refError && (
+                    <p className="text-xs text-[#FF5252]">{refError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={refSaving}
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-[#F2C48D] text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {refSaving ? "..." : "Enregistrer"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingRef(false)}
+                      className="flex-1 px-3 py-1.5 rounded-lg border border-[#333] text-sm text-[#666] hover:text-white hover:border-[#444] transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 
-          {consolidated && consolidated.children && consolidated.children.length > 0 && (
+          {hasChildren && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
               <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Solde consolidé</p>
-              <p className={`text-2xl font-bold ${consolidated.consolidated_balance >= 0 ? "text-[#F2C48D]" : "text-[#FF5252]"}`}>
-                {eurFormatter.format(consolidated.consolidated_balance)}
+              <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-[#F2C48D]" : "text-[#FF5252]"}`}>
+                {eurFormatter.format(consolidated!.consolidated_balance)}
               </p>
               <div className="mt-3 space-y-1">
-                {consolidated.children.map((child) => (
+                {consolidated!.children.map((child) => (
                   <div key={child.entity_id} className="flex justify-between text-xs">
                     <span className="text-[#B0B0B0]">{findName(entityTree, child.entity_id) ?? `Entité #${child.entity_id}`}</span>
                     <span className={child.balance >= 0 ? "text-[#B0B0B0]" : "text-[#FF5252]"}>
@@ -314,6 +413,49 @@ function EntityBalancePanel({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {hasChildren && (
+            <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+              <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Calculer le solde propre</p>
+              <p className="text-xs text-[#666] mb-3 leading-relaxed">
+                Si tu connais le total du compte bancaire, le solde propre se déduit automatiquement.
+              </p>
+              <input
+                type="number"
+                step="0.01"
+                value={bankTotal}
+                onChange={(e) => setBankTotal(e.target.value)}
+                placeholder="Total compte bancaire"
+                className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#F2C48D]/50"
+              />
+              {calculatedOwn !== null && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-[#666]">
+                    Solde propre calculé ={" "}
+                    <span className="text-[#B0B0B0]">{eurFormatter.format(bankTotalNum!)}</span>
+                    {" − "}
+                    <span className="text-[#B0B0B0]">{eurFormatter.format(sumChildren)}</span>
+                    {" = "}
+                    <span className={`font-bold ${calculatedOwn >= 0 ? "text-white" : "text-[#FF5252]"}`}>
+                      {eurFormatter.format(calculatedOwn)}
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRefAmount(String(calculatedOwn));
+                      setRefDate(balance?.reference_date ?? new Date().toISOString().slice(0, 10));
+                      setRefError(null);
+                      setEditingRef(true);
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg border border-[#F2C48D]/40 text-sm text-[#F2C48D] hover:bg-[#F2C48D]/5 hover:border-[#F2C48D]/70 transition-colors"
+                  >
+                    Utiliser cette valeur
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

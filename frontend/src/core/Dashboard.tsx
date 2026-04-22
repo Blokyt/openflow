@@ -5,6 +5,9 @@ import { TrendingUp, TrendingDown, Hash, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useEntity } from "./EntityContext";
 import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -34,6 +37,41 @@ function SummaryCard({
   );
 }
 
+function niceStep(range: number): number {
+  const candidates = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+  for (const c of candidates) {
+    if (range / c <= 6) return c;
+  }
+  return 100000;
+}
+
+function labelFor(m: string): string {
+  const [y, mo] = m.split("-");
+  const names = ["jan", "fév", "mar", "avr", "mai", "jun", "jul", "aoû", "sep", "oct", "nov", "déc"];
+  return `${names[parseInt(mo, 10) - 1]} ${y.slice(2)}`;
+}
+
+function BalanceTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: Array<{ value: number }>;
+  label?: string;
+}) {
+  if (!active || !payload || payload.length === 0 || !label) return null;
+  return (
+    <div style={{
+      backgroundColor: "#1a1a1a",
+      border: "1px solid #333",
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: "#fff",
+      fontSize: 12,
+    }}>
+      <p style={{ color: "#B0B0B0", marginBottom: 4 }}>{label}</p>
+      <p style={{ fontWeight: 600 }}>{eurFormatter.format(payload[0].value)}</p>
+    </div>
+  );
+}
+
 function BalanceChart({ series }: { series: TimePoint[] }) {
   if (series.length < 2) {
     return (
@@ -43,56 +81,68 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
       </div>
     );
   }
-  const w = 640, h = 180, padL = 50, padR = 12, padT = 12, padB = 24;
-  const xs = (i: number) => padL + (i * (w - padL - padR)) / (series.length - 1);
+
   const values = series.map((s) => s.balance);
   const minV = Math.min(...values);
   const maxV = Math.max(...values);
+  const hasNegative = minV < 0;
+  const accentColor = hasNegative ? "#FF5252" : "#F2C48D";
+  const gradientId = hasNegative ? "balanceGradRed" : "balanceGradGold";
+
   const range = maxV - minV || 1;
-  const ys = (v: number) => padT + (1 - (v - minV) / range) * (h - padT - padB);
-  const pts = series.map((s, i) => `${xs(i)},${ys(s.balance)}`).join(" ");
-  const area = `M${xs(0)},${h - padB} L${pts.split(" ").join(" L")} L${xs(series.length - 1)},${h - padB} Z`;
-  const labelFor = (m: string) => {
-    const [y, mo] = m.split("-");
-    const names = ["jan", "fév", "mar", "avr", "mai", "jun", "jul", "aoû", "sep", "oct", "nov", "déc"];
-    return `${names[parseInt(mo, 10) - 1]} ${y.slice(2)}`;
-  };
-  const stepX = Math.ceil(series.length / 6);
+  const step = niceStep(range);
+  const tickMin = Math.floor(minV / step) * step;
+  const tickMax = Math.ceil(maxV / step) * step;
+  const ticks: number[] = [];
+  for (let t = tickMin; t <= tickMax; t += step) {
+    ticks.push(t);
+  }
+
+  const data = series.map((s) => ({ ...s, label: labelFor(s.month) }));
+  const xInterval = Math.max(0, Math.ceil(series.length / 6) - 1);
+
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-medium text-[#666] uppercase tracking-wider">Évolution du solde</p>
         <p className="text-xs text-[#666]">{series.length} mois</p>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
-        <defs>
-          <linearGradient id="balanceGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F2C48D" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#F2C48D" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0, 0.5, 1].map((t) => {
-          const y = padT + t * (h - padT - padB);
-          const v = maxV - t * range;
-          return (
-            <g key={t}>
-              <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#1a1a1a" strokeWidth="1" />
-              <text x={padL - 6} y={y + 3} fill="#555" fontSize="10" textAnchor="end">
-                {Math.round(v).toLocaleString("fr-FR")}
-              </text>
-            </g>
-          );
-        })}
-        <path d={area} fill="url(#balanceGrad)" />
-        <polyline points={pts} fill="none" stroke="#F2C48D" strokeWidth="2" />
-        {series.map((s, i) =>
-          i % stepX === 0 || i === series.length - 1 ? (
-            <text key={i} x={xs(i)} y={h - 6} fill="#666" fontSize="10" textAnchor="middle">
-              {labelFor(s.month)}
-            </text>
-          ) : null
-        )}
-      </svg>
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={accentColor} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={accentColor} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#1a1a1a" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: "#666", fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            interval={xInterval}
+          />
+          <YAxis
+            ticks={ticks}
+            tickFormatter={(v: number) => v.toLocaleString("fr-FR")}
+            tick={{ fill: "#666", fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={55}
+          />
+          <Tooltip content={<BalanceTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="balance"
+            stroke={accentColor}
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+            dot={false}
+            activeDot={{ r: 4, fill: accentColor, strokeWidth: 0 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }

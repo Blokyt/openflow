@@ -52,6 +52,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   budget: "/budget",
   tiers: "/tiers",
   reimbursements: "/reimbursements",
+  invoices: "/invoices",
   multi_users: "/multi-users",
   backup: "/backup",
   smart_import: "/smart-import",

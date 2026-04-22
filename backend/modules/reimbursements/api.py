@@ -15,7 +15,8 @@ router = APIRouter()
 
 class ReimbursementCreate(BaseModel):
     transaction_id: Optional[int] = None
-    person_name: str
+    contact_id: Optional[int] = None
+    person_name: str = ""
     amount: float
     status: str = "pending"
     reimbursed_date: Optional[str] = None
@@ -25,6 +26,7 @@ class ReimbursementCreate(BaseModel):
 
 class ReimbursementUpdate(BaseModel):
     transaction_id: Optional[int] = None
+    contact_id: Optional[int] = None
     person_name: Optional[str] = None
     amount: Optional[float] = None
     status: Optional[str] = None
@@ -37,12 +39,20 @@ class ReimbursementUpdate(BaseModel):
 def list_reimbursements(status: Optional[str] = None):
     conn = get_conn()
     try:
-        query = "SELECT * FROM reimbursements WHERE 1=1"
+        query = """SELECT r.*,
+                   t.label AS transaction_label,
+                   t.date AS transaction_date,
+                   t.amount AS transaction_amount,
+                   co.name AS contact_name
+            FROM reimbursements r
+            LEFT JOIN transactions t ON r.transaction_id = t.id
+            LEFT JOIN contacts co ON r.contact_id = co.id
+            WHERE 1=1"""
         params = []
         if status:
-            query += " AND status = ?"
+            query += " AND r.status = ?"
             params.append(status)
-        query += " ORDER BY created_at DESC, id DESC"
+        query += " ORDER BY r.created_at DESC, r.id DESC"
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]
     finally:
@@ -54,14 +64,22 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
+        # Auto-resolve person_name from contact_id if not provided
+        person_name = reimbursement.person_name
+        contact_id = reimbursement.contact_id
+        if contact_id and not person_name:
+            contact = conn.execute("SELECT name FROM contacts WHERE id = ?", (contact_id,)).fetchone()
+            if contact:
+                person_name = contact[0]
         cur = conn.execute(
             """INSERT INTO reimbursements
-               (transaction_id, person_name, amount, status, reimbursed_date,
+               (transaction_id, contact_id, person_name, amount, status, reimbursed_date,
                 reimbursement_transaction_id, notes, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 reimbursement.transaction_id,
-                reimbursement.person_name,
+                contact_id,
+                person_name,
                 reimbursement.amount,
                 reimbursement.status,
                 reimbursement.reimbursed_date,
@@ -80,14 +98,18 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
 
 @router.get("/summary")
 def get_summary():
-    """Return who owes what: group by person_name, sum pending amounts."""
+    """Return who owes what: group by contact, sum pending amounts."""
     conn = get_conn()
     try:
         cur = conn.execute(
-            """SELECT person_name, SUM(amount) as total_pending, COUNT(*) as count
-               FROM reimbursements
-               WHERE status = 'pending'
-               GROUP BY person_name
+            """SELECT COALESCE(co.name, r.person_name) AS person_name,
+                      r.contact_id,
+                      SUM(r.amount) as total_pending,
+                      COUNT(*) as count
+               FROM reimbursements r
+               LEFT JOIN contacts co ON r.contact_id = co.id
+               WHERE r.status = 'pending'
+               GROUP BY COALESCE(co.name, r.person_name)
                ORDER BY total_pending DESC""",
         )
         return [row_to_dict(r) for r in cur.fetchall()]

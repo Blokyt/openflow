@@ -58,11 +58,23 @@ def list_transactions(
         query = """SELECT t.*,
                    c.name AS category_name, c.color AS category_color,
                    ef.name AS from_entity_name, ef.color AS from_entity_color,
-                   et.name AS to_entity_name, et.color AS to_entity_color
+                   et.name AS to_entity_name, et.color AS to_entity_color,
+                   co.name AS contact_name,
+                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             LEFT JOIN entities ef ON t.from_entity_id = ef.id
             LEFT JOIN entities et ON t.to_entity_id = et.id
+            LEFT JOIN contacts co ON t.contact_id = co.id
+            LEFT JOIN (
+                SELECT transaction_id,
+                       GROUP_CONCAT(COALESCE(rco.name, r.person_name), ', ') AS reimb_person_name,
+                       MIN(r.status) AS reimb_status,
+                       COUNT(*) AS reimb_count
+                FROM reimbursements r
+                LEFT JOIN contacts rco ON r.contact_id = rco.id
+                GROUP BY transaction_id
+            ) rb ON rb.transaction_id = t.id
             WHERE 1=1"""
         params = []
         if date_from:
@@ -75,8 +87,11 @@ def list_transactions(
             query += " AND t.category_id = ?"
             params.append(category_id)
         if search:
-            query += " AND (t.label LIKE ? OR t.description LIKE ?)"
-            params.extend([f"%{search}%", f"%{search}%"])
+            query += """ AND (t.label LIKE ? OR t.description LIKE ?
+                         OR ef.name LIKE ? OR et.name LIKE ?
+                         OR c.name LIKE ? OR co.name LIKE ? OR t.date LIKE ?)"""
+            s = f"%{search}%"
+            params.extend([s, s, s, s, s, s, s])
         if entity_id is not None:
             if include_children:
                 rows = conn.execute(

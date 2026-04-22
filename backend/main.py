@@ -54,12 +54,69 @@ def _bootstrap_admin(db_path: Path):
         conn.close()
 
 
+def _migrate_reimbursement_contacts(db_path: Path):
+    """Auto-create contacts from existing reimbursement person_names and populate contact_id."""
+    import sqlite3
+    from datetime import datetime, timezone
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        # Check if contact_id column exists
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(reimbursements)").fetchall()]
+        if "contact_id" not in cols:
+            return
+
+        # Find reimbursements with person_name but no contact_id
+        rows = conn.execute(
+            "SELECT DISTINCT person_name FROM reimbursements WHERE contact_id IS NULL AND person_name != ''"
+        ).fetchall()
+        if not rows:
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        migrated = 0
+        for row in rows:
+            name = row[0]
+            # Check if contact already exists (case-insensitive)
+            existing = conn.execute(
+                "SELECT id FROM contacts WHERE LOWER(name) = LOWER(?)", (name,)
+            ).fetchone()
+            if existing:
+                contact_id = existing[0]
+            else:
+                conn.execute(
+                    "INSERT INTO contacts (name, type, email, phone, address, notes, created_at, updated_at) VALUES (?, 'membre', '', '', '', '', ?, ?)",
+                    (name, now, now),
+                )
+                contact_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            # Update reimbursements
+            conn.execute(
+                "UPDATE reimbursements SET contact_id = ? WHERE person_name = ? AND contact_id IS NULL",
+                (contact_id, name),
+            )
+            migrated += 1
+        conn.commit()
+        if migrated:
+            print(f"  Migrated {migrated} reimbursement person_name(s) to contacts.")
+    except Exception as e:
+        print(f"  Reimbursement contact migration skipped: {e}")
+    finally:
+        conn.close()
+
+
 def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db", bootstrap: bool = True) -> FastAPI:
     app = FastAPI(title="OpenFlow", version="0.1.0")
 
     project_root = Path(__file__).parent.parent
     config_file = project_root / config_path
     config = load_config(str(config_file))
+
+    # Auto-activate tiers if reimbursements is active (they are tightly coupled)
+    if config.modules.get("reimbursements", False) and not config.modules.get("tiers", False):
+        config.modules["tiers"] = True
+        save_config(config, str(config_file))
+        print("  Auto-activated 'tiers' module (required by reimbursements).")
 
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -91,9 +148,13 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
     if bootstrap and config.modules.get("multi_users", False):
         _bootstrap_admin(project_root / db_path)
 
+    # Migrate existing person_names to contacts
+    if bootstrap and config.modules.get("reimbursements", False):
+        _migrate_reimbursement_contacts(project_root / db_path)
+
     @app.get("/api/modules")
     def get_modules():
-        return active_modules
+        return filter_active(all_modules, config.modules)
 
     @app.get("/api/modules/all")
     def get_all_modules():

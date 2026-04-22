@@ -272,6 +272,7 @@ export default function TransactionList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
+                <th className="px-3 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider w-12">#</th>
                 <th
                   onClick={() => toggleSort("date")}
                   className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
@@ -301,9 +302,24 @@ export default function TransactionList() {
                   key={tx.id}
                   className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
                 >
+                  <td className="px-3 py-3.5 text-[#555] text-xs font-mono">#{tx.id}</td>
                   <td className="px-4 py-3.5 text-[#B0B0B0] whitespace-nowrap">{tx.date}</td>
                   <td className="px-4 py-3.5 font-medium text-white">
-                    {tx.label}
+                    <div className="flex items-center gap-2">
+                      <span>{tx.label}</span>
+                      {tx.reimb_person_name && (
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border ${
+                            tx.reimb_status === "reimbursed"
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                              : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                          }`}
+                          title={`Avance de ${tx.reimb_person_name}${tx.reimb_status === "reimbursed" ? " (remboursé)" : " (en attente)"}`}
+                        >
+                          ↩ {tx.reimb_person_name}
+                        </span>
+                      )}
+                    </div>
                     {tx.description && (
                       <p className="text-xs text-[#666] font-normal mt-0.5 truncate max-w-xs">{tx.description}</p>
                     )}
@@ -435,7 +451,10 @@ export default function TransactionList() {
           >
             <div className="flex items-start justify-between mb-6">
               <div className="min-w-0 flex-1">
-                <h2 className="text-xl font-bold text-white break-words">{detailTx.label}</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-[#555] bg-[#1a1a1a] px-1.5 py-0.5 rounded">#{detailTx.id}</span>
+                  <h2 className="text-xl font-bold text-white break-words">{detailTx.label}</h2>
+                </div>
                 <div className="text-sm text-[#666] mt-1">{detailTx.date}</div>
                 <div
                   className={`mt-3 text-2xl font-bold ${
@@ -444,6 +463,16 @@ export default function TransactionList() {
                 >
                   {eurFormatter.format(detailTx.amount)}
                 </div>
+                {(detailTx as any).reimb_person_name && (
+                  <div className={`mt-2 inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border ${
+                    (detailTx as any).reimb_status === "reimbursed"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  }`}>
+                    ↩ Avance de {(detailTx as any).reimb_person_name}
+                    {(detailTx as any).reimb_status === "reimbursed" ? " — remboursé" : " — en attente"}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => setDetailTx(null)}
