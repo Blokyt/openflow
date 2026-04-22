@@ -179,7 +179,7 @@ export default function TiersList() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
-            Contacts &amp; Tiers
+            Contacts
           </h1>
           <p className="text-sm text-[#666] mt-1">
             Clients, fournisseurs, membres, sponsors.

@@ -52,6 +52,7 @@ function AppContent() {
                     <Route key={moduleId} path={route.path} element={route.element} />
                   ) : null
                 )}
+                <Route path="/tiers" element={<Navigate to="/contacts" replace />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>

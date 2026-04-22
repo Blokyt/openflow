@@ -17,7 +17,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   categories: { path: "/categories", element: <CategoryManager /> },
   entities: { path: "/entities", element: <EntityTree /> },
   budget: { path: "/budget", element: <BudgetManager /> },
-  tiers: { path: "/tiers", element: <TiersList /> },
+  tiers: { path: "/contacts", element: <TiersList /> },
   reimbursements: { path: "/reimbursements", element: <ReimbursementManager /> },
   multi_users: { path: "/multi-users", element: <UserManager /> },
   backup: { path: "/backup", element: <BackupManager /> },
