@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
 import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
+import { useFiscalYear } from "../../core/FiscalYearContext";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -236,7 +237,23 @@ function EntityBalancePanel({
   const [consolidated, setConsolidated] = useState<ConsolidatedBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const { entities: entityTree, setSelectedEntityId } = useEntity();
+  const { currentYear } = useFiscalYear();
+  const [opening, setOpening] = useState<{ amount: number; source: string } | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!currentYear) { setOpening(null); return; }
+    let cancelled = false;
+    fetch(`/api/budget/fiscal-years/${currentYear.id}/opening-balances`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: any[]) => {
+        if (cancelled) return;
+        const row = rows.find((r) => r.entity_id === entityId);
+        setOpening(row ? { amount: row.amount, source: row.source || "" } : null);
+      })
+      .catch(() => { if (!cancelled) setOpening(null); });
+    return () => { cancelled = true; };
+  }, [entityId, currentYear?.id]);
 
   // Ref edition form state
   const [editingRef, setEditingRef] = useState(false);
@@ -347,7 +364,12 @@ function EntityBalancePanel({
               <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-[#FF5252]"}`}>
                 {eurFormatter.format(balance.balance)}
               </p>
-              {balance.reference_date && (
+              {opening ? (
+                <p className="text-xs text-[#555] mt-1">
+                  Ouverture {currentYear?.name} : {eurFormatter.format(opening.amount)}
+                  {opening.source && <span className="text-[#444]"> ({opening.source})</span>}
+                </p>
+              ) : balance.reference_date && (
                 <p className="text-xs text-[#555] mt-1">
                   Réf. {balance.reference_date} : {eurFormatter.format(balance.reference_amount)}
                 </p>
