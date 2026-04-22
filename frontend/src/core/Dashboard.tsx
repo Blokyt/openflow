@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Hash, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useEntity } from "./EntityContext";
 import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
+import BudgetOverview from "../modules/budget/widgets/BudgetOverview";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -283,7 +284,8 @@ export default function Dashboard() {
 
       <BalanceChart series={series} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <BudgetOverview />
         <TopCategories cats={cats} />
         <RecentTransactions txs={recent} />
       </div>
