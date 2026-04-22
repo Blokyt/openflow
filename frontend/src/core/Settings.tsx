@@ -5,6 +5,7 @@ import { Pencil, Check, X, Info, FileSpreadsheet, Download, MapPin, ArrowRight }
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
 import { useAuth } from "./AuthContext";
 import { eur } from "../utils/format";
+import BalanceRefsSection from "./BalanceRefsSection";
 
 // Category labels — modules are classified dynamically via manifest.category.
 const CATEGORY_LABELS: Record<string, string> = {
@@ -499,6 +500,8 @@ export default function Settings() {
           </div>
         </section>
       )}
+
+      <BalanceRefsSection />
 
       <PasswordSection />
 
