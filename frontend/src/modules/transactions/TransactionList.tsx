@@ -5,7 +5,7 @@ import { useEntity } from "../../core/EntityContext";
 import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
 import AnnotationsSection from "./AnnotationsSection";
-import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Download, FileJson } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Download, FileJson, Hourglass, Check } from "lucide-react";
 
 const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -287,6 +287,7 @@ export default function TransactionList() {
                 </th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Flux</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Rembo</th>
                 <th
                   onClick={() => toggleSort("amount")}
                   className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
@@ -307,18 +308,6 @@ export default function TransactionList() {
                   <td className="px-4 py-3.5 font-medium text-white">
                     <div className="flex items-center gap-2">
                       <span>{tx.label}</span>
-                      {tx.reimb_person_name && (
-                        <span
-                          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border ${
-                            tx.reimb_status === "reimbursed"
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                              : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                          }`}
-                          title={`Avance de ${tx.reimb_person_name}${tx.reimb_status === "reimbursed" ? " (remboursé)" : " (en attente)"}`}
-                        >
-                          ↩ {tx.reimb_person_name}
-                        </span>
-                      )}
                     </div>
                     {tx.description && (
                       <p className="text-xs text-[#666] font-normal mt-0.5 truncate max-w-xs">{tx.description}</p>
@@ -362,6 +351,23 @@ export default function TransactionList() {
                       </span>
                     ) : (
                       <span className="text-[#444]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    {tx.reimb_person_name ? (
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
+                          tx.reimb_status === "reimbursed"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                        }`}
+                        title={`Avance de ${tx.reimb_person_name}${tx.reimb_status === "reimbursed" ? " (remboursé)" : " (en attente)"}`}
+                      >
+                        {tx.reimb_status === "reimbursed" ? <Check size={12} /> : <Hourglass size={12} />}
+                        {tx.reimb_person_name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#444]">—</span>
                     )}
                   </td>
                   <td
