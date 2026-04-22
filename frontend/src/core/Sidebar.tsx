@@ -229,6 +229,28 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     };
   }, [reimbursementsActive]);
 
+  const [budgetBadge, setBudgetBadge] = useState(0);
+  useEffect(() => {
+    const budgetActive = activeModules.some((m) => m.id === "budget");
+    if (!budgetActive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/budget/fiscal-years/current");
+        if (!r.ok) return;
+        const fy = await r.json();
+        const v = await fetch(`/api/budget/view?fiscal_year_id=${fy.id}`);
+        if (!v.ok) return;
+        const data = await v.json();
+        const count = (data.entities as any[]).filter(
+          (e) => e.allocated_total > 0 && Math.abs(e.realized_total) / e.allocated_total >= 0.95
+        ).length;
+        if (!cancelled) setBudgetBadge(count);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [activeModules]);
+
   // Build core nav items (fixed, always shown)
   const coreManifests = CORE_IDS
     .map((id) => activeModules.find((m) => m.id === id))
@@ -254,7 +276,10 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     to: MODULE_PATH_MAP[m.id] || `/${m.id}`,
     label: m.menu?.label || m.name,
     icon: ICON_MAP[m.menu?.icon] || LayoutDashboard,
-    badge: m.id === "reimbursements" ? pendingReimbursements : undefined,
+    badge:
+      m.id === "reimbursements" ? pendingReimbursements :
+      m.id === "budget" ? budgetBadge :
+      undefined,
   }));
 
   // Multi-users shown only for admins, at the bottom
