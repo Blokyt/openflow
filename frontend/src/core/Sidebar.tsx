@@ -8,7 +8,9 @@ import {
   ChevronDown, GitBranch, Check, LogOut, Archive, FileUp, Activity,
 } from "lucide-react";
 import { useEntity } from "./EntityContext";
+import { useFiscalYear } from "./FiscalYearContext";
 import { useAuth } from "./AuthContext";
+import { api } from "../api";
 import { Entity } from "../types";
 import { MODULE_IDS_WITH_ROUTE } from "../routes";
 
@@ -231,25 +233,21 @@ export default function Sidebar({ activeModules }: SidebarProps) {
 
   const [budgetBadge, setBudgetBadge] = useState(0);
   const budgetActive = activeModules.some((m) => m.id === "budget");
+  const { currentYear } = useFiscalYear();
   useEffect(() => {
-    if (!budgetActive) return;
+    if (!budgetActive || !currentYear) { setBudgetBadge(0); return; }
     let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch("/api/budget/fiscal-years/current");
-        if (!r.ok) return;
-        const fy = await r.json();
-        const v = await fetch(`/api/budget/view?fiscal_year_id=${fy.id}`);
-        if (!v.ok) return;
-        const data = await v.json();
+    api.getBudgetView(currentYear.id)
+      .then((data) => {
+        if (cancelled) return;
         const count = (data.entities as any[]).filter(
           (e) => e.allocated_total > 0 && Math.abs(e.realized_total) / e.allocated_total >= 0.95
         ).length;
-        if (!cancelled) setBudgetBadge(count);
-      } catch {}
-    })();
+        setBudgetBadge(count);
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [budgetActive]);
+  }, [budgetActive, currentYear?.id]);
 
   // Build core nav items (fixed, always shown)
   const coreManifests = CORE_IDS

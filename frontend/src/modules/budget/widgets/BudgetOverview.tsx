@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useFiscalYear } from "../../../core/FiscalYearContext";
 import { api } from "../../../api";
+import { eur, budgetColor } from "../../../utils/format";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
-
-const eur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
 export default function BudgetOverview() {
   const { selectedYear } = useFiscalYear();
@@ -12,7 +11,12 @@ export default function BudgetOverview() {
 
   useEffect(() => {
     if (!selectedYear) { setView(null); return; }
-    api.getBudgetView(selectedYear.id).then(setView).catch(() => setView(null));
+    let cancelled = false;
+    setView(null);
+    api.getBudgetView(selectedYear.id)
+      .then((d) => { if (!cancelled) setView(d); })
+      .catch(() => { if (!cancelled) setView(null); });
+    return () => { cancelled = true; };
   }, [selectedYear?.id]);
 
   if (!selectedYear) {
@@ -30,7 +34,7 @@ export default function BudgetOverview() {
   const allocated = view.totals.allocated as number;
   const realized = Math.abs(view.totals.realized as number);
   const pct = allocated > 0 ? (realized / allocated) * 100 : 0;
-  const barColor = pct < 70 ? "#00C853" : pct < 95 ? "#F2C48D" : "#FF5252";
+  const barColor = budgetColor(pct);
 
   const overspending = view.entities
     .filter((e: any) => e.allocated_total > 0 && Math.abs(e.realized_total) / e.allocated_total >= 0.95)

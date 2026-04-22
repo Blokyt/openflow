@@ -72,14 +72,16 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
     try {
       if (copyAllocations && previousYearId !== null) {
         const prevAllocs = await api.listAllocations(previousYearId);
-        for (const a of prevAllocs) {
-          await api.createAllocation(createdFyId, {
-            entity_id: a.entity_id,
-            category_id: a.category_id,
-            amount: a.amount,
-            notes: a.notes,
-          });
-        }
+        await Promise.all(
+          prevAllocs.map((a) =>
+            api.createAllocation(createdFyId, {
+              entity_id: a.entity_id,
+              category_id: a.category_id,
+              amount: a.amount,
+              notes: a.notes,
+            })
+          )
+        );
       }
       onCreated();
       onClose();
@@ -90,7 +92,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={step === 1 && !createdFyId ? onClose : undefined}>
       <div
         className="bg-[#0a0a0a] border border-[#222] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -208,7 +210,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
         <div className="flex items-center justify-end gap-3 p-5 border-t border-[#222]">
           {step > 1 && (
             <button
-              onClick={() => setStep((s) => (s - 1) as any)}
+              onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
               className="px-4 py-2 text-sm text-[#B0B0B0] hover:text-white"
             >
               Retour

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { api } from "../api";
 
 export interface FiscalYear {
   id: number;
@@ -38,13 +39,8 @@ export function FiscalYearProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     try {
-      const r = await fetch("/api/budget/fiscal-years");
-      if (!r.ok) {
-        setYears([]);
-        return;
-      }
-      const data: FiscalYear[] = await r.json();
-      setYears(data);
+      const data = await api.listFiscalYears();
+      setYears(data as FiscalYear[]);
     } catch {
       setYears([]);
     }

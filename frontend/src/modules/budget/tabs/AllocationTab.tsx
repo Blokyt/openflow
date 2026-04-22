@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
 import { Entity, Category } from "../../../types";
+import { eur } from "../../../utils/format";
 import { Plus, Trash2 } from "lucide-react";
-
-const eur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
 interface Props {
   year: FiscalYear | null;
@@ -21,19 +20,23 @@ export default function AllocationTab({ year, onChange }: Props) {
   const [newAmount, setNewAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function reload() {
-    if (!year) return;
-    const [a, e, c] = await Promise.all([
-      api.listAllocations(year.id),
-      api.getEntities(),
-      api.getCategories(),
-    ]);
-    setAllocations(a);
-    setEntities(e as any);
-    setCategories(c as any);
-  }
+  useEffect(() => {
+    Promise.all([api.getEntities(), api.getCategories()])
+      .then(([e, c]) => { setEntities(e as any); setCategories(c as any); })
+      .catch(() => {});
+  }, []);
 
-  useEffect(() => { reload(); }, [year?.id]);
+  const reloadAllocations = useCallback(async () => {
+    if (!year) return;
+    try {
+      const a = await api.listAllocations(year.id);
+      setAllocations(a);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, [year?.id]);
+
+  useEffect(() => { reloadAllocations(); }, [reloadAllocations]);
 
   if (!year) return <p className="text-sm text-[#666]">Crée un exercice d'abord.</p>;
 
@@ -48,7 +51,7 @@ export default function AllocationTab({ year, onChange }: Props) {
       });
       setNewEntity(""); setNewCategory(""); setNewAmount("");
       setAdding(false);
-      await reload();
+      await reloadAllocations();
       onChange();
     } catch (e: any) {
       setError(e.message);
@@ -56,9 +59,13 @@ export default function AllocationTab({ year, onChange }: Props) {
   }
 
   async function remove(id: number) {
-    await api.deleteAllocation(id);
-    await reload();
-    onChange();
+    try {
+      await api.deleteAllocation(id);
+      await reloadAllocations();
+      onChange();
+    } catch (err: any) {
+      setError(err.message);
+    }
   }
 
   const internalEntities = entities.filter((e: any) => e.type === "internal");

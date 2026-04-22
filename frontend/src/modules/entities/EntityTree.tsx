@@ -244,8 +244,7 @@ function EntityBalancePanel({
   useEffect(() => {
     if (!currentYear) { setOpening(null); return; }
     let cancelled = false;
-    fetch(`/api/budget/fiscal-years/${currentYear.id}/opening-balances`)
-      .then((r) => (r.ok ? r.json() : []))
+    api.listOpeningBalances(currentYear.id)
       .then((rows: any[]) => {
         if (cancelled) return;
         const row = rows.find((r) => r.entity_id === entityId);
