@@ -172,7 +172,7 @@ export default function BalanceRefsSection() {
 
   if (loading) {
     return (
-      <section className="mb-8">
+      <section id="balances" className="mb-8">
         <h2 className="text-base font-semibold text-white mb-3">Soldes de référence</h2>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5 flex items-center justify-center h-20">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#F2C48D]" />
@@ -184,7 +184,7 @@ export default function BalanceRefsSection() {
   if (entities.length === 0) return null;
 
   return (
-    <section className="mb-8">
+    <section id="balances" className="mb-8">
       <h2 className="text-base font-semibold text-white mb-3">Soldes de référence</h2>
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {/* Intro */}

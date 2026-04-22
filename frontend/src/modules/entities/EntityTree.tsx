@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
 import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
@@ -275,6 +275,20 @@ function EntityBalancePanel({
     return null;
   }
 
+  function findEntity(tree: typeof entityTree, id: number): Entity | null {
+    for (const e of tree) {
+      if (e.id === id) return e;
+      if (e.children) {
+        const found = findEntity(e.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const entity = findEntity(entityTree, entityId);
+  const isAggregate = entity?.balance_mode === "aggregate";
+
   async function loadBalances() {
     return Promise.all([
       api.getEntityBalance(entityId).catch(() => null),
@@ -325,7 +339,14 @@ function EntityBalancePanel({
   return (
     <div className="bg-[#0d0d0d] border border-[#222] rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">{entityName}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-white">{entityName}</h3>
+          {isAggregate && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#F2C48D]/10 text-[#F2C48D] border border-[#F2C48D]/30">
+              Agrégé
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setSelectedEntityId(entityId); navigate("/transactions"); }}
@@ -349,8 +370,10 @@ function EntityBalancePanel({
           {balance && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-[#666] uppercase tracking-wider">Solde propre</p>
-                {!editingRef && (
+                <p className="text-xs text-[#666] uppercase tracking-wider">
+                  {isAggregate ? "Solde propre (calculé)" : "Solde propre"}
+                </p>
+                {!isAggregate && !editingRef && (
                   <button
                     onClick={openEditForm}
                     className="text-[#666] hover:text-[#F2C48D] transition-colors"
@@ -359,22 +382,36 @@ function EntityBalancePanel({
                     <Pencil size={13} />
                   </button>
                 )}
+                {isAggregate && (
+                  <Link
+                    to="/settings#balances"
+                    className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5"
+                  >
+                    Modifier dans Paramètres →
+                  </Link>
+                )}
               </div>
               <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-[#FF5252]"}`}>
                 {eurFormatter.format(balance.balance)}
               </p>
-              {opening ? (
+              {isAggregate ? (
+                balance.reference_date && (
+                  <p className="text-xs text-[#555] mt-1">
+                    Solde agrégé {balance.reference_date} : {eurFormatter.format(balance.reference_amount)} (bancaire)
+                  </p>
+                )
+              ) : opening ? (
                 <p className="text-xs text-[#555] mt-1">
                   Ouverture {currentYear?.name} : {eurFormatter.format(opening.amount)}
                   {opening.source && <span className="text-[#444]"> ({opening.source})</span>}
                 </p>
-              ) : balance.reference_date && (
+              ) : balance.reference_date ? (
                 <p className="text-xs text-[#555] mt-1">
                   Réf. {balance.reference_date} : {eurFormatter.format(balance.reference_amount)}
                 </p>
-              )}
+              ) : null}
 
-              {editingRef && (
+              {!isAggregate && editingRef && (
                 <form onSubmit={handleSaveRef} className="mt-3 space-y-2">
                   <div className="flex gap-2">
                     <input
@@ -424,6 +461,9 @@ function EntityBalancePanel({
               <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-[#F2C48D]" : "text-[#FF5252]"}`}>
                 {eurFormatter.format(consolidated!.consolidated_balance)}
               </p>
+              {isAggregate && (
+                <p className="text-xs text-[#555] mt-1">= solde agrégé de référence + variations depuis</p>
+              )}
               <div className="mt-3 space-y-1">
                 {consolidated!.children.map((child) => (
                   <div key={child.entity_id} className="flex justify-between text-xs">
@@ -437,7 +477,7 @@ function EntityBalancePanel({
             </div>
           )}
 
-          {hasChildren && (
+          {hasChildren && !isAggregate && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
               <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Calculer le solde propre</p>
               <p className="text-xs text-[#666] mb-3 leading-relaxed">

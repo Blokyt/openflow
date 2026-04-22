@@ -89,6 +89,7 @@ export interface Entity {
   is_divers: number;
   color: string;
   position: number;
+  balance_mode?: "own" | "aggregate";
   created_at?: string;
   updated_at?: string;
   children?: Entity[];
