@@ -46,3 +46,7 @@ docs/superpowers/plans/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+# Audit artifacts
+audit/
+!audit/.gitkeep
