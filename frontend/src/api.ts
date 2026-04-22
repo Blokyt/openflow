@@ -35,6 +35,40 @@ export const api = {
   getBudget: (id: number) => request<any>(`/budget/${id}`),
   updateBudget: (id: number, b: any) => request<any>(`/budget/${id}`, { method: "PUT", body: JSON.stringify(b) }),
   deleteBudget: (id: number) => request<any>(`/budget/${id}`, { method: "DELETE" }),
+  // Budget & Exercices
+  listFiscalYears: () => request<any[]>("/budget/fiscal-years"),
+  getCurrentFiscalYear: () => request<any>("/budget/fiscal-years/current"),
+  createFiscalYear: (fy: any) =>
+    request<any>("/budget/fiscal-years", { method: "POST", body: JSON.stringify(fy) }),
+  updateFiscalYear: (id: number, fy: any) =>
+    request<any>(`/budget/fiscal-years/${id}`, { method: "PUT", body: JSON.stringify(fy) }),
+  deleteFiscalYear: (id: number) =>
+    request<any>(`/budget/fiscal-years/${id}`, { method: "DELETE" }),
+  listOpeningBalances: (id: number) =>
+    request<any[]>(`/budget/fiscal-years/${id}/opening-balances`),
+  upsertOpeningBalances: (id: number, entries: any[]) =>
+    request<any[]>(`/budget/fiscal-years/${id}/opening-balances`, {
+      method: "PUT",
+      body: JSON.stringify(entries),
+    }),
+  getSuggestedOpening: (id: number) =>
+    request<any[]>(`/budget/fiscal-years/${id}/suggested-opening`),
+  listAllocations: (fyId: number) =>
+    request<any[]>(`/budget/fiscal-years/${fyId}/allocations`),
+  createAllocation: (fyId: number, a: any) =>
+    request<any>(`/budget/fiscal-years/${fyId}/allocations`, {
+      method: "POST",
+      body: JSON.stringify(a),
+    }),
+  updateAllocation: (id: number, a: any) =>
+    request<any>(`/budget/allocations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(a),
+    }),
+  deleteAllocation: (id: number) =>
+    request<any>(`/budget/allocations/${id}`, { method: "DELETE" }),
+  getBudgetView: (fyId: number) =>
+    request<any>(`/budget/view?fiscal_year_id=${fyId}`),
   getTimeseries: (entityId?: number, months = 12) => {
     const q = new URLSearchParams();
     q.set("months", String(months));
