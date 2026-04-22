@@ -30,6 +30,7 @@ class TransactionCreate(BaseModel):
     created_by: str = ""
     from_entity_id: int
     to_entity_id: int
+    payer_contact_id: Optional[int] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -42,6 +43,7 @@ class TransactionUpdate(BaseModel):
     created_by: Optional[str] = None
     from_entity_id: Optional[int] = None
     to_entity_id: Optional[int] = None
+    payer_contact_id: Optional[int] = None
 
 
 @router.get("/")
@@ -63,7 +65,7 @@ def list_transactions(
                    ef.name AS from_entity_name, ef.color AS from_entity_color,
                    et.name AS to_entity_name, et.color AS to_entity_color,
                    co.name AS contact_name,
-                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count
+                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count, rb.reimb_contact_id
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             LEFT JOIN entities ef ON t.from_entity_id = ef.id
@@ -73,7 +75,8 @@ def list_transactions(
                 SELECT transaction_id,
                        GROUP_CONCAT(COALESCE(rco.name, r.person_name), ', ') AS reimb_person_name,
                        MIN(r.status) AS reimb_status,
-                       COUNT(*) AS reimb_count
+                       COUNT(*) AS reimb_count,
+                       MIN(r.contact_id) AS reimb_contact_id
                 FROM reimbursements r
                 LEFT JOIN contacts rco ON r.contact_id = rco.id
                 GROUP BY transaction_id
@@ -166,8 +169,22 @@ def create_transaction(tx: TransactionCreate):
                 now,
             ),
         )
-        new_row = conn.execute("SELECT * FROM transactions WHERE id = ?", (cur.lastrowid,)).fetchone()
-        record_audit(conn, "create", "transactions", cur.lastrowid, None, row_to_dict(new_row), tx.created_by)
+        tx_id = cur.lastrowid
+        new_row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        record_audit(conn, "create", "transactions", tx_id, None, row_to_dict(new_row), tx.created_by)
+
+        if tx.payer_contact_id is not None:
+            contact_row = conn.execute(
+                "SELECT name FROM contacts WHERE id = ?", (tx.payer_contact_id,)
+            ).fetchone()
+            person_name = contact_row[0] if contact_row else ""
+            conn.execute(
+                """INSERT INTO reimbursements
+                   (transaction_id, contact_id, person_name, amount, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+                (tx_id, tx.payer_contact_id, person_name, abs(tx.amount), now, now),
+            )
+
         conn.commit()
         return row_to_dict(new_row)
     finally:
@@ -207,7 +224,11 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
 
         updates = tx.model_dump(exclude_unset=True)
-        if not updates:
+        # Separate payer_contact_id from tx-column updates
+        payer_contact_id_provided = "payer_contact_id" in updates
+        payer_contact_id_value = updates.pop("payer_contact_id", None)
+
+        if not updates and not payer_contact_id_provided:
             return row_to_dict(existing)
 
         for field in ("from_entity_id", "to_entity_id"):
@@ -218,14 +239,36 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
                 if exists is None:
                     raise HTTPException(status_code=400, detail=f"{field}={updates[field]} does not reference an existing entity")
 
-        set_clauses = ", ".join(f"{k} = ?" for k in updates)
-        set_clauses += ", updated_at = ?"
-        values = list(updates.values()) + [now, tx_id]
+        if updates:
+            set_clauses = ", ".join(f"{k} = ?" for k in updates)
+            set_clauses += ", updated_at = ?"
+            values = list(updates.values()) + [now, tx_id]
+            conn.execute(
+                f"UPDATE transactions SET {set_clauses} WHERE id = ?",
+                values,
+            )
 
-        conn.execute(
-            f"UPDATE transactions SET {set_clauses} WHERE id = ?",
-            values,
-        )
+        # Handle payer / reimbursement upsert
+        if payer_contact_id_provided:
+            # Always delete existing rembo for this tx first
+            conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
+            if payer_contact_id_value is not None:
+                contact_row = conn.execute(
+                    "SELECT name FROM contacts WHERE id = ?", (payer_contact_id_value,)
+                ).fetchone()
+                person_name = contact_row[0] if contact_row else ""
+                # Use current amount (may have been updated above)
+                current_amount_row = conn.execute(
+                    "SELECT amount FROM transactions WHERE id = ?", (tx_id,)
+                ).fetchone()
+                amount = abs(current_amount_row[0]) if current_amount_row else 0.0
+                conn.execute(
+                    """INSERT INTO reimbursements
+                       (transaction_id, contact_id, person_name, amount, status, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+                    (tx_id, payer_contact_id_value, person_name, amount, now, now),
+                )
+
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         record_audit(conn, "update", "transactions", tx_id, row_to_dict(existing), row_to_dict(row))
         conn.commit()

@@ -123,6 +123,9 @@ export const api = {
     request<any>(`/multi_users/${userId}/entities`, { method: "POST", body: JSON.stringify(data) }),
   removeUserEntity: (userId: number, entityId: number) =>
     request<any>(`/multi_users/${userId}/entities/${entityId}`, { method: "DELETE" }),
+  // Tiers / Contacts
+  getTiers: () => request<any[]>("/tiers/"),
+  getContacts: () => request<any[]>("/tiers/"),
   // Backup
   getBackupPreview: () => request<any>("/backup/preview"),
   exportBackup: async () => {

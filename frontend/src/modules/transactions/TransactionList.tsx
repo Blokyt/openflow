@@ -262,10 +262,10 @@ export default function TransactionList() {
           onChange={(e) => setReimbFilter(e.target.value)}
           className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
         >
-          <option value="">Tous remboursements</option>
+          <option value="">Tous payeurs</option>
           <option value="pending">En attente</option>
           <option value="reimbursed">Remboursés</option>
-          <option value="none">Sans rembo</option>
+          <option value="none">Sans payeur</option>
         </select>
         <input
           type="number"
@@ -324,7 +324,7 @@ export default function TransactionList() {
                 </th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Flux</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Rembo</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Payeur</th>
                 <th
                   onClick={() => toggleSort("amount")}
                   className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"

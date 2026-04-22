@@ -1,3 +1,13 @@
+export interface Contact {
+  id: number;
+  name: string;
+  type: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+}
+
 export interface Transaction {
   id: number;
   date: string;
@@ -10,6 +20,9 @@ export interface Transaction {
   from_entity_id: number;
   to_entity_id: number;
   category?: Category;
+  reimb_contact_id?: number;
+  reimb_person_name?: string;
+  reimb_status?: string;
 }
 
 export interface Category {

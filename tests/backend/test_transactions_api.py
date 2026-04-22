@@ -155,3 +155,166 @@ def test_list_transactions_amount_filter(client_and_db):
     # amount_min > amount_max → 400
     r = client.get("/api/transactions/?amount_min=200&amount_max=50")
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Payer (advance payer) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def contact_and_entities(client):
+    """Returns (contact_id, src_entity_id, dst_entity_id)."""
+    src = client.post("/api/entities/", json={"name": "SrcPayer", "type": "external"}).json()
+    dst = client.post("/api/entities/", json={"name": "DstPayer", "type": "internal"}).json()
+    contact = client.post("/api/tiers/", json={"name": "Alice", "type": "membre"}).json()
+    return contact["id"], src["id"], dst["id"]
+
+
+def test_create_transaction_with_payer(client_and_db, contact_and_entities):
+    """POST tx with payer_contact_id creates a reimbursement row."""
+    client, db_path = client_and_db
+    contact_id, src_id, dst_id = contact_and_entities
+
+    r = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Achat avancé", "amount": -50.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+        "payer_contact_id": contact_id,
+    })
+    assert r.status_code == 201
+    tx_id = r.json()["id"]
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rembo = conn.execute(
+        "SELECT * FROM reimbursements WHERE transaction_id = ?", (tx_id,)
+    ).fetchone()
+    conn.close()
+
+    assert rembo is not None
+    assert rembo["contact_id"] == contact_id
+    assert rembo["status"] == "pending"
+    assert rembo["amount"] == 50.0  # abs(-50)
+
+
+def test_create_transaction_with_payer_returns_contact_id_in_list(client_and_db, contact_and_entities):
+    """GET /transactions/ returns reimb_contact_id for pre-selection on edit."""
+    client, db_path = client_and_db
+    contact_id, src_id, dst_id = contact_and_entities
+
+    r = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Avance test", "amount": -30.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+        "payer_contact_id": contact_id,
+    })
+    assert r.status_code == 201
+    tx_id = r.json()["id"]
+
+    txs = client.get("/api/transactions/").json()
+    tx = next(t for t in txs if t["id"] == tx_id)
+    assert tx["reimb_contact_id"] == contact_id
+
+
+def test_update_transaction_set_payer(client_and_db, contact_and_entities):
+    """PUT with payer_contact_id on a tx that had none creates the rembo."""
+    client, db_path = client_and_db
+    contact_id, src_id, dst_id = contact_and_entities
+
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "No payer", "amount": -20.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+    }).json()
+
+    r = client.put(f"/api/transactions/{tx['id']}", json={"payer_contact_id": contact_id})
+    assert r.status_code == 200
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rembo = conn.execute(
+        "SELECT * FROM reimbursements WHERE transaction_id = ?", (tx["id"],)
+    ).fetchone()
+    conn.close()
+
+    assert rembo is not None
+    assert rembo["contact_id"] == contact_id
+    assert rembo["status"] == "pending"
+
+
+def test_update_transaction_remove_payer(client_and_db, contact_and_entities):
+    """PUT with payer_contact_id=null removes existing rembo."""
+    client, db_path = client_and_db
+    contact_id, src_id, dst_id = contact_and_entities
+
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Has payer", "amount": -40.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+        "payer_contact_id": contact_id,
+    }).json()
+
+    r = client.put(f"/api/transactions/{tx['id']}", json={"payer_contact_id": None})
+    assert r.status_code == 200
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    rembo = conn.execute(
+        "SELECT * FROM reimbursements WHERE transaction_id = ?", (tx["id"],)
+    ).fetchone()
+    conn.close()
+
+    assert rembo is None
+
+
+def test_update_transaction_change_payer(client_and_db, contact_and_entities):
+    """PUT with different payer_contact_id replaces the existing rembo."""
+    client, db_path = client_and_db
+    contact_a_id, src_id, dst_id = contact_and_entities
+    contact_b = client.post("/api/tiers/", json={"name": "Bob", "type": "membre"}).json()
+    contact_b_id = contact_b["id"]
+
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Change payer", "amount": -60.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+        "payer_contact_id": contact_a_id,
+    }).json()
+
+    r = client.put(f"/api/transactions/{tx['id']}", json={"payer_contact_id": contact_b_id})
+    assert r.status_code == 200
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rembos = conn.execute(
+        "SELECT * FROM reimbursements WHERE transaction_id = ?", (tx["id"],)
+    ).fetchall()
+    conn.close()
+
+    assert len(rembos) == 1
+    assert rembos[0]["contact_id"] == contact_b_id
+
+
+def test_update_transaction_no_payer_key_leaves_rembo_untouched(client_and_db, contact_and_entities):
+    """PUT without payer_contact_id key does not touch existing rembo."""
+    client, db_path = client_and_db
+    contact_id, src_id, dst_id = contact_and_entities
+
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Stable payer", "amount": -15.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+        "payer_contact_id": contact_id,
+    }).json()
+
+    # Update only the label — payer_contact_id key is absent
+    r = client.put(f"/api/transactions/{tx['id']}", json={"label": "Stable payer updated"})
+    assert r.status_code == 200
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rembo = conn.execute(
+        "SELECT * FROM reimbursements WHERE transaction_id = ?", (tx["id"],)
+    ).fetchone()
+    conn.close()
+
+    assert rembo is not None
+    assert rembo["contact_id"] == contact_id

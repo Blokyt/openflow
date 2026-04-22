@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
-import { Transaction, Category, Entity } from "../../types";
+import { Transaction, Category, Entity, Contact } from "../../types";
 
 interface TransactionFormProps {
   initial?: Partial<Transaction>;
@@ -22,14 +22,19 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
   const [toEntityId, setToEntityId] = useState<string>(
     initial?.to_entity_id !== undefined ? String(initial.to_entity_id) : ""
   );
+  const [payerContactId, setPayerContactId] = useState<string>(
+    initial?.reimb_contact_id !== undefined ? String(initial.reimb_contact_id) : ""
+  );
   const [categories, setCategories] = useState<Category[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {});
     api.getEntities().then(setEntities).catch(() => {});
+    api.getContacts().then(setContacts).catch(() => {});
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -51,7 +56,8 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         category_id: categoryId ? parseInt(categoryId) : undefined,
         from_entity_id: parseInt(fromEntityId),
         to_entity_id: parseInt(toEntityId),
-      });
+        payer_contact_id: payerContactId ? parseInt(payerContactId) : null,
+      } as any);
     } catch (e: any) {
       setError(e.message);
       setSubmitting(false);
@@ -152,6 +158,24 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           ))}
         </select>
       </div>
+      {contacts.length > 0 && (
+        <div>
+          <label className={labelClass}>Payeur (avance)</label>
+          <select
+            value={payerContactId}
+            onChange={(e) => setPayerContactId(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">— Aucun, pas de remboursement —</option>
+            {contacts.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-[#555] mt-1">
+            Si un membre a avancé l'argent, sélectionne-le ici pour créer un remboursement.
+          </p>
+        </div>
+      )}
       <div>
         <label className={labelClass}>Description</label>
         <textarea
