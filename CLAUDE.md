@@ -74,6 +74,24 @@ Le module `multi_users` gere l'authentification et les permissions :
 - Middleware auth actif dans `main.py` quand `multi_users` est active
 - Sans users en DB → app ouverte (bootstrap du premier admin)
 
+## Budget & Exercices
+
+Le module `budget` (1.2.0) introduit trois tables :
+- `fiscal_years` : tranches d'affichage libres (pas de verrou sur les tx)
+- `fiscal_year_opening_balances` : solde bancaire reel par entite interne a l'ouverture
+- `budget_allocations` : allocation (entite, categorie optionnelle) = montant
+
+`backend/core/balance.py::compute_entity_balance_for_period` calcule le realise
+sur un intervalle de dates pour une entite (± categorie), utilisant la meme
+convention de signe que `compute_entity_balance`.
+
+L'endpoint composite `/api/budget/view?fiscal_year_id=X` renvoie la vue
+complete (entites + categories + N-1) consommee par la page `/budget` et le
+widget dashboard.
+
+Le contexte React `FiscalYearContext` expose `currentYear` et `selectedYear`
+(persiste dans `localStorage` sous la cle `openflow_fiscal_year_id`).
+
 ## Convention modules
 
 Chaque module = un dossier `backend/modules/<id>/` avec :
