@@ -19,6 +19,10 @@ export interface Category {
   color?: string;
   icon?: string;
   children?: Category[];
+  tx_count?: number;
+  tx_total?: number;
+  descendant_tx_count?: number;
+  descendant_tx_total?: number;
 }
 
 export interface EntityConfig {

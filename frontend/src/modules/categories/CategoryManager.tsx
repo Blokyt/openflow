@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../../api";
 import { Category } from "../../types";
+import { eur } from "../../utils/format";
 import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Check } from "lucide-react";
 
 /* ---------- Category tree node ---------- */
@@ -37,6 +38,19 @@ function CategoryNode({
           title={cat.color || "#6B7280"}
         />
         <span className="flex-1 text-sm text-white font-medium">{cat.name}</span>
+        {hasChildren ? (
+          (cat.descendant_tx_count ?? 0) > 0 && (
+            <span className="text-xs text-[#555] mr-1">
+              {cat.descendant_tx_count} · {eur.format(cat.descendant_tx_total ?? 0)}
+            </span>
+          )
+        ) : (
+          (cat.tx_count ?? 0) > 0 && (
+            <span className="text-xs text-[#666] mr-1">
+              {cat.tx_count} · {eur.format(cat.tx_total ?? 0)}
+            </span>
+          )
+        )}
         <span className="hidden group-hover:inline-flex items-center gap-1">
           <button
             onClick={() => onEdit(cat)}

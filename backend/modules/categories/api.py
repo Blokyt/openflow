@@ -41,7 +41,19 @@ def get_tree():
     conn = get_conn()
     try:
         rows = conn.execute("SELECT * FROM categories ORDER BY position, id").fetchall()
-        nodes = {r["id"]: {**row_to_dict(r), "children": []} for r in rows}
+        nodes = {r["id"]: {**row_to_dict(r), "children": [], "tx_count": 0, "tx_total": 0.0} for r in rows}
+
+        # Aggregate transaction counts and totals per category
+        tx_rows = conn.execute(
+            "SELECT category_id, COUNT(*) AS cnt, SUM(ABS(amount)) AS total "
+            "FROM transactions WHERE category_id IS NOT NULL GROUP BY category_id"
+        ).fetchall()
+        for tx_row in tx_rows:
+            cat_id = tx_row["category_id"]
+            if cat_id in nodes:
+                nodes[cat_id]["tx_count"] = tx_row["cnt"]
+                nodes[cat_id]["tx_total"] = float(tx_row["total"] or 0.0)
+
         roots = []
         for node in nodes.values():
             parent_id = node["parent_id"]
@@ -49,6 +61,21 @@ def get_tree():
                 roots.append(node)
             else:
                 nodes[parent_id]["children"].append(node)
+
+        # Recursively compute descendant aggregates
+        def _compute_descendants(node):
+            desc_count = node["tx_count"]
+            desc_total = node["tx_total"]
+            for child in node["children"]:
+                _compute_descendants(child)
+                desc_count += child["descendant_tx_count"]
+                desc_total += child["descendant_tx_total"]
+            node["descendant_tx_count"] = desc_count
+            node["descendant_tx_total"] = desc_total
+
+        for root in roots:
+            _compute_descendants(root)
+
         return roots
     finally:
         conn.close()
