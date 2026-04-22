@@ -47,9 +47,9 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
   }
 
   async function goToStep3() {
+    if (!createdFyId) return;
     setError(null);
     setSubmitting(true);
-    if (!createdFyId) return;
     try {
       const entries = suggestions.map((s) => ({
         entity_id: s.entity_id,
@@ -66,9 +66,9 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
   }
 
   async function finish() {
+    if (!createdFyId) return;
     setError(null);
     setSubmitting(true);
-    if (!createdFyId) return;
     try {
       if (copyAllocations && previousYearId !== null) {
         const prevAllocs = await api.listAllocations(previousYearId);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -59,8 +59,8 @@ export default function OverviewTab({ year }: Props) {
               ? Math.abs(ent.realized_total) / ent.allocated_total * 100
               : 0;
             return (
-              <>
-                <tr key={ent.entity_id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
+              <Fragment key={ent.entity_id}>
+                <tr className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
                   <td className="px-4 py-3">
                     {ent.categories.length > 0 && (
                       <button onClick={() => toggle(ent.entity_id)} className="text-[#666] hover:text-white">
@@ -104,7 +104,7 @@ export default function OverviewTab({ year }: Props) {
                     {hasNMinus1 && <td className="px-4 py-2 text-right">—</td>}
                   </tr>
                 ))}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
