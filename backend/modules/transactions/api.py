@@ -53,6 +53,8 @@ def list_transactions(
     entity_id: Optional[int] = None,
     include_children: bool = False,
     reimb_status: Optional[str] = None,
+    amount_min: Optional[float] = None,
+    amount_max: Optional[float] = None,
 ):
     conn = get_conn()
     try:
@@ -121,6 +123,14 @@ def list_transactions(
             query += " AND rb.reimb_status IS NULL"
         elif reimb_status is not None:
             raise HTTPException(status_code=400, detail=f"invalid reimb_status: {reimb_status}")
+        if amount_min is not None and amount_max is not None and amount_min > amount_max:
+            raise HTTPException(status_code=400, detail="amount_min must be <= amount_max")
+        if amount_min is not None:
+            query += " AND ABS(t.amount) >= ?"
+            params.append(amount_min)
+        if amount_max is not None:
+            query += " AND ABS(t.amount) <= ?"
+            params.append(amount_max)
         query += " ORDER BY t.date DESC, t.id DESC"
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]

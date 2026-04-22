@@ -19,6 +19,8 @@ export default function TransactionList() {
   const [dateTo, setDateTo] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [reimbFilter, setReimbFilter] = useState<string>("");
+  const [amountMin, setAmountMin] = useState<string>("");
+  const [amountMax, setAmountMax] = useState<string>("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [sortBy, setSortBy] = useState<"date" | "amount" | "label">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -48,6 +50,8 @@ export default function TransactionList() {
     if (dateTo) p.set("date_to", dateTo);
     if (categoryFilter) p.set("category_id", categoryFilter);
     if (reimbFilter) p.set("reimb_status", reimbFilter);
+    if (amountMin) p.set("amount_min", amountMin);
+    if (amountMax) p.set("amount_max", amountMax);
     if (selectedEntityId) {
       p.set("entity_id", String(selectedEntityId));
       p.set("include_children", "true");
@@ -64,6 +68,8 @@ export default function TransactionList() {
     if (dateTo) params.date_to = dateTo;
     if (categoryFilter) params.category_id = categoryFilter;
     if (reimbFilter) params.reimb_status = reimbFilter;
+    if (amountMin) params.amount_min = amountMin;
+    if (amountMax) params.amount_max = amountMax;
     if (selectedEntityId) {
       params.entity_id = String(selectedEntityId);
       params.include_children = "true";
@@ -73,7 +79,7 @@ export default function TransactionList() {
       .then(setTransactions)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [search, dateFrom, dateTo, categoryFilter, reimbFilter, selectedEntityId]);
+  }, [search, dateFrom, dateTo, categoryFilter, reimbFilter, amountMin, amountMax, selectedEntityId]);
 
   useEffect(() => {
     fetchTransactions();
@@ -211,7 +217,7 @@ export default function TransactionList() {
       )}
 
       {/* Filters */}
-      <div className="mb-5 flex flex-wrap gap-3">
+      <div className="mb-5 flex flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-48 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 focus-within:border-[#F2C48D] transition-colors">
           <Search size={15} className="text-[#666]" />
           <input
@@ -261,9 +267,27 @@ export default function TransactionList() {
           <option value="reimbursed">Remboursés</option>
           <option value="none">Sans rembo</option>
         </select>
-        {(search || dateFrom || dateTo || categoryFilter || reimbFilter) && (
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={amountMin}
+          onChange={(e) => setAmountMin(e.target.value)}
+          placeholder="Min €"
+          className="min-w-0 w-24 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#666]"
+        />
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={amountMax}
+          onChange={(e) => setAmountMax(e.target.value)}
+          placeholder="Max €"
+          className="min-w-0 w-24 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#666]"
+        />
+        {(search || dateFrom || dateTo || categoryFilter || reimbFilter || amountMin || amountMax) && (
           <button
-            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setCategoryFilter(""); setReimbFilter(""); }}
+            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setCategoryFilter(""); setReimbFilter(""); setAmountMin(""); setAmountMax(""); }}
             className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
           >
             <X size={14} /> Effacer
@@ -272,7 +296,7 @@ export default function TransactionList() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
