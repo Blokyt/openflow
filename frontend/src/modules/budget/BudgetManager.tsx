@@ -35,7 +35,7 @@ export default function BudgetManager() {
           >
             {years.map((y) => (
               <option key={y.id} value={y.id}>
-                {y.name} {y.is_current === 1 ? "(actif)" : ""}
+                {y.name}{y.is_current === 1 ? " ●" : ""}
               </option>
             ))}
           </select>

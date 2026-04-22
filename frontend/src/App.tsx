@@ -53,6 +53,7 @@ function AppContent() {
                   ) : null
                 )}
                 <Route path="/tiers" element={<Navigate to="/contacts" replace />} />
+                <Route path="/multi_users" element={<Navigate to="/multi-users" replace />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>

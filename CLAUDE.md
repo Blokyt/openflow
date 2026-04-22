@@ -138,3 +138,8 @@ system, annotations, attachments, export, audit, fec_export
   toujours importer depuis `backend.core.balance`
 - **from_entity_id / to_entity_id** : toujours specifies sur les transactions — le
   calcul de solde repose dessus. Ne jamais les laisser null en insertion.
+- **Snapshot pristine du module `system`** : la page Système affiche les fichiers différents
+  du snapshot `install/pristine.zip`. Ce compteur est attendu en rouge pendant le développement
+  d'une feature. Régénérer uniquement lors d'une release (bouton "Mettre à jour" ou
+  régénération manuelle du ZIP). Ne pas paniquer si 14 fichiers sont marqués modifiés pendant
+  un WIP.

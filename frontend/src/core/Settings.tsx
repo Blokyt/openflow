@@ -4,6 +4,7 @@ import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info, FileSpreadsheet, Download, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
 import { useAuth } from "./AuthContext";
+import { eur } from "../utils/format";
 
 // Category labels — modules are classified dynamically via manifest.category.
 const CATEGORY_LABELS: Record<string, string> = {
@@ -32,12 +33,14 @@ interface DisplayModule {
 function EditableField({
   label,
   value,
+  displayValue,
   onSave,
   type = "text",
   options,
 }: {
   label: string;
   value: string;
+  displayValue?: string;
   onSave: (val: string) => Promise<void>;
   type?: "text" | "date" | "number" | "select";
   options?: string[];
@@ -102,7 +105,7 @@ function EditableField({
     <div className="flex items-center justify-between group">
       <span className="text-[#666] text-sm">{label}</span>
       <div className="flex items-center gap-2">
-        <span className="font-medium text-white text-sm">{value || "—"}</span>
+        <span className="font-medium text-white text-sm">{displayValue ?? (value || "—")}</span>
         <button
           onClick={() => setEditing(true)}
           className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#F2C48D] transition-opacity p-1"
@@ -488,6 +491,7 @@ export default function Settings() {
               <EditableField
                 label="Solde de référence"
                 value={String(balanceRef.amount)}
+                displayValue={eur.format(balanceRef.amount)}
                 onSave={(v) => updateBalanceRef("amount", v)}
                 type="number"
               />
