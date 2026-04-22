@@ -20,4 +20,7 @@ migrations = {
             updated_at       TEXT    NOT NULL
         )""",
     ],
+    "1.1.0": [
+        """ALTER TABLE entities ADD COLUMN balance_mode TEXT NOT NULL DEFAULT 'own' CHECK(balance_mode IN ('own', 'aggregate'))""",
+    ],
 }

@@ -3,7 +3,7 @@
   "name": "Entités",
   "description": "Structure de l'organisation : qui gère quoi (ex: BDA, Gastronomine)",
   "help": "Gerez votre structure organisationnelle : entite racine, sous-clubs, fournisseurs, clients. Chaque transaction trace qui paie qui. Consultez le solde propre et consolide de chaque entite.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "origin": "builtin",
   "category": "core",
   "dependencies": [

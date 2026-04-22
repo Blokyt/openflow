@@ -1,6 +1,6 @@
 """Entities API module for OpenFlow."""
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -22,6 +22,7 @@ class EntityCreate(BaseModel):
     is_divers: int = 0
     color: str = "#6B7280"
     position: int = 0
+    balance_mode: Optional[Literal["own", "aggregate"]] = "own"
 
 
 class EntityUpdate(BaseModel):
@@ -30,6 +31,7 @@ class EntityUpdate(BaseModel):
     color: Optional[str] = None
     position: Optional[int] = None
     parent_id: Optional[int] = None
+    balance_mode: Optional[Literal["own", "aggregate"]] = None
 
 
 class BalanceRefUpdate(BaseModel):
@@ -79,12 +81,17 @@ def create_entity(entity: EntityCreate):
             if parent["type"] != "internal":
                 raise HTTPException(400, "Parent must be an internal entity")
 
+        # Only root entities (parent_id IS NULL) can use 'aggregate' mode
+        balance_mode = entity.balance_mode or "own"
+        if balance_mode == "aggregate" and entity.parent_id is not None:
+            raise HTTPException(400, "Only root entities (parent_id = null) can use balance_mode='aggregate'")
+
         now = datetime.now(timezone.utc).isoformat()
         cur = conn.execute(
-            """INSERT INTO entities (name, description, type, parent_id, is_divers, color, position, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO entities (name, description, type, parent_id, is_divers, color, position, balance_mode, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (entity.name, entity.description, entity.type, entity.parent_id,
-             entity.is_divers, entity.color, entity.position, now, now),
+             entity.is_divers, entity.color, entity.position, balance_mode, now, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM entities WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -137,13 +144,19 @@ def update_entity(entity_id: int, update: EntityUpdate):
             raise HTTPException(404, "Entity not found")
 
         fields = {}
-        for field in ["name", "description", "color", "position", "parent_id"]:
+        for field in ["name", "description", "color", "position", "parent_id", "balance_mode"]:
             val = getattr(update, field, None)
             if val is not None:
                 fields[field] = val
 
         if not fields:
             return row_to_dict(existing)
+
+        # Validate balance_mode: only root entities can use 'aggregate'
+        if "balance_mode" in fields and fields["balance_mode"] == "aggregate":
+            parent_id = fields.get("parent_id", existing["parent_id"])
+            if parent_id is not None:
+                raise HTTPException(400, "Only root entities (parent_id = null) can use balance_mode='aggregate'")
 
         if "parent_id" in fields:
             new_parent = fields["parent_id"]
