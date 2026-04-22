@@ -46,3 +46,62 @@ def test_get_balance(client):
     response = client.get("/api/transactions/balance")
     assert response.status_code == 200
     assert "balance" in response.json()
+
+
+def test_list_transactions_reimb_status_filter(client_and_db):
+    client, _ = client_and_db
+    src = client.post("/api/entities/", json={"name": "Src", "type": "external"}).json()
+    dst = client.post("/api/entities/", json={"name": "Dst", "type": "internal"}).json()
+    src_id, dst_id = src["id"], dst["id"]
+
+    # Create 3 transactions
+    tx_pending = client.post("/api/transactions/", json={
+        "date": "2026-01-01", "label": "Pending", "amount": -10.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+    }).json()
+    tx_reimbursed = client.post("/api/transactions/", json={
+        "date": "2026-01-02", "label": "Reimbursed", "amount": -20.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+    }).json()
+    tx_none = client.post("/api/transactions/", json={
+        "date": "2026-01-03", "label": "NoReimb", "amount": -30.0,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+    }).json()
+
+    # Attach reimbursements
+    client.post("/api/reimbursements/", json={
+        "transaction_id": tx_pending["id"], "person_name": "Alice",
+        "amount": 10.0, "status": "pending",
+    })
+    client.post("/api/reimbursements/", json={
+        "transaction_id": tx_reimbursed["id"], "person_name": "Bob",
+        "amount": 20.0, "status": "reimbursed",
+    })
+
+    # Filter: pending → only tx_pending
+    r = client.get("/api/transactions/?reimb_status=pending")
+    assert r.status_code == 200
+    ids = [t["id"] for t in r.json()]
+    assert tx_pending["id"] in ids
+    assert tx_reimbursed["id"] not in ids
+    assert tx_none["id"] not in ids
+
+    # Filter: reimbursed → only tx_reimbursed
+    r = client.get("/api/transactions/?reimb_status=reimbursed")
+    assert r.status_code == 200
+    ids = [t["id"] for t in r.json()]
+    assert tx_reimbursed["id"] in ids
+    assert tx_pending["id"] not in ids
+    assert tx_none["id"] not in ids
+
+    # Filter: none → only tx_none
+    r = client.get("/api/transactions/?reimb_status=none")
+    assert r.status_code == 200
+    ids = [t["id"] for t in r.json()]
+    assert tx_none["id"] in ids
+    assert tx_pending["id"] not in ids
+    assert tx_reimbursed["id"] not in ids
+
+    # Invalid value → 400
+    r = client.get("/api/transactions/?reimb_status=invalid")
+    assert r.status_code == 400

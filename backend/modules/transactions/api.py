@@ -52,6 +52,7 @@ def list_transactions(
     search: Optional[str] = None,
     entity_id: Optional[int] = None,
     include_children: bool = False,
+    reimb_status: Optional[str] = None,
 ):
     conn = get_conn()
     try:
@@ -112,6 +113,14 @@ def list_transactions(
             else:
                 query += " AND (t.from_entity_id = ? OR t.to_entity_id = ?)"
                 params.extend([entity_id, entity_id])
+        if reimb_status == "pending":
+            query += " AND rb.reimb_status = 'pending'"
+        elif reimb_status == "reimbursed":
+            query += " AND rb.reimb_status = 'reimbursed'"
+        elif reimb_status == "none":
+            query += " AND rb.reimb_status IS NULL"
+        elif reimb_status is not None:
+            raise HTTPException(status_code=400, detail=f"invalid reimb_status: {reimb_status}")
         query += " ORDER BY t.date DESC, t.id DESC"
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]

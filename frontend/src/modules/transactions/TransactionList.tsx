@@ -18,6 +18,7 @@ export default function TransactionList() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [reimbFilter, setReimbFilter] = useState<string>("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [sortBy, setSortBy] = useState<"date" | "amount" | "label">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -46,6 +47,7 @@ export default function TransactionList() {
     if (dateFrom) p.set("date_from", dateFrom);
     if (dateTo) p.set("date_to", dateTo);
     if (categoryFilter) p.set("category_id", categoryFilter);
+    if (reimbFilter) p.set("reimb_status", reimbFilter);
     if (selectedEntityId) {
       p.set("entity_id", String(selectedEntityId));
       p.set("include_children", "true");
@@ -61,6 +63,7 @@ export default function TransactionList() {
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     if (categoryFilter) params.category_id = categoryFilter;
+    if (reimbFilter) params.reimb_status = reimbFilter;
     if (selectedEntityId) {
       params.entity_id = String(selectedEntityId);
       params.include_children = "true";
@@ -70,7 +73,7 @@ export default function TransactionList() {
       .then(setTransactions)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [search, dateFrom, dateTo, categoryFilter, selectedEntityId]);
+  }, [search, dateFrom, dateTo, categoryFilter, reimbFilter, selectedEntityId]);
 
   useEffect(() => {
     fetchTransactions();
@@ -248,9 +251,19 @@ export default function TransactionList() {
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
-        {(search || dateFrom || dateTo || categoryFilter) && (
+        <select
+          value={reimbFilter}
+          onChange={(e) => setReimbFilter(e.target.value)}
+          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+        >
+          <option value="">Tous remboursements</option>
+          <option value="pending">En attente</option>
+          <option value="reimbursed">Remboursés</option>
+          <option value="none">Sans rembo</option>
+        </select>
+        {(search || dateFrom || dateTo || categoryFilter || reimbFilter) && (
           <button
-            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setCategoryFilter(""); }}
+            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setCategoryFilter(""); setReimbFilter(""); }}
             className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
           >
             <X size={14} /> Effacer
