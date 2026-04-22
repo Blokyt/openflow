@@ -240,3 +240,113 @@ def test_delete_user_no_longer_retrievable(authed_client):
 def test_delete_user_not_found_returns_404(client):
     resp = client.delete("/api/multi_users/999999")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /api/multi_users/login — session purge on login
+# ---------------------------------------------------------------------------
+
+def test_login_purges_stale_sessions(client_and_db):
+    """Login must delete sessions older than 24h and keep the new one."""
+    import sqlite3
+    from datetime import datetime, timezone, timedelta
+
+    client, db_file = client_and_db
+
+    # Create a user to log in with
+    user = make_user(client, username="login_purge_user", password="pass1234")
+
+    # Seed 3 old sessions directly in the DB (older than 24h)
+    conn = sqlite3.connect(str(db_file))
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+    try:
+        for i in range(3):
+            conn.execute(
+                "INSERT INTO sessions (id, user_id, created_at) VALUES (?, ?, ?)",
+                (f"stale-session-{i:04d}-0000-0000-0000-000000000000", user["id"], old_ts),
+            )
+        conn.commit()
+
+        # Verify 3 stale sessions exist before login
+        count_before = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE user_id = ?", (user["id"],)
+        ).fetchone()[0]
+        assert count_before == 3
+    finally:
+        conn.close()
+
+    # Perform login
+    resp = client.post("/api/multi_users/login", json={
+        "username": "login_purge_user",
+        "password": "pass1234",
+    })
+    assert resp.status_code == 200
+
+    # After login: only the new session should remain (stale ones purged)
+    conn = sqlite3.connect(str(db_file))
+    try:
+        sessions = conn.execute(
+            "SELECT id, created_at FROM sessions WHERE user_id = ?", (user["id"],)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    # Only 1 session (the new one) should remain
+    assert len(sessions) == 1, (
+        f"Expected 1 session after login, got {len(sessions)}: {sessions}"
+    )
+    # The surviving session must NOT be one of the stale seeds
+    assert not sessions[0][0].startswith("stale-session-"), (
+        "The surviving session should be the newly created one"
+    )
+
+
+def test_login_keeps_recent_sessions_of_other_users(client_and_db):
+    """Login purge must not delete recent sessions belonging to other users."""
+    import sqlite3
+    import bcrypt
+    from datetime import datetime, timezone, timedelta
+    import uuid
+
+    client, db_file = client_and_db
+
+    # Create user_a via API (no users yet, so first creation is public)
+    user_a = make_user(client, username="login_purge_user_a2", password="passA1234")
+
+    # Create user_b directly in the DB (avoid auth requirement after first user exists)
+    conn = sqlite3.connect(str(db_file))
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    fresh_session_id = str(uuid.uuid4())
+    try:
+        hashed = bcrypt.hashpw(b"passB1234", bcrypt.gensalt()).decode()
+        cur = conn.execute(
+            "INSERT INTO users (username, password_hash, role, display_name, created_at, active) "
+            "VALUES (?, ?, 'lecteur', '', ?, 1)",
+            ("login_purge_user_b2", hashed, recent_ts),
+        )
+        user_b_id = cur.lastrowid
+        # Seed a RECENT session for user_b
+        conn.execute(
+            "INSERT INTO sessions (id, user_id, created_at) VALUES (?, ?, ?)",
+            (fresh_session_id, user_b_id, recent_ts),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # user_a logs in — should NOT affect user_b's recent session
+    resp = client.post("/api/multi_users/login", json={
+        "username": "login_purge_user_a2",
+        "password": "passA1234",
+    })
+    assert resp.status_code == 200
+
+    conn = sqlite3.connect(str(db_file))
+    try:
+        surviving = conn.execute(
+            "SELECT id FROM sessions WHERE id = ?", (fresh_session_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert surviving is not None, "Recent session for another user must NOT be deleted"

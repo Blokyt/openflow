@@ -121,6 +121,10 @@ def login(creds: LoginRequest, response: Response):
 
         session_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
+        # Purge stale sessions older than 24h before creating the new one
+        conn.execute(
+            "DELETE FROM sessions WHERE datetime(created_at) < datetime('now', '-24 hours')"
+        )
         conn.execute(
             "INSERT INTO sessions (id, user_id, created_at) VALUES (?, ?, ?)",
             (session_id, user["id"], now),

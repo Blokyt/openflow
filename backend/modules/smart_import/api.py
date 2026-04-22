@@ -10,6 +10,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import time
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -29,6 +30,26 @@ router = APIRouter()
 TEMP_DIR = Path(get_db_path()).parent / "smart_import_temp"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
+_STALE_THRESHOLD_SECONDS = 3600  # 1 hour
+
+
+def cleanup_stale_temps(temp_dir: Optional[Path] = None) -> None:
+    """Delete any file in *temp_dir* (defaults to TEMP_DIR) older than 1 hour.
+
+    Called opportunistically at the top of each endpoint that touches the temp
+    directory — no scheduler required.
+    """
+    target = temp_dir if temp_dir is not None else TEMP_DIR
+    if not target.exists():
+        return
+    cutoff = time.time() - _STALE_THRESHOLD_SECONDS
+    for f in target.iterdir():
+        if f.is_file() and f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
 
 @router.get("/parsers")
 def list_parsers():
@@ -47,6 +68,7 @@ def list_parsers():
 @router.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
     """Upload a file and return parsing attempts from all applicable parsers."""
+    cleanup_stale_temps()
     if not file.filename:
         raise HTTPException(400, "Nom de fichier manquant")
 
@@ -126,6 +148,7 @@ class CommitRequest(BaseModel):
 @router.post("/commit")
 def commit(req: CommitRequest):
     """Apply the chosen parser's result: insert new + update modified transactions."""
+    cleanup_stale_temps()
     # Find the temp file for this import_id
     matches = list(TEMP_DIR.glob(f"{req.import_id}.*"))
     if not matches:
