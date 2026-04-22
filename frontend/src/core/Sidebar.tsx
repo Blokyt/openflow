@@ -230,8 +230,8 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   }, [reimbursementsActive]);
 
   const [budgetBadge, setBudgetBadge] = useState(0);
+  const budgetActive = activeModules.some((m) => m.id === "budget");
   useEffect(() => {
-    const budgetActive = activeModules.some((m) => m.id === "budget");
     if (!budgetActive) return;
     let cancelled = false;
     (async () => {
@@ -249,7 +249,7 @@ export default function Sidebar({ activeModules }: SidebarProps) {
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [activeModules]);
+  }, [budgetActive]);
 
   // Build core nav items (fixed, always shown)
   const coreManifests = CORE_IDS
