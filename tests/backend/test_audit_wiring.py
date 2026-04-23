@@ -219,3 +219,64 @@ def test_update_entity_logs_audit(client_and_db):
     assert len(matching) == 1
     assert matching[0]["old_value"] is not None
     assert matching[0]["new_value"] is not None
+
+
+def test_delete_entity_logs_audit(client_and_db):
+    client, db_path = client_and_db
+    ent = client.post("/api/entities/", json={"name": "Ent To Delete", "type": "internal"}).json()
+    resp = client.delete(f"/api/entities/{ent['id']}")
+    assert resp.status_code == 200
+
+    entries = _get_audit_entries(db_path, table_name="entities", action="DELETE")
+    matching = [e for e in entries if e["record_id"] == ent["id"]]
+    assert len(matching) == 1
+    assert matching[0]["old_value"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Budget — allocations (update + delete)
+# ---------------------------------------------------------------------------
+
+def test_update_allocation_logs_audit(client_and_db):
+    client, db_path = client_and_db
+    # Crée une entité interne et un exercice
+    ent = client.post("/api/entities/", json={"name": "BDA Update Audit", "type": "internal"}).json()
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "FY Update Alloc Audit",
+        "start_date": "2021-01-01",
+        "end_date": "2021-12-31",
+    }).json()
+    alloc = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": ent["id"],
+        "amount": 500.0,
+    }).json()
+    resp = client.put(f"/api/budget/allocations/{alloc['id']}", json={"amount": 750.0})
+    assert resp.status_code == 200
+
+    entries = _get_audit_entries(db_path, table_name="budget_allocations", action="UPDATE")
+    matching = [e for e in entries if e["record_id"] == alloc["id"]]
+    assert len(matching) == 1
+    assert matching[0]["old_value"] is not None
+    assert matching[0]["new_value"] is not None
+
+
+def test_delete_allocation_logs_audit(client_and_db):
+    client, db_path = client_and_db
+    # Crée une entité interne et un exercice
+    ent = client.post("/api/entities/", json={"name": "BDA Delete Audit", "type": "internal"}).json()
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "FY Delete Alloc Audit",
+        "start_date": "2020-01-01",
+        "end_date": "2020-12-31",
+    }).json()
+    alloc = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": ent["id"],
+        "amount": 200.0,
+    }).json()
+    resp = client.delete(f"/api/budget/allocations/{alloc['id']}")
+    assert resp.status_code == 200
+
+    entries = _get_audit_entries(db_path, table_name="budget_allocations", action="DELETE")
+    matching = [e for e in entries if e["record_id"] == alloc["id"]]
+    assert len(matching) == 1
+    assert matching[0]["old_value"] is not None

@@ -217,16 +217,23 @@ def change_password(request: Request, body: PasswordChange):
 
     new_hash = _hash_password(body.new_password)
     session_id = request.cookies.get("session_id")
+    user_id = user["id"]
     conn = get_conn()
     try:
         conn.execute(
             "UPDATE users SET password_hash = ? WHERE id = ?",
-            (new_hash, user["id"]),
+            (new_hash, user_id),
         )
         # Invalidate all OTHER sessions for this user
         conn.execute(
             "DELETE FROM sessions WHERE user_id = ? AND id != ?",
-            (user["id"], session_id),
+            (user_id, session_id),
+        )
+        record_audit(
+            conn, "UPDATE", "users", user_id,
+            old_value={"password_changed": True},
+            new_value={"password_changed": True},
+            user_name=user["username"],
         )
         conn.commit()
     finally:
