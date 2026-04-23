@@ -501,6 +501,7 @@ def update_user(user_id: int, user: UserUpdate, request: Request):
 
         # Hash the password if it's being updated
         if "password" in updates:
+            _validate_password_strength(updates["password"])
             updates["password_hash"] = _hash_password(updates.pop("password"))
 
         set_clauses = ", ".join(f"{k} = ?" for k in updates)

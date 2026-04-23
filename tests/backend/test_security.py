@@ -205,3 +205,32 @@ def test_rate_limit_endpoint_configured(client):
         f"Expected at least one 429 in {statuses}. "
         "Vérifier que slowapi est actif dans create_app() avec la limite 5/15minutes."
     )
+
+
+# ---------------------------------------------------------------------------
+# Item C — Politique de mot de passe sur la mise à jour admin (PUT /{user_id})
+# ---------------------------------------------------------------------------
+
+def test_admin_update_user_password_policy_enforced(authed_client):
+    """PUT /multi_users/{user_id} avec MDP faible doit retourner 400.
+
+    Vérifie que la politique de mot de passe est appliquée côté admin,
+    pas seulement lors de la création ou du changement de MDP par le user.
+    Utilise authed_client (admin root déjà loggué et lié à l'entité racine).
+    """
+    # Crée un utilisateur cible via l'admin déjà authentifié
+    target_resp = authed_client.post("/api/multi_users/", json={
+        "username": "target_user_pwd_policy",
+        "password": "TargetPass1!xyz",
+        "role": "lecteur",
+    })
+    assert target_resp.status_code == 201, target_resp.text
+    target_id = target_resp.json()["id"]
+
+    # Tente de mettre à jour le MDP avec un mot de passe faible (sans maj ni spécial)
+    resp = authed_client.put(f"/api/multi_users/{target_id}", json={
+        "password": "weakpass",
+    })
+    assert resp.status_code == 400, (
+        f"Expected 400 for weak password in admin update, got {resp.status_code}: {resp.json()}"
+    )

@@ -142,7 +142,8 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
 
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-    # Item D — Security headers (après CORS)
+    # SecurityHeadersMiddleware ajouté en dernier = plus externe dans la chaîne Starlette
+    # (dernier add_middleware = premier middleware traversé à l'entrée de la requête)
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Auth middleware — only active when multi_users module is enabled
