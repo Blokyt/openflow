@@ -7,10 +7,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from backend.core.config import load_config, save_config
 from backend.core.database import set_db_path
 from backend.core.module_loader import discover_modules, filter_active
+from backend.core.rate_limit import limiter
 
 
 def _bootstrap_admin(db_path: Path):
@@ -105,8 +110,25 @@ def _migrate_reimbursement_contacts(db_path: Path):
         conn.close()
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Injecte des headers de sécurité HTTP sur chaque réponse."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # Pas de HSTS tant qu'on est en HTTP local — à ajouter quand HTTPS sera en place
+        return response
+
+
 def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db", bootstrap: bool = True) -> FastAPI:
     app = FastAPI(title="OpenFlow", version="0.1.0")
+
+    # Item A — Rate limiting
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     project_root = Path(__file__).parent.parent
     config_file = project_root / config_path
@@ -119,6 +141,9 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
         print("  Auto-activated 'tiers' module (required by reimbursements).")
 
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+    # Item D — Security headers (après CORS)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Auth middleware — only active when multi_users module is enabled
     if config.modules.get("multi_users", False):

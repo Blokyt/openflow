@@ -1,4 +1,5 @@
 """Multi-users API module for OpenFlow."""
+import re
 import secrets
 import sqlite3
 import string
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 from backend.core.database import get_conn, row_to_dict
 from backend.core.auth import is_root_admin
 from backend.core.audit import record_audit
+from backend.core.rate_limit import limiter
 
 router = APIRouter()
 
@@ -25,11 +27,47 @@ VALID_ENTITY_ROLES = {"tresorier", "president", "lecteur"}
 # ---------------------------------------------------------------------------
 
 def _hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    # rounds=12 explicite — choix délibéré de sécurité (défaut bcrypt = 12 aussi)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
 def _verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+def _validate_password_strength(password: str) -> None:
+    """12+ chars, au moins 1 majuscule, 1 chiffre, 1 caractère spécial."""
+    if len(password) < 12:
+        raise HTTPException(400, "Le mot de passe doit contenir au moins 12 caractères")
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(400, "Le mot de passe doit contenir au moins une majuscule")
+    if not re.search(r"[0-9]", password):
+        raise HTTPException(400, "Le mot de passe doit contenir au moins un chiffre")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        raise HTTPException(400, "Le mot de passe doit contenir au moins un caractère spécial")
+
+
+def _generate_secure_password() -> str:
+    """Génère un mot de passe de 16 chars satisfaisant la politique de sécurité.
+
+    Garantit au moins 1 majuscule, 1 chiffre, 1 caractère spécial, puis complète
+    avec des caractères aléatoires du pool complet avant de mélanger.
+    """
+    specials = "!@#$%^&*"
+    pool = string.ascii_letters + string.digits + specials
+    # Forcer au moins 1 de chaque catégorie obligatoire
+    mandatory = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.digits),
+        secrets.choice(specials),
+    ]
+    rest = [secrets.choice(pool) for _ in range(13)]
+    chars = mandatory + rest
+    # Mélanger de façon sécurisée
+    for i in range(len(chars) - 1, 0, -1):
+        j = secrets.randbelow(i + 1)
+        chars[i], chars[j] = chars[j], chars[i]
+    return "".join(chars)
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
@@ -111,7 +149,8 @@ class EntityAssignment(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/login")
-def login(creds: LoginRequest, request: Request, response: Response):
+@limiter.limit("5/15minutes")
+async def login(request: Request, creds: LoginRequest, response: Response):
     conn = get_conn()
     try:
         user = conn.execute(
@@ -212,8 +251,7 @@ def change_password(request: Request, body: PasswordChange):
     user = _get_session_user(request)
     if not _verify_password(body.old_password, user["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if len(body.new_password) < 6:
-        raise HTTPException(400, "Password must be at least 6 characters")
+    _validate_password_strength(body.new_password)
 
     new_hash = _hash_password(body.new_password)
     session_id = request.cookies.get("session_id")
@@ -381,11 +419,10 @@ def create_user(user: UserCreate, request: Request):
     raw_password = user.password
     generated = False
     if not raw_password:
-        alphabet = string.ascii_letters + string.digits
-        raw_password = "".join(secrets.choice(alphabet) for _ in range(10))
+        raw_password = _generate_secure_password()
         generated = True
-    elif len(raw_password) < 6:
-        raise HTTPException(400, "Password must be at least 6 characters")
+    else:
+        _validate_password_strength(raw_password)
 
     now = datetime.now(timezone.utc).isoformat()
     password_hash = _hash_password(raw_password)

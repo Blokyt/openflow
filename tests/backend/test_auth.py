@@ -11,7 +11,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_user(client, username="authuser", password="testpass123", role="lecteur"):
+def make_user(client, username="authuser", password="TestPass123!xx", role="lecteur"):
     resp = client.post("/api/multi_users/", json={
         "username": username,
         "password": password,
@@ -33,10 +33,10 @@ def make_entity(client, name="TestEntity"):
 # ---------------------------------------------------------------------------
 
 def test_login_success(client):
-    make_user(client, username="login_ok_user", password="correctpass")
+    make_user(client, username="login_ok_user", password="CorrectPass1!xx")
     resp = client.post("/api/multi_users/login", json={
         "username": "login_ok_user",
-        "password": "correctpass",
+        "password": "CorrectPass1!xx",
     })
     assert resp.status_code == 200
     # Cookie should be set
@@ -44,7 +44,7 @@ def test_login_success(client):
 
 
 def test_login_wrong_password(client):
-    make_user(client, username="login_wrong_pwd_user", password="rightpass")
+    make_user(client, username="login_wrong_pwd_user", password="RightPass1!xxx")
     resp = client.post("/api/multi_users/login", json={
         "username": "login_wrong_pwd_user",
         "password": "wrongpass",
@@ -65,11 +65,11 @@ def test_login_nonexistent_user(client):
 # ---------------------------------------------------------------------------
 
 def test_logout(client):
-    make_user(client, username="logout_test_user", password="logoutpass")
+    make_user(client, username="logout_test_user", password="LogoutPass1!xx")
     # Login
     login_resp = client.post("/api/multi_users/login", json={
         "username": "logout_test_user",
-        "password": "logoutpass",
+        "password": "LogoutPass1!xx",
     })
     assert login_resp.status_code == 200
     assert "session_id" in client.cookies
@@ -90,10 +90,10 @@ def test_logout(client):
 # ---------------------------------------------------------------------------
 
 def test_me_with_session(client):
-    make_user(client, username="me_session_user", password="mepass")
+    make_user(client, username="me_session_user", password="MePass1!secureX")
     client.post("/api/multi_users/login", json={
         "username": "me_session_user",
-        "password": "mepass",
+        "password": "MePass1!secureX",
     })
     resp = client.get("/api/multi_users/me")
     assert resp.status_code == 200
@@ -114,16 +114,16 @@ def test_me_without_session(client):
 # ---------------------------------------------------------------------------
 
 def test_change_password(client):
-    make_user(client, username="change_pwd_user", password="oldpassword")
+    make_user(client, username="change_pwd_user", password="OldPassword1!xx")
     client.post("/api/multi_users/login", json={
         "username": "change_pwd_user",
-        "password": "oldpassword",
+        "password": "OldPassword1!xx",
     })
 
     # Change password
     resp = client.put("/api/multi_users/me/password", json={
-        "old_password": "oldpassword",
-        "new_password": "newpassword123",
+        "old_password": "OldPassword1!xx",
+        "new_password": "NewPassword123!",
     })
     assert resp.status_code == 200
 
@@ -131,21 +131,21 @@ def test_change_password(client):
     client.cookies.clear()
     login_resp = client.post("/api/multi_users/login", json={
         "username": "change_pwd_user",
-        "password": "newpassword123",
+        "password": "NewPassword123!",
     })
     assert login_resp.status_code == 200
 
 
 def test_change_password_wrong_old(client):
-    make_user(client, username="wrong_old_pwd_user", password="correctold")
+    make_user(client, username="wrong_old_pwd_user", password="CorrectOld1!xxx")
     client.post("/api/multi_users/login", json={
         "username": "wrong_old_pwd_user",
-        "password": "correctold",
+        "password": "CorrectOld1!xxx",
     })
 
     resp = client.put("/api/multi_users/me/password", json={
         "old_password": "wrongold",
-        "new_password": "doesntmatter",
+        "new_password": "DoesntMatter1!x",
     })
     assert resp.status_code == 400
 
@@ -221,7 +221,7 @@ def test_assign_invalid_entity_role_returns_400(authed_client):
 # ---------------------------------------------------------------------------
 
 def test_me_includes_entities(authed_client):
-    user = make_user(authed_client, username="me_entities_user", password="meentpass")
+    user = make_user(authed_client, username="me_entities_user", password="MeEntPass1!xxx")
     entity = make_entity(authed_client, name="MeIncludeEntity")
 
     # Assign entity
@@ -233,7 +233,7 @@ def test_me_includes_entities(authed_client):
     # Login as the new user (replacing the admin session)
     authed_client.post("/api/multi_users/login", json={
         "username": "me_entities_user",
-        "password": "meentpass",
+        "password": "MeEntPass1!xxx",
     })
 
     # /me should include entities

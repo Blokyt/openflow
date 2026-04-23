@@ -14,7 +14,7 @@ import pytest
 def make_user(client, **kwargs):
     payload = {
         "username": f"testuser_{id(kwargs)}",
-        "password": "securepassword",
+        "password": "SecurePass1!xyz",  # conforme: 15 chars, maj, chiffre, spécial
         "role": "lecteur",
         "display_name": "Test User",
     }
@@ -31,7 +31,7 @@ def make_user(client, **kwargs):
 def test_create_user_returns_201(client):
     resp = client.post("/api/multi_users/", json={
         "username": "newuser_create_201",
-        "password": "pass123",
+        "password": "ValidPass123!",
     })
     assert resp.status_code == 201
 
@@ -65,7 +65,7 @@ def test_create_user_custom_role(client):
 def test_create_user_invalid_role_returns_400(client):
     resp = client.post("/api/multi_users/", json={
         "username": "bad_role_user",
-        "password": "pass",
+        "password": "ValidPass123!",
         "role": "superuser",
     })
     assert resp.status_code == 400
@@ -75,7 +75,7 @@ def test_create_user_duplicate_username_returns_400(authed_client):
     make_user(authed_client, username="duplicate_user_x")
     resp = authed_client.post("/api/multi_users/", json={
         "username": "duplicate_user_x",
-        "password": "anotherpass",
+        "password": "AnotherPass1!xyz",
     })
     assert resp.status_code == 400
 
@@ -85,7 +85,7 @@ def test_password_is_hashed_in_database(client_and_db):
     import sqlite3
     client, db_file = client_and_db
 
-    password = "mysecretpassword"
+    password = "MySecretPass1!"
 
     user = make_user(client, username="hash_check_user", password=password)
 
@@ -178,7 +178,7 @@ def test_update_user_role(authed_client):
 
 def test_update_user_password_not_returned(authed_client):
     user = make_user(authed_client, username="update_pwd_user")
-    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"password": "newpassword"})
+    resp = authed_client.put(f"/api/multi_users/{user['id']}", json={"password": "NewPassword1!"})
     assert resp.status_code == 200
     data = resp.json()
     assert "password_hash" not in data
@@ -190,8 +190,8 @@ def test_update_user_password_rehashed(client_and_db):
     import sqlite3
     client, db_file = client_and_db
 
-    user = make_user(client, username="rehash_user", password="oldpass")
-    new_password = "newpass"
+    user = make_user(client, username="rehash_user", password="OldPass1!secure")
+    new_password = "NewPass1!secure"
 
     client.put(f"/api/multi_users/{user['id']}", json={"password": new_password})
 
@@ -254,7 +254,7 @@ def test_login_purges_stale_sessions(client_and_db):
     client, db_file = client_and_db
 
     # Create a user to log in with
-    user = make_user(client, username="login_purge_user", password="pass1234")
+    user = make_user(client, username="login_purge_user", password="Pass1234!secure")
 
     # Seed 3 old sessions directly in the DB (older than 24h)
     conn = sqlite3.connect(str(db_file))
@@ -278,7 +278,7 @@ def test_login_purges_stale_sessions(client_and_db):
     # Perform login
     resp = client.post("/api/multi_users/login", json={
         "username": "login_purge_user",
-        "password": "pass1234",
+        "password": "Pass1234!secure",
     })
     assert resp.status_code == 200
 
@@ -311,7 +311,7 @@ def test_login_keeps_recent_sessions_of_other_users(client_and_db):
     client, db_file = client_and_db
 
     # Create user_a via API (no users yet, so first creation is public)
-    user_a = make_user(client, username="login_purge_user_a2", password="passA1234")
+    user_a = make_user(client, username="login_purge_user_a2", password="PassA1234!secure")
 
     # Create user_b directly in the DB (avoid auth requirement after first user exists)
     conn = sqlite3.connect(str(db_file))
@@ -337,7 +337,7 @@ def test_login_keeps_recent_sessions_of_other_users(client_and_db):
     # user_a logs in — should NOT affect user_b's recent session
     resp = client.post("/api/multi_users/login", json={
         "username": "login_purge_user_a2",
-        "password": "passA1234",
+        "password": "PassA1234!secure",
     })
     assert resp.status_code == 200
 

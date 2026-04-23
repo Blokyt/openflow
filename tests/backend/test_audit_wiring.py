@@ -293,13 +293,13 @@ def test_login_success_logs_audit(client_and_db):
     # Crée un user (premier user = bootstrap public, pas d'auth requise)
     client.post("/api/multi_users/", json={
         "username": "audit_login_user",
-        "password": "test123",
+        "password": "AuditLogin1!xxx",
         "role": "lecteur",
     })
 
     resp = client.post("/api/multi_users/login", json={
         "username": "audit_login_user",
-        "password": "test123",
+        "password": "AuditLogin1!xxx",
     })
     assert resp.status_code == 200
 
@@ -315,7 +315,7 @@ def test_login_failure_logs_audit(client_and_db):
     # Crée un user pour pouvoir tenter un login avec mauvais mot de passe
     client.post("/api/multi_users/", json={
         "username": "audit_login_fail_user",
-        "password": "correct_password",
+        "password": "CorrectPwd1!xxx",
         "role": "lecteur",
     })
 

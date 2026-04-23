@@ -13,7 +13,21 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.main import create_app
+from backend.core.rate_limit import limiter
 from tools.migrate import ensure_system_tables, load_migrations, apply_migrations
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Reset le compteur du limiter slowapi entre chaque test.
+
+    Le limiter est un singleton global (MemoryStorage). Sans reset, les
+    compteurs s'accumulent entre tests de la même session pytest et font
+    passer le seuil de 5/15min bien avant le test dédié au rate limiting.
+    """
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
 
 
 def _init_db(db_path: str):
@@ -153,7 +167,7 @@ def authed_client(db_path):
     # Create the first admin (public — no users yet, middleware skips)
     user_resp = c.post("/api/multi_users/", json={
         "username": "_test_admin",
-        "password": "_test_pass_123",
+        "password": "TestAdmin1!secure",  # conforme à la politique: 17 chars, maj, chiffre, spécial
         "role": "admin",
     })
     user_id = user_resp.json()["id"]
@@ -190,6 +204,6 @@ def authed_client(db_path):
     # Login to obtain session cookie
     c.post("/api/multi_users/login", json={
         "username": "_test_admin",
-        "password": "_test_pass_123",
+        "password": "TestAdmin1!secure",
     })
     return c

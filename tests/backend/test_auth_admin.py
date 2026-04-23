@@ -11,7 +11,7 @@ def test_list_users_no_auth_when_no_users(client):
 def test_create_first_user_no_auth(client):
     """First user creation is open (bootstrap)."""
     resp = client.post("/api/multi_users/", json={
-        "username": "admin", "password": "pass123", "role": "admin"
+        "username": "admin", "password": "AdminPass1!xxx", "role": "admin"
     })
     assert resp.status_code == 201
 
@@ -19,7 +19,7 @@ def test_create_first_user_no_auth(client):
 def test_list_users_requires_admin_after_first(client):
     """After first user exists, listing requires admin."""
     client.post("/api/multi_users/", json={
-        "username": "admin", "password": "pass123", "role": "admin"
+        "username": "admin", "password": "AdminPass1!xxx", "role": "admin"
     })
     # Not logged in — should be rejected
     resp = client.get("/api/multi_users/")
@@ -35,7 +35,7 @@ def test_admin_can_list_users(authed_client):
 def test_admin_can_create_user(authed_client):
     """Admin can create additional users."""
     resp = authed_client.post("/api/multi_users/", json={
-        "username": "newuser", "password": "pass123", "role": "lecteur"
+        "username": "newuser", "password": "NewUserPass1!x", "role": "lecteur"
     })
     assert resp.status_code == 201
 
@@ -43,7 +43,7 @@ def test_admin_can_create_user(authed_client):
 def test_admin_can_delete_user(authed_client):
     """Admin can delete a user."""
     user = authed_client.post("/api/multi_users/", json={
-        "username": "todelete", "password": "pass123"
+        "username": "todelete", "password": "ToDeletePass1!"
     }).json()
     resp = authed_client.delete(f"/api/multi_users/{user['id']}")
     assert resp.status_code == 200
