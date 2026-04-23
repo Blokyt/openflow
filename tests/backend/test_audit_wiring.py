@@ -280,3 +280,51 @@ def test_delete_allocation_logs_audit(client_and_db):
     matching = [e for e in entries if e["record_id"] == alloc["id"]]
     assert len(matching) == 1
     assert matching[0]["old_value"] is not None
+
+
+# ---------------------------------------------------------------------------
+# multi_users — login audit
+# ---------------------------------------------------------------------------
+
+def test_login_success_logs_audit(client_and_db):
+    """Un login réussi doit produire 1 entrée audit action=LOGIN, table_name=users."""
+    client, db_path = client_and_db
+
+    # Crée un user (premier user = bootstrap public, pas d'auth requise)
+    client.post("/api/multi_users/", json={
+        "username": "audit_login_user",
+        "password": "test123",
+        "role": "lecteur",
+    })
+
+    resp = client.post("/api/multi_users/login", json={
+        "username": "audit_login_user",
+        "password": "test123",
+    })
+    assert resp.status_code == 200
+
+    entries = _get_audit_entries(db_path, table_name="users", action="LOGIN")
+    matching = [e for e in entries if e["table_name"] == "users" and e["action"] == "LOGIN"]
+    assert len(matching) == 1, f"Expected 1 LOGIN audit entry, got {len(matching)}"
+
+
+def test_login_failure_logs_audit(client_and_db):
+    """Un login avec mauvais mot de passe doit produire 1 entrée audit action=LOGIN_FAILED, table_name=users."""
+    client, db_path = client_and_db
+
+    # Crée un user pour pouvoir tenter un login avec mauvais mot de passe
+    client.post("/api/multi_users/", json={
+        "username": "audit_login_fail_user",
+        "password": "correct_password",
+        "role": "lecteur",
+    })
+
+    resp = client.post("/api/multi_users/login", json={
+        "username": "audit_login_fail_user",
+        "password": "wrong_password",
+    })
+    assert resp.status_code == 401
+
+    entries = _get_audit_entries(db_path, table_name="users", action="LOGIN_FAILED")
+    matching = [e for e in entries if e["table_name"] == "users" and e["action"] == "LOGIN_FAILED"]
+    assert len(matching) == 1, f"Expected 1 LOGIN_FAILED audit entry, got {len(matching)}"

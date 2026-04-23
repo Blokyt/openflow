@@ -203,6 +203,8 @@ def upsert_opening_balances(fy_id: int, entries: list[OpeningBalanceEntry]):
                 (fy_id, entry.entity_id, entry.amount, entry.source, entry.notes, now, now),
             )
         new_data = [{"fiscal_year_id": fy_id, "entity_id": e.entity_id, "amount": e.amount} for e in entries]
+        # old_value=None intentionnel : l'opération DELETE+INSERT en masse rend
+        # le snapshot précédent non pertinent ; seul le nouvel état est tracé.
         record_audit(conn, "UPDATE", "fiscal_year_opening_balances", fy_id,
                      old_value=None, new_value=new_data)
         conn.commit()
