@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from backend.core.database import get_conn, row_to_dict
 from backend.core.auth import is_root_admin
+from backend.core.audit import record_audit
 
 router = APIRouter()
 
@@ -110,13 +111,20 @@ class EntityAssignment(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/login")
-def login(creds: LoginRequest, response: Response):
+def login(creds: LoginRequest, request: Request, response: Response):
     conn = get_conn()
     try:
         user = conn.execute(
             "SELECT * FROM users WHERE username = ?", (creds.username,)
         ).fetchone()
         if user is None or not _verify_password(creds.password, user["password_hash"]):
+            # Audit login failure
+            record_audit(
+                conn, "LOGIN_FAILED", "users", None,
+                new_value={"username": creds.username},
+                user_name=creds.username,
+            )
+            conn.commit()
             raise HTTPException(status_code=401, detail="Invalid username or password")
 
         session_id = str(uuid.uuid4())
@@ -128,6 +136,12 @@ def login(creds: LoginRequest, response: Response):
         conn.execute(
             "INSERT INTO sessions (id, user_id, created_at) VALUES (?, ?, ?)",
             (session_id, user["id"], now),
+        )
+        ip = request.client.host if request.client else ""
+        record_audit(
+            conn, "LOGIN", "users", user["id"],
+            new_value={"username": user["username"], "ip": ip},
+            user_name=user["username"],
         )
         conn.commit()
     finally:
@@ -149,7 +163,18 @@ def logout(request: Request, response: Response):
     if session_id:
         conn = get_conn()
         try:
+            session = conn.execute(
+                "SELECT user_id FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            user_name = ""
+            user_id = None
+            if session:
+                user_id = session["user_id"]
+                user_row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+                if user_row:
+                    user_name = user_row["username"]
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            record_audit(conn, "LOGOUT", "sessions", user_id, user_name=user_name)
             conn.commit()
         finally:
             conn.close()
@@ -366,14 +391,18 @@ def create_user(user: UserCreate, request: Request):
                    VALUES (?, ?, ?, ?, ?, 1)""",
                 (user.username, password_hash, user.role, user.display_name, now),
             )
-            conn.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(
                 status_code=400, detail=f"Username '{user.username}' already exists"
             )
 
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (new_id,)).fetchone()
         result = _row_to_dict(row)
+        record_audit(conn, "CREATE", "users", new_id,
+                     old_value=None,
+                     new_value={"username": user.username, "role": user.role, "display_name": user.display_name})
+        conn.commit()
         # Return generated password ONCE so admin can share it
         if generated:
             result["generated_password"] = raw_password
@@ -415,6 +444,7 @@ def update_user(user_id: int, user: UserUpdate, request: Request):
         if existing is None:
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
+        old_data = {"username": existing["username"], "role": existing["role"], "display_name": existing["display_name"], "active": existing["active"]}
         updates = user.model_dump(exclude_unset=True)
         if not updates:
             return _row_to_dict(existing)
@@ -437,11 +467,15 @@ def update_user(user_id: int, user: UserUpdate, request: Request):
                 f"UPDATE users SET {set_clauses} WHERE id = ?",
                 values,
             )
-            conn.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=400, detail="Username already taken")
 
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        new_data = {"username": row["username"], "role": row["role"], "display_name": row["display_name"], "active": row["active"]}
+        record_audit(conn, "UPDATE", "users", user_id,
+                     old_value=old_data, new_value=new_data,
+                     user_name=existing["username"])
+        conn.commit()
         return _row_to_dict(row)
     finally:
         conn.close()
@@ -457,9 +491,12 @@ def delete_user(user_id: int, request: Request):
         ).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+        old_data = {"username": existing["username"], "role": existing["role"]}
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM user_entities WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        record_audit(conn, "DELETE", "users", user_id, old_value=old_data,
+                     user_name=existing["username"])
         conn.commit()
         return {"deleted": user_id}
     finally:

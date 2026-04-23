@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.core.database import get_conn, row_to_dict
+from backend.core.audit import record_audit
 
 router = APIRouter()
 
@@ -88,9 +89,11 @@ def create_fiscal_year(body: FiscalYearCreate):
         fy_id = cur.lastrowid
         if body.is_current:
             _set_single_current(conn, fy_id)
-        conn.commit()
         row = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone()
-        return row_to_dict(row)
+        new_data = row_to_dict(row)
+        record_audit(conn, "CREATE", "fiscal_years", fy_id, old_value=None, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
 
@@ -104,9 +107,10 @@ def update_fiscal_year(fy_id: int, body: FiscalYearUpdate):
         if existing is None:
             raise HTTPException(404, f"Exercice {fy_id} introuvable")
 
+        old_data = row_to_dict(existing)
         updates = body.model_dump(exclude_unset=True)
         if not updates:
-            return row_to_dict(existing)
+            return old_data
 
         new_start = updates.get("start_date", existing["start_date"])
         new_end = updates.get("end_date", existing["end_date"])
@@ -121,9 +125,11 @@ def update_fiscal_year(fy_id: int, body: FiscalYearUpdate):
         conn.execute(f"UPDATE fiscal_years SET {set_clause} WHERE id = ?", values)
         if updates.get("is_current") == 1:
             _set_single_current(conn, fy_id)
-        conn.commit()
         row = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone()
-        return row_to_dict(row)
+        new_data = row_to_dict(row)
+        record_audit(conn, "UPDATE", "fiscal_years", fy_id, old_value=old_data, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
 
@@ -135,10 +141,12 @@ def delete_fiscal_year(fy_id: int):
         existing = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone()
         if existing is None:
             raise HTTPException(404, f"Exercice {fy_id} introuvable")
+        old_data = row_to_dict(existing)
         # Applicative cascade (PRAGMA foreign_keys OFF in this project)
         conn.execute("DELETE FROM budget_allocations WHERE fiscal_year_id = ?", (fy_id,))
         conn.execute("DELETE FROM fiscal_year_opening_balances WHERE fiscal_year_id = ?", (fy_id,))
         conn.execute("DELETE FROM fiscal_years WHERE id = ?", (fy_id,))
+        record_audit(conn, "DELETE", "fiscal_years", fy_id, old_value=old_data)
         conn.commit()
         return {"deleted": fy_id}
     finally:
@@ -194,6 +202,9 @@ def upsert_opening_balances(fy_id: int, entries: list[OpeningBalanceEntry]):
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (fy_id, entry.entity_id, entry.amount, entry.source, entry.notes, now, now),
             )
+        new_data = [{"fiscal_year_id": fy_id, "entity_id": e.entity_id, "amount": e.amount} for e in entries]
+        record_audit(conn, "UPDATE", "fiscal_year_opening_balances", fy_id,
+                     old_value=None, new_value=new_data)
         conn.commit()
         rows = conn.execute(
             "SELECT * FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? ORDER BY entity_id",
@@ -306,9 +317,12 @@ def create_allocation(fy_id: int, body: AllocationCreate):
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (fy_id, body.entity_id, body.category_id, body.amount, body.notes, now, now),
         )
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (new_id,)).fetchone()
+        new_data = row_to_dict(row)
+        record_audit(conn, "CREATE", "budget_allocations", new_id, old_value=None, new_value=new_data)
         conn.commit()
-        row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return row_to_dict(row)
+        return new_data
     finally:
         conn.close()
 
@@ -320,16 +334,19 @@ def update_allocation(alloc_id: int, body: AllocationUpdate):
         existing = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (alloc_id,)).fetchone()
         if existing is None:
             raise HTTPException(404, f"Allocation {alloc_id} introuvable")
+        old_data = row_to_dict(existing)
         updates = body.model_dump(exclude_unset=True)
         if not updates:
-            return row_to_dict(existing)
+            return old_data
         now = _now()
         set_clause = ", ".join(f"{k} = ?" for k in updates) + ", updated_at = ?"
         values = list(updates.values()) + [now, alloc_id]
         conn.execute(f"UPDATE budget_allocations SET {set_clause} WHERE id = ?", values)
-        conn.commit()
         row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (alloc_id,)).fetchone()
-        return row_to_dict(row)
+        new_data = row_to_dict(row)
+        record_audit(conn, "UPDATE", "budget_allocations", alloc_id, old_value=old_data, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
 
@@ -341,7 +358,9 @@ def delete_allocation(alloc_id: int):
         existing = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (alloc_id,)).fetchone()
         if existing is None:
             raise HTTPException(404, f"Allocation {alloc_id} introuvable")
+        old_data = row_to_dict(existing)
         conn.execute("DELETE FROM budget_allocations WHERE id = ?", (alloc_id,))
+        record_audit(conn, "DELETE", "budget_allocations", alloc_id, old_value=old_data)
         conn.commit()
         return {"deleted": alloc_id}
     finally:

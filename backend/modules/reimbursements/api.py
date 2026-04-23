@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.core.database import get_conn, row_to_dict
+from backend.core.audit import record_audit
 
 router = APIRouter()
 
@@ -89,9 +90,12 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
                 now,
             ),
         )
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM reimbursements WHERE id = ?", (new_id,)).fetchone()
+        new_data = row_to_dict(row)
+        record_audit(conn, "CREATE", "reimbursements", new_id, old_value=None, new_value=new_data)
         conn.commit()
-        row = conn.execute("SELECT * FROM reimbursements WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return row_to_dict(row)
+        return new_data
     finally:
         conn.close()
 
@@ -142,9 +146,10 @@ def update_reimbursement(reimbursement_id: int, reimbursement: ReimbursementUpda
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Reimbursement {reimbursement_id} not found")
 
+        old_data = row_to_dict(existing)
         updates = reimbursement.model_dump(exclude_unset=True)
         if not updates:
-            return row_to_dict(existing)
+            return old_data
 
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         set_clauses += ", updated_at = ?"
@@ -154,9 +159,11 @@ def update_reimbursement(reimbursement_id: int, reimbursement: ReimbursementUpda
             f"UPDATE reimbursements SET {set_clauses} WHERE id = ?",
             values,
         )
-        conn.commit()
         row = conn.execute("SELECT * FROM reimbursements WHERE id = ?", (reimbursement_id,)).fetchone()
-        return row_to_dict(row)
+        new_data = row_to_dict(row)
+        record_audit(conn, "UPDATE", "reimbursements", reimbursement_id, old_value=old_data, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
 
@@ -170,7 +177,9 @@ def delete_reimbursement(reimbursement_id: int):
         ).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Reimbursement {reimbursement_id} not found")
+        old_data = row_to_dict(existing)
         conn.execute("DELETE FROM reimbursements WHERE id = ?", (reimbursement_id,))
+        record_audit(conn, "DELETE", "reimbursements", reimbursement_id, old_value=old_data)
         conn.commit()
         return {"deleted": reimbursement_id}
     finally:

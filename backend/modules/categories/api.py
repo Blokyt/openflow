@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from backend.core.database import get_conn, row_to_dict
+from backend.core.audit import record_audit
 
 router = APIRouter()
 
@@ -89,9 +90,12 @@ def create_category(data: CategoryIn):
             "INSERT INTO categories (name, parent_id, color, icon, position) VALUES (?, ?, ?, ?, ?)",
             (data.name, data.parent_id, data.color, data.icon, data.position),
         )
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM categories WHERE id = ?", (new_id,)).fetchone()
+        new_data = row_to_dict(row)
+        record_audit(conn, "CREATE", "categories", new_id, old_value=None, new_value=new_data)
         conn.commit()
-        row = conn.execute("SELECT * FROM categories WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return row_to_dict(row)
+        return new_data
     finally:
         conn.close()
 
@@ -116,6 +120,7 @@ def update_category(cat_id: int, data: CategoryUpdate):
         if row is None:
             raise HTTPException(status_code=404, detail="Category not found")
         current = row_to_dict(row)
+        old_data = dict(current)
         name = data.name if data.name is not None else current["name"]
         parent_id = data.parent_id if data.parent_id is not None else current["parent_id"]
         color = data.color if data.color is not None else current["color"]
@@ -125,9 +130,11 @@ def update_category(cat_id: int, data: CategoryUpdate):
             "UPDATE categories SET name=?, parent_id=?, color=?, icon=?, position=? WHERE id=?",
             (name, parent_id, color, icon, position, cat_id),
         )
-        conn.commit()
         updated = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
-        return row_to_dict(updated)
+        new_data = row_to_dict(updated)
+        record_audit(conn, "UPDATE", "categories", cat_id, old_value=old_data, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
 
@@ -139,7 +146,9 @@ def delete_category(cat_id: int):
         row = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Category not found")
+        old_data = row_to_dict(row)
         conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+        record_audit(conn, "DELETE", "categories", cat_id, old_value=old_data)
         conn.commit()
         return {"deleted": cat_id}
     finally:

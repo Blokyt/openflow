@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance, compute_consolidated_balance
+from backend.core.audit import record_audit
 
 router = APIRouter()
 
@@ -93,9 +94,12 @@ def create_entity(entity: EntityCreate):
             (entity.name, entity.description, entity.type, entity.parent_id,
              entity.is_divers, entity.color, entity.position, balance_mode, now, now),
         )
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM entities WHERE id = ?", (new_id,)).fetchone()
+        new_data = row_to_dict(row)
+        record_audit(conn, "CREATE", "entities", new_id, old_value=None, new_value=new_data)
         conn.commit()
-        row = conn.execute("SELECT * FROM entities WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return row_to_dict(row)
+        return new_data
     finally:
         conn.close()
 
@@ -143,6 +147,7 @@ def update_entity(entity_id: int, update: EntityUpdate):
         if not existing:
             raise HTTPException(404, "Entity not found")
 
+        old_data = row_to_dict(existing)
         fields = {}
         for field in ["name", "description", "color", "position", "parent_id", "balance_mode"]:
             val = getattr(update, field, None)
@@ -175,9 +180,11 @@ def update_entity(entity_id: int, update: EntityUpdate):
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE entities SET {set_clause} WHERE id = ?", list(fields.values()) + [entity_id])
-        conn.commit()
         row = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
-        return row_to_dict(row)
+        new_data = row_to_dict(row)
+        record_audit(conn, "UPDATE", "entities", entity_id, old_value=old_data, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
 
@@ -189,6 +196,8 @@ def delete_entity(entity_id: int):
         existing = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         if not existing:
             raise HTTPException(404, "Entity not found")
+
+        old_data = row_to_dict(existing)
 
         # Reject if has children
         children = conn.execute("SELECT id FROM entities WHERE parent_id = ?", (entity_id,)).fetchone()
@@ -214,6 +223,7 @@ def delete_entity(entity_id: int):
         conn.execute("DELETE FROM fiscal_year_opening_balances WHERE entity_id = ?", (entity_id,))
         conn.execute("DELETE FROM budget_allocations WHERE entity_id = ?", (entity_id,))
         conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
+        record_audit(conn, "DELETE", "entities", entity_id, old_value=old_data)
         conn.commit()
         return {"deleted": entity_id}
     finally:
@@ -267,6 +277,8 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
             raise HTTPException(404, "Internal entity not found")
 
         now = datetime.now(timezone.utc).isoformat()
+        old_ref = conn.execute("SELECT * FROM entity_balance_refs WHERE entity_id = ?", (entity_id,)).fetchone()
+        old_data = row_to_dict(old_ref) if old_ref else None
         conn.execute(
             """INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at)
                VALUES (?, ?, ?, ?)
@@ -276,8 +288,11 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
                    updated_at = excluded.updated_at""",
             (entity_id, ref.reference_date, ref.reference_amount, now),
         )
-        conn.commit()
         row = conn.execute("SELECT * FROM entity_balance_refs WHERE entity_id = ?", (entity_id,)).fetchone()
-        return row_to_dict(row)
+        new_data = row_to_dict(row)
+        action = "UPDATE" if old_data else "CREATE"
+        record_audit(conn, action, "entity_balance_refs", entity_id, old_value=old_data, new_value=new_data)
+        conn.commit()
+        return new_data
     finally:
         conn.close()
