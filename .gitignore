@@ -15,8 +15,12 @@ frontend/dist/
 # Data utilisateur (chaque instance a sa propre DB)
 data/openflow.db
 data/openflow.db.backup.*
+data/openflow.db.manualbak-*
 data/attachments/*
 !data/attachments/.gitkeep
+
+# Bases SQLite stray (creees par un outil lance depuis un mauvais CWD)
+*.db
 
 # Config utilisateur (cree par setup.py depuis config.example.yaml)
 config.yaml

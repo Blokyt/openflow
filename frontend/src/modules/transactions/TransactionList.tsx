@@ -1,22 +1,24 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "../../api";
 import { Transaction, Category } from "../../types";
 import { useEntity } from "../../core/EntityContext";
+import { useFiscalYear } from "../../core/FiscalYearContext";
 import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
-import AnnotationsSection from "./AnnotationsSection";
-import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Download, FileJson, Hourglass, Check } from "lucide-react";
-
-const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+import { formatEuros, txTone } from "../../utils/format";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw } from "lucide-react";
 
 export default function TransactionList() {
   const { selectedEntityId, selectedEntity } = useEntity();
+  const { selectedYear } = useFiscalYear();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Track the last context that initialized the date filters (for the reset link)
+  const contextDatesRef = useRef<{ from: string; to: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [reimbFilter, setReimbFilter] = useState<string>("");
   const [amountMin, setAmountMin] = useState<string>("");
@@ -39,26 +41,35 @@ export default function TransactionList() {
     api.getCategories().then(setCategories).catch(() => {});
   }, []);
 
-  const hasAttachments = activeModuleIds.has("attachments");
-  const hasAnnotations = activeModuleIds.has("annotations");
-  const hasExport = activeModuleIds.has("export");
-
-  function buildExportQuery(): string {
-    const p = new URLSearchParams();
-    if (search) p.set("search", search);
-    if (dateFrom) p.set("date_from", dateFrom);
-    if (dateTo) p.set("date_to", dateTo);
-    if (categoryFilter) p.set("category_id", categoryFilter);
-    if (reimbFilter) p.set("reimb_status", reimbFilter);
-    if (amountMin) p.set("amount_min", amountMin);
-    if (amountMax) p.set("amount_max", amountMax);
-    if (selectedEntityId) {
-      p.set("entity_id", String(selectedEntityId));
-      p.set("include_children", "true");
+  // Synchronise les filtres de date avec l'exercice sélectionné.
+  const today = new Date().toISOString().slice(0, 10);
+  useEffect(() => {
+    if (selectedYear) {
+      const from = selectedYear.start_date;
+      const to = selectedYear.end_date ?? today;
+      contextDatesRef.current = { from, to };
+      setDateFrom(from);
+      setDateTo(to);
+    } else {
+      contextDatesRef.current = null;
+      // Ne pas réinitialiser les dates si l'utilisateur les a déjà définies manuellement
     }
-    const q = p.toString();
-    return q ? `?${q}` : "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear?.id]);
+
+  // Vérifie si les dates ont été modifiées manuellement par rapport au contexte
+  const datesModified =
+    contextDatesRef.current !== null &&
+    (dateFrom !== contextDatesRef.current.from || dateTo !== contextDatesRef.current.to);
+
+  function resetDatesToContext() {
+    if (contextDatesRef.current) {
+      setDateFrom(contextDatesRef.current.from);
+      setDateTo(contextDatesRef.current.to);
+    }
   }
+
+  const hasAttachments = activeModuleIds.has("attachments");
 
   const fetchTransactions = useCallback(() => {
     setLoading(true);
@@ -166,24 +177,6 @@ export default function TransactionList() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {hasExport && (
-            <>
-              <a
-                href={`/api/export/transactions/csv${buildExportQuery()}`}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#B0B0B0] border border-[#333] rounded-full hover:border-[#F2C48D] hover:text-[#F2C48D] transition-colors"
-                title="Télécharger CSV"
-              >
-                <Download size={14} /> CSV
-              </a>
-              <a
-                href={`/api/export/transactions/json${buildExportQuery()}`}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#B0B0B0] border border-[#333] rounded-full hover:border-[#F2C48D] hover:text-[#F2C48D] transition-colors"
-                title="Télécharger JSON"
-              >
-                <FileJson size={14} /> JSON
-              </a>
-            </>
-          )}
           <button
             onClick={() => { setShowForm(true); setEditingTx(null); }}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
@@ -246,6 +239,16 @@ export default function TransactionList() {
             className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors [color-scheme:dark]"
           />
         </div>
+        {datesModified && (
+          <button
+            onClick={resetDatesToContext}
+            className="flex items-center gap-1.5 px-3 py-2.5 text-xs text-[#F2C48D] border border-[#F2C48D]/30 rounded-xl hover:bg-[#F2C48D]/10 transition-colors"
+            title="Réinitialiser aux dates de l'exercice"
+          >
+            <RotateCcw size={12} />
+            Réinitialiser
+          </button>
+        )}
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
@@ -342,12 +345,10 @@ export default function TransactionList() {
                 >
                   <td className="px-3 py-3.5 text-[#555] text-xs font-mono">#{tx.id}</td>
                   <td className="px-4 py-3.5 text-[#B0B0B0] whitespace-nowrap">{tx.date}</td>
-                  <td className="px-4 py-3.5 font-medium text-white">
-                    <div className="flex items-center gap-2">
-                      <span>{tx.label}</span>
-                    </div>
+                  <td className="px-4 py-3.5 font-medium text-white max-w-xs">
+                    <span title={tx.description || undefined}>{tx.label}</span>
                     {tx.description && (
-                      <p className="text-xs text-[#666] font-normal mt-0.5 truncate max-w-xs">{tx.description}</p>
+                      <p className="text-xs text-[#888] font-normal mt-0.5 truncate" title={tx.description}>{tx.description}</p>
                     )}
                   </td>
                   <td className="px-4 py-3.5">
@@ -407,12 +408,11 @@ export default function TransactionList() {
                       <span className="text-xs text-[#444]">—</span>
                     )}
                   </td>
-                  <td
-                    className={`px-4 py-3.5 text-right font-semibold whitespace-nowrap ${
-                      tx.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"
-                    }`}
-                  >
-                    {eurFormatter.format(tx.amount)}
+                  <td className="px-4 py-3.5 text-right font-semibold whitespace-nowrap">
+                    {(() => {
+                      const { color, sign } = txTone(tx);
+                      return <span style={{ color }}>{sign}{formatEuros(tx.amount)}</span>;
+                    })()}
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     {confirmDelete === tx.id ? (
@@ -434,11 +434,11 @@ export default function TransactionList() {
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
-                        {(hasAttachments || hasAnnotations) && (
+                        {hasAttachments && (
                           <button
                             onClick={() => setDetailTx(tx)}
                             className="p-1.5 text-[#666] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
-                            title="Détails (notes, pièces jointes)"
+                            title="Détails (pièces jointes)"
                           >
                             <Eye size={14} strokeWidth={1.5} />
                           </button>
@@ -499,13 +499,14 @@ export default function TransactionList() {
                   <h2 className="text-xl font-bold text-white break-words">{detailTx.label}</h2>
                 </div>
                 <div className="text-sm text-[#666] mt-1">{detailTx.date}</div>
-                <div
-                  className={`mt-3 text-2xl font-bold ${
-                    detailTx.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"
-                  }`}
-                >
-                  {eurFormatter.format(detailTx.amount)}
-                </div>
+                {(() => {
+                  const { color, sign } = txTone(detailTx);
+                  return (
+                    <div className="mt-3 text-2xl font-bold" style={{ color }}>
+                      {sign}{formatEuros(detailTx.amount)}
+                    </div>
+                  );
+                })()}
                 {(detailTx as any).reimb_person_name && (
                   <div className={`mt-2 inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border ${
                     (detailTx as any).reimb_status === "reimbursed"
@@ -533,10 +534,9 @@ export default function TransactionList() {
 
             <div className="space-y-4">
               {hasAttachments && <AttachmentsSection txId={detailTx.id} />}
-              {hasAnnotations && <AnnotationsSection txId={detailTx.id} />}
-              {!hasAttachments && !hasAnnotations && (
+              {!hasAttachments && (
                 <div className="text-sm text-[#666]">
-                  Active les modules « Pièces jointes » et « Annotations » dans Paramètres
+                  Active le module « Pièces jointes » dans Paramètres
                   pour enrichir le détail des transactions.
                 </div>
               )}

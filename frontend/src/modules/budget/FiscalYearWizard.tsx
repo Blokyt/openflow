@@ -9,20 +9,16 @@ interface WizardProps {
 }
 
 export default function FiscalYearWizard({ previousYearId, onClose, onCreated }: WizardProps) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2>(1);
   const today = new Date();
   const defaultStart = `${today.getFullYear()}-09-01`;
-  const defaultEnd = `${today.getFullYear() + 1}-08-31`;
 
   const [name, setName] = useState(`${today.getFullYear()}-${today.getFullYear() + 1}`);
   const [startDate, setStartDate] = useState(defaultStart);
-  const [endDate, setEndDate] = useState(defaultEnd);
-  const [isCurrent, setIsCurrent] = useState(true);
+  const [presidentName, setPresidentName] = useState("");
+  const [tresorierName, setTresorierName] = useState("");
 
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [openings, setOpenings] = useState<Record<number, { amount: string; source: string }>>({});
   const [createdFyId, setCreatedFyId] = useState<number | null>(null);
-
   const [copyAllocations, setCopyAllocations] = useState(previousYearId !== null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -32,32 +28,13 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
     setSubmitting(true);
     try {
       const fy = await api.createFiscalYear({
-        name, start_date: startDate, end_date: endDate, is_current: isCurrent,
+        name,
+        start_date: startDate,
+        president_name: presidentName,
+        tresorier_name: tresorierName,
       });
       setCreatedFyId(fy.id);
-      const sugg = await api.getSuggestedOpening(fy.id);
-      setSuggestions(sugg);
-      setOpenings(Object.fromEntries(sugg.map((s) => [s.entity_id, { amount: "", source: "" }])));
       setStep(2);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function goToStep3() {
-    if (!createdFyId) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const entries = suggestions.map((s) => ({
-        entity_id: s.entity_id,
-        amount: parseFloat(openings[s.entity_id]?.amount || String(s.suggested_amount)),
-        source: openings[s.entity_id]?.source || "",
-      }));
-      await api.upsertOpeningBalances(createdFyId, entries);
-      setStep(3);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -92,16 +69,21 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={step === 1 && !createdFyId ? onClose : undefined}>
+    <div
+      className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+      onClick={step === 1 && !createdFyId ? onClose : undefined}
+    >
       <div
-        className="bg-[#0a0a0a] border border-[#222] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-[#0a0a0a] border border-[#222] rounded-2xl max-w-lg w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b border-[#222]">
           <h2 className="text-base font-semibold text-white">
-            Nouvel exercice — étape {step}/3
+            Nouvel exercice — étape {step}/2
           </h2>
-          <button onClick={onClose} className="text-[#666] hover:text-white"><X size={18} /></button>
+          <button onClick={onClose} className="text-[#666] hover:text-white">
+            <X size={18} />
+          </button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -121,105 +103,69 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
                   className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Date de début</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white [color-scheme:dark]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Début</label>
+                  <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">
+                    Président <span className="text-[#555]">(optionnel)</span>
+                  </label>
                   <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white [color-scheme:dark]"
+                    value={presidentName}
+                    onChange={(e) => setPresidentName(e.target.value)}
+                    placeholder="Nom du président"
+                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#444]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Fin</label>
+                  <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">
+                    Trésorier <span className="text-[#555]">(optionnel)</span>
+                  </label>
                   <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white [color-scheme:dark]"
+                    value={tresorierName}
+                    onChange={(e) => setTresorierName(e.target.value)}
+                    placeholder="Nom du trésorier"
+                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#444]"
                   />
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm text-[#B0B0B0]">
-                <input type="checkbox" checked={isCurrent} onChange={(e) => setIsCurrent(e.target.checked)} />
-                Définir comme exercice actif
-              </label>
+              <p className="text-xs text-[#555]">
+                Le mandat restera ouvert jusqu'à ce que tu le closes manuellement.
+              </p>
             </div>
           )}
 
           {step === 2 && (
-            <div className="space-y-2">
-              <p className="text-sm text-[#B0B0B0]">
-                Saisis le vrai solde bancaire de chaque entité au {startDate}.
-                Utilise les valeurs suggérées comme point de départ ou saisis tes relevés réels.
-              </p>
-              <div className="space-y-2">
-                {suggestions.map((s) => (
-                  <div key={s.entity_id} className="flex items-center gap-3 bg-[#111] border border-[#222] rounded-xl p-3">
-                    <div className="flex-1">
-                      <p className="text-sm text-white font-medium">{s.entity_name}</p>
-                      <p className="text-xs text-[#666]">Suggéré : {s.suggested_amount.toFixed(2)} €</p>
-                    </div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder={String(s.suggested_amount)}
-                      value={openings[s.entity_id]?.amount ?? ""}
-                      onChange={(e) =>
-                        setOpenings((p) => ({
-                          ...p,
-                          [s.entity_id]: { ...(p[s.entity_id] ?? { amount: "", source: "" }), amount: e.target.value },
-                        }))
-                      }
-                      className="w-28 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white text-right"
-                    />
-                    <input
-                      type="text"
-                      placeholder="source (optionnel)"
-                      value={openings[s.entity_id]?.source ?? ""}
-                      onChange={(e) =>
-                        setOpenings((p) => ({
-                          ...p,
-                          [s.entity_id]: { ...(p[s.entity_id] ?? { amount: "", source: "" }), source: e.target.value },
-                        }))
-                      }
-                      className="w-40 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
             <div className="space-y-3">
               {previousYearId !== null && (
                 <label className="flex items-center gap-2 text-sm text-[#B0B0B0]">
-                  <input type="checkbox" checked={copyAllocations} onChange={(e) => setCopyAllocations(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={copyAllocations}
+                    onChange={(e) => setCopyAllocations(e.target.checked)}
+                  />
                   Copier les allocations de l'exercice précédent
                 </label>
               )}
               <p className="text-sm text-[#666]">
-                L'exercice est prêt à être créé. Tu pourras affiner allocations et soldes à tout moment.
+                Tu pourras affiner les allocations à tout moment depuis l'onglet Allocation.
               </p>
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-end gap-3 p-5 border-t border-[#222]">
-          {step > 1 && (
-            <button
-              onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
-              className="px-4 py-2 text-sm text-[#B0B0B0] hover:text-white"
-            >
-              Retour
-            </button>
-          )}
           {step === 1 && (
             <button
               onClick={goToStep2}
-              disabled={submitting || !name || !startDate || !endDate}
+              disabled={submitting || !name.trim() || !startDate}
               className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 inline-flex items-center gap-1"
             >
               Suivant <ArrowRight size={14} />
@@ -227,20 +173,11 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
           )}
           {step === 2 && (
             <button
-              onClick={goToStep3}
-              disabled={submitting}
-              className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50"
-            >
-              Suivant
-            </button>
-          )}
-          {step === 3 && (
-            <button
               onClick={finish}
               disabled={submitting}
               className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50"
             >
-              Créer l'exercice
+              Créer le mandat
             </button>
           )}
         </div>

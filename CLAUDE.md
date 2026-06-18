@@ -1,5 +1,18 @@
 # OpenFlow
 
+## Regles d'execution — Claude doit tout faire lui-meme
+
+**Ne jamais demander a l'utilisateur de relancer le serveur, builder le frontend ou lancer les tests.**
+Claude execute directement :
+
+- **Apres tout changement backend** → relancer `python dev.py` (ou verifier que le reload a pris)
+- **Apres tout changement frontend** → `cd frontend && npm run build` (build prod) ou verifier HMR si dev en cours
+- **Apres tout ajout de route ou migration** → `python tools/migrate.py && python tools/check.py`
+- **Apres toute nouvelle fonctionnalite** → `python -m pytest tests/ -v` (ou le fichier de test concerne)
+- **Toujours tuer les anciens processus** avant de relancer : `taskkill /F /IM python.exe` + `taskkill /F /IM node.exe`
+- **Toujours utiliser des chemins absolus** pour `python dev.py` car le CWD peut avoir derive (`cd frontend && ...`)
+- dev.py lance uvicorn --reload (port 8000) + npm dev (port 5173 ou suivant si occupe)
+
 ## Philosophie
 
 OpenFlow est un outil de tresorerie **ultra-modulaire**. Les modules sont des unites
@@ -61,19 +74,6 @@ Toute la logique de calcul de solde est dans `backend/core/balance.py` :
 - `compute_entity_balance()` — solde propre d'une entite
 - `compute_consolidated_balance()` — solde consolide avec enfants
 
-## Systeme d'auth
-
-Le module `multi_users` gere l'authentification et les permissions :
-
-- **`users`** : username + password_hash (bcrypt, min 6 chars) + active
-- **`sessions`** : cookie httponly, token UUID, supprime a la fermeture navigateur
-- **`user_entities`** : `(user_id, entity_id, role)` — role par entite
-- **Roles** : `tresorier` (lire + ecrire) ou `lecteur` (consultation seule)
-- **Tresorier de la racine = admin** — gere les users, la structure, tout
-- **Heritage** : acces a une entite = acces a ses enfants
-- Middleware auth actif dans `main.py` quand `multi_users` est active
-- Sans users en DB → app ouverte (bootstrap du premier admin)
-
 ## Budget & Exercices
 
 Le module `budget` (1.2.0) introduit trois tables :
@@ -106,17 +106,20 @@ Toujours lancer `check.py` apres modification d'un manifest.
 
 Pour creer un module : `python tools/create_module.py <id> --name "..." --description "..."`
 
-## 17 modules disponibles
+## 11 modules disponibles
 
-**Noyau (toujours actifs, 10) :** transactions, categories, dashboard, entities,
-system, annotations, attachments, export, audit, fec_export
+**Noyau (7) :** transactions, categories, dashboard, entities, system, attachments, backup
 
-**Metier (6) :** invoices, reimbursements, budget, tiers, smart_import, backup
-
-**Avance (1) :** multi_users
+**Metier (4) :** reimbursements, budget, tiers, reports
 
 ## Testing
 
+**Regle absolue : toute nouvelle fonctionnalite ou endpoint doit avoir ses tests avant
+d'etre consideree terminee. Un code sans test n'est pas fonctionnel.**
+
+- Chaque nouvel endpoint API → au moins : 200/201 success, 404 si ressource absente, 400 si payload invalide
+- Chaque nouveau champ de reponse → verifier qu'il est present et correct dans les tests
+- Chaque comportement metier → un test qui le capture (ex : contact_name dans list_users apres association)
 - `conftest.py` build une DB template une fois par session, puis la copie par test
 - Chaque test a sa propre DB isolee — jamais de state partage
 - Fixture `client` → TestClient avec DB isolee

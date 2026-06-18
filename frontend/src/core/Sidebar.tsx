@@ -4,12 +4,11 @@ import {
   LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Repeat,
   TrendingUp, GitCompare, Receipt, Settings, FileText, RotateCcw,
   Building2, Users, Paperclip, MessageSquare, Download, Wallet,
-  ShieldCheck, Bell, HandCoins, FileSpreadsheet, UsersRound,
-  ChevronDown, GitBranch, Check, LogOut, Archive, FileUp, Activity,
+  ShieldCheck, Bell, HandCoins, FileSpreadsheet,
+  ChevronDown, GitBranch, Check, Archive, FileUp, Activity, CalendarDays,
 } from "lucide-react";
 import { useEntity } from "./EntityContext";
 import { useFiscalYear } from "./FiscalYearContext";
-import { useAuth } from "./AuthContext";
 import { api } from "../api";
 import { Entity } from "../types";
 import { MODULE_IDS_WITH_ROUTE } from "../routes";
@@ -36,7 +35,6 @@ const ICON_MAP: Record<string, any> = {
   "bell": Bell,
   "hand-coins": HandCoins,
   "file-spreadsheet": FileSpreadsheet,
-  "users-round": UsersRound,
   "git-branch": GitBranch,
   "archive": Archive,
   "file-up": FileUp,
@@ -54,10 +52,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   budget: "/budget",
   tiers: "/tiers",
   reimbursements: "/reimbursements",
-  invoices: "/invoices",
-  multi_users: "/multi-users",
   backup: "/backup",
-  smart_import: "/smart-import",
   system: "/system",
 };
 
@@ -174,6 +169,64 @@ function EntitySelector() {
   );
 }
 
+// ─── Fiscal year selector dropdown ───────────────────────────────────────────
+
+function FiscalYearSelector() {
+  const { years, selectedYear, setSelectedYearId } = useFiscalYear();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (years.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative px-3 pb-3">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[#111] border border-[#222] hover:border-[#333] transition-colors text-sm"
+      >
+        <CalendarDays size={13} className="text-[#F2C48D] flex-shrink-0" strokeWidth={1.5} />
+        <span className="flex-1 truncate text-left text-[#B0B0B0]">
+          {selectedYear ? selectedYear.name : "Aucun exercice"}
+        </span>
+        <ChevronDown
+          size={13}
+          className={`text-[#555] transition-transform flex-shrink-0 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden">
+          <div className="max-h-48 overflow-y-auto py-1">
+            {years.map((y) => (
+              <button
+                key={y.id}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-[#1a1a1a] transition-colors text-left"
+                onClick={() => {
+                  setSelectedYearId(y.id);
+                  setOpen(false);
+                }}
+              >
+                <span className={`flex-1 truncate ${selectedYear?.id === y.id ? "text-[#F2C48D]" : "text-[#B0B0B0]"}`}>
+                  {y.name}{y.end_date === null ? " ●" : ""}
+                </span>
+                {selectedYear?.id === y.id && <Check size={12} className="text-[#F2C48D] flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Nav item component ─────────────────────────────────────────────────────
 
 function NavItem({ to, label, icon: Icon, badge }: { to: string; label: string; icon: any; badge?: number }) {
@@ -213,7 +266,6 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeModules }: SidebarProps) {
-  const { user, logout } = useAuth();
   const [pendingReimbursements, setPendingReimbursements] = useState(0);
 
   const reimbursementsActive = activeModules.some((m) => m.id === "reimbursements");
@@ -265,7 +317,7 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   // registered React route. Prevents ghost tabs when a backend module lacks
   // its frontend component. Complements the check.py invariant.
   const optionalModules = activeModules
-    .filter((m) => !CORE_IDS.includes(m.id) && m.id !== "multi_users")
+    .filter((m) => !CORE_IDS.includes(m.id))
     .filter((m) => m.menu && MODULE_IDS_WITH_ROUTE.has(m.id))
     .sort((a, b) => (a.menu?.position ?? 99) - (b.menu?.position ?? 99));
 
@@ -280,10 +332,6 @@ export default function Sidebar({ activeModules }: SidebarProps) {
       undefined,
   }));
 
-  // Multi-users shown only for admins, at the bottom
-  const isAdmin = user?.role === "admin";
-  const multiUsersActive = activeModules.some((m) => m.id === "multi_users");
-
   return (
     <aside className="w-60 bg-[#080808] border-r border-[#222] flex flex-col h-full flex-shrink-0">
       <div className="px-5 py-6 border-b border-[#222]">
@@ -294,6 +342,7 @@ export default function Sidebar({ activeModules }: SidebarProps) {
       </div>
       <div className="pt-3 border-b border-[#1a1a1a]">
         <EntitySelector />
+        <FiscalYearSelector />
       </div>
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
         {/* Core modules */}
@@ -312,32 +361,9 @@ export default function Sidebar({ activeModules }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Bottom section: admin + settings + user */}
+      {/* Bottom section: settings */}
       <div className="px-3 pb-3 space-y-0.5 border-t border-[#222] pt-3">
-        {isAdmin && multiUsersActive && (
-          <NavItem to="/multi-users" label="Utilisateurs" icon={UsersRound} />
-        )}
         <NavItem to="/settings" label="Paramètres" icon={Settings} />
-
-        {user && (
-          <div className="mt-2 pt-2 border-t border-[#1a1a1a]">
-            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a]">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-white truncate">
-                  {user.display_name || user.username}
-                </p>
-                <p className="text-[10px] text-[#555] capitalize">{user.role}</p>
-              </div>
-              <button
-                onClick={logout}
-                className="text-[#555] hover:text-[#FF5252] transition-colors p-1 flex-shrink-0"
-                title="Se déconnecter"
-              >
-                <LogOut size={14} strokeWidth={1.5} />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </aside>
   );

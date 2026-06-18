@@ -3,7 +3,6 @@ import {
   Activity, HardDrive, Database, FileUp, Archive, AlertTriangle,
   Check, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
 } from "lucide-react";
-import AuditSection from "../audit/AuditSection";
 
 interface SystemStatus {
   version: string;
@@ -18,7 +17,6 @@ interface SystemStatus {
     tables_count?: number;
     transactions?: number;
     entities?: number;
-    users?: number;
     modules?: { id: string; version: string }[];
     error?: string;
   };
@@ -53,6 +51,7 @@ function formatAge(seconds: number): string {
 }
 
 export default function SystemPage() {
+  const isAdmin = true;
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [pristine, setPristine] = useState<PristineCheck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,11 +209,10 @@ export default function SystemPage() {
           <Database size={15} /> Base de données
         </h2>
         {status.db.connected ? (
-          <div className="grid grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-3 gap-3 text-sm">
             <div><span className="text-[#666]">Tables</span><p className="text-white font-medium">{status.db.tables_count}</p></div>
             <div><span className="text-[#666]">Transactions</span><p className="text-white font-medium">{status.db.transactions}</p></div>
             <div><span className="text-[#666]">Entités</span><p className="text-white font-medium">{status.db.entities}</p></div>
-            <div><span className="text-[#666]">Utilisateurs</span><p className="text-white font-medium">{status.db.users}</p></div>
           </div>
         ) : (
           <p className="text-red-400 text-sm">Connexion impossible: {status.db.error}</p>
@@ -234,13 +232,15 @@ export default function SystemPage() {
                 Créez un snapshot de l'état actuel pour pouvoir réparer plus tard.
               </p>
             </div>
-            <button
-              onClick={() => createPristine(false)}
-              disabled={action === "pristine"}
-              className="px-4 py-2 bg-[#F2C48D] text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-sm"
-            >
-              {action === "pristine" ? "Création..." : "Créer le snapshot"}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => createPristine(false)}
+                disabled={action === "pristine"}
+                className="px-4 py-2 bg-[#F2C48D] text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-sm"
+              >
+                {action === "pristine" ? "Création..." : "Créer le snapshot"}
+              </button>
+            )}
           </div>
         ) : pristine ? (
           <>
@@ -253,15 +253,17 @@ export default function SystemPage() {
                 )}
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => createPristine(true)}
-                  disabled={action !== ""}
-                  className="px-3 py-1.5 text-xs border border-[#333] text-[#999] hover:text-white rounded-lg transition-colors"
-                  title="Écraser le snapshot avec l'état actuel"
-                >
-                  <RefreshCw size={12} className="inline mr-1" />
-                  Mettre à jour
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => createPristine(true)}
+                    disabled={action !== ""}
+                    className="px-3 py-1.5 text-xs border border-[#333] text-[#999] hover:text-white rounded-lg transition-colors"
+                    title="Écraser le snapshot avec l'état actuel — réservé à l'admin"
+                  >
+                    <RefreshCw size={12} className="inline mr-1" />
+                    Mettre à jour
+                  </button>
+                )}
                 {!pristine.healthy && (
                   <button
                     onClick={doRepair}
@@ -402,8 +404,6 @@ export default function SystemPage() {
           </button>
         </div>
       </section>
-
-      <AuditSection />
     </div>
   );
 }

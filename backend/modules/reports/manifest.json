@@ -1,0 +1,20 @@
+{
+  "id": "reports",
+  "name": "Rapports",
+  "description": "Compte de résultat et bilan simplifié pour l'assemblée générale",
+  "help": "Génère le compte de résultat (produits/charges par catégorie) et le bilan de trésorerie pour l'assemblée générale. Accepte une période libre (start_date/end_date) ou un exercice fiscal (fiscal_year_id).",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "categories", "entities"],
+  "menu": {
+    "label": "Rapports",
+    "icon": "file-bar-chart",
+    "position": 17
+  },
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {},
+  "example": "Je génère le compte de résultat du BDA pour l'exercice 2025-2026 : 12 500 € de produits (cotisations + billetterie), 9 200 € de charges, excédent de 3 300 €."
+}

@@ -11,20 +11,14 @@ entity:
   type: association
   vat_enabled: false
 modules:
-  annotations: true
   attachments: true
-  audit: true
   backup: true
   budget: false
   categories: true
   dashboard: true
   entities: true
-  export: true
-  fec_export: true
-  invoices: false
-  multi_users: true
   reimbursements: false
-  smart_import: true
+  reports: false
   system: true
   tiers: false
   transactions: true

@@ -7,11 +7,19 @@ REMOVED_MODULE_IDS = {
     "alerts",
     "multi_accounts",
     "divisions",
-    "bank_reconciliation",
     "forecasting",
     "tax_receipts",
-    "grants",
     "recurring",
+    "mandates",
+    "invoices",
+    "grants",
+    "members",
+    "bank_reconciliation",
+    "fec_export",
+    "annotations",
+    "smart_import",
+    "audit",
+    "multi_users",
 }
 
 # Fichiers qui ont le droit de mentionner ces ids (routes/registry).

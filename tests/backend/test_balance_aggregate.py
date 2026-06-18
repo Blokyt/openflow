@@ -1,31 +1,30 @@
-"""Tests for aggregate balance mode (Sujet 2.1).
+"""Tests pour le mode de solde agrégé (Sujet 2.1).
 
-Sign convention in OpenFlow:
-  - amount > 0  → money flowing INTO to_entity_id
-  - amount < 0  → money flowing OUT OF from_entity_id
-    (when negative, the to_entity_id also sees the negative amount as incoming,
-     reducing its balance — by design for internal allocations)
+Convention (refonte C1+C2) :
+  - `amount` est un entier de centimes, TOUJOURS POSITIF.
+  - Le sens vient de from_entity_id -> to_entity_id :
+      recette  = from EXTERNE -> to INTERNE
+      dépense  = from INTERNE -> to EXTERNE
+      virement = INTERNE -> INTERNE
+  - Solde propre = reference + SUM(amount où to=X) - SUM(amount où from=X).
 
-Scenario:
-  Root  (aggregate mode) — ref 2025-01-01 = 10000 (consolidated bank statement)
-  ├── A (own mode)        — ref 2025-01-01 = 4000
-  └── B (own mode)        — ref 2025-01-01 = 3000
+Scénario :
+  Root  (mode aggregate) — ref 2025-01-01 = 10000 centimes
+  ├── A (mode own)        — ref 2025-01-01 = 4000 centimes
+  └── B (mode own)        — ref 2025-01-01 = 3000 centimes
 
-Transactions after 2025-01-01:
-  - 2025-02-01: external → A   +500  (subtree external inflow)
-  - 2025-02-15: A → external   -200  (subtree external outflow, from_entity=A, amount=-200)
-  - 2025-03-01: A → B          -1000 (internal allocation, amount=-1000 per sign convention)
+Transactions (après 2025-01-01, en centimes) :
+  - 2025-02-01 : ext -> A   amount=500   (recette : entrée externe dans le sous-arbre)
+  - 2025-02-15 : A   -> ext amount=200   (dépense : sortie externe du sous-arbre)
+  - 2025-03-01 : A   -> B   amount=1000  (virement interne, montant positif)
 
-Expected results (per actual sign convention):
-  A.own  = 4000 + 500 - 200 - 1000 = 3300
-           (incoming SUM(amount WHERE to=A) = 500; outgoing SUM(ABS WHERE from=A,<0) = 200+1000)
-  B.own  = 3000 + (-1000) = 2000
-           (incoming SUM(amount WHERE to=B) = -1000)
-  Root.consolidated (aggregate):
-         = 10000 + 500 (external in, crosses subtree boundary) - 200 (external out) = 10300
-         The A→B internal transfer does NOT cross the boundary → ignored ✓
+Résultats attendus :
+  A.own  = 4000 + 500 (to=A) - 200 (from=A, tx ext) - 1000 (from=A, tx B) = 3300
+  B.own  = 3000 + 1000 (to=B, virement A→B) = 4000
+  Root.consolidated (aggregate) = 10000 + 500 (entrée externe) - 200 (sortie externe) = 10300
+    (le virement A→B est interne au sous-arbre → ignoré)
   Root.own = Root.consolidated - A.consolidated - B.consolidated
-           = 10300 - 3300 - 2000 = 5000
+           = 10300 - 3300 - 4000 = 3000
 """
 import sqlite3
 import pytest
@@ -35,11 +34,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 # ---------------------------------------------------------------------------
-# Helpers to build a self-contained DB
+# Helpers pour construire une DB autonome
 # ---------------------------------------------------------------------------
 
 def _make_db(tmp_path):
-    """Create a minimal test DB with balance_mode column."""
+    """Crée une DB de test minimale avec la colonne balance_mode."""
     db = tmp_path / "agg_test.db"
     conn = sqlite3.connect(str(db))
     conn.row_factory = sqlite3.Row
@@ -60,7 +59,7 @@ def _make_db(tmp_path):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
         label TEXT NOT NULL,
-        amount REAL NOT NULL,
+        amount INTEGER NOT NULL,
         from_entity_id INTEGER,
         to_entity_id INTEGER
     )""")
@@ -69,9 +68,12 @@ def _make_db(tmp_path):
 
 
 def _seed(conn):
-    """Seed the scenario described in the module docstring."""
-    # Entities: root=1 (aggregate), A=2 (own, child of root), B=3 (own, child of root)
-    # external=99 used as the external counterpart
+    """Insère le scénario décrit dans la docstring du module.
+
+    Tous les montants sont positifs. Le sens est encodé via from/to.
+    ext=99 est l'entité externe de référence.
+    """
+    # Entités : root=1 (aggregate), A=2 (own, enfant de root), B=3 (own, enfant de root)
     conn.execute(
         "INSERT INTO entities (id, name, type, parent_id, balance_mode) VALUES (1, 'Root', 'internal', NULL, 'aggregate')"
     )
@@ -85,7 +87,7 @@ def _seed(conn):
         "INSERT INTO entities (id, name, type, parent_id, balance_mode) VALUES (99, 'External', 'external', NULL, 'own')"
     )
 
-    # Balance refs
+    # Références de solde (en centimes)
     conn.execute(
         "INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (1, '2025-01-01', 10000, '2025-01-01')"
     )
@@ -96,28 +98,28 @@ def _seed(conn):
         "INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (3, '2025-01-01', 3000, '2025-01-01')"
     )
 
-    # Transactions
-    # external → A +500 (external inflow)
+    # Transactions (montants positifs, sens via from/to)
+    # ext -> A : recette 500 centimes
     conn.execute(
         "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-02-01', 'ext-A', 500, 99, 2)"
     )
-    # A → external -200 (external outflow; from_entity=A, amount<0)
+    # A -> ext : dépense 200 centimes
     conn.execute(
-        "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-02-15', 'A-ext', -200, 2, 99)"
+        "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-02-15', 'A-ext', 200, 2, 99)"
     )
-    # A → B -1000 (internal allocation; amount=-1000 per sign convention)
+    # A -> B : virement interne 1000 centimes
     conn.execute(
-        "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-03-01', 'A-B', -1000, 2, 3)"
+        "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-03-01', 'A-B', 1000, 2, 3)"
     )
     conn.commit()
 
 
 # ---------------------------------------------------------------------------
-# Direct balance.py function tests
+# Tests directs sur les fonctions de balance.py
 # ---------------------------------------------------------------------------
 
 class TestAggregateDirect:
-    """Test balance functions directly against a seeded connection."""
+    """Tests des fonctions balance.py sur une connexion seedée."""
 
     def setup_method(self, method):
         import tempfile
@@ -131,31 +133,31 @@ class TestAggregateDirect:
     def test_child_A_own_balance(self):
         from backend.core.balance import compute_entity_balance
         result = compute_entity_balance(self.conn, 2)
-        # A: ref=4000
-        # incoming: SUM(amount WHERE to_entity=A) = 500 (ext→A)
-        # outgoing: SUM(ABS WHERE from_entity=A AND amount<0) = 200 (A→ext) + 1000 (A→B) = 1200
-        # balance = 4000 + 500 - 1200 = 3300
+        # A : ref=4000
+        # entrées  (to=A)   : 500 (ext→A)
+        # sorties  (from=A) : 200 (A→ext) + 1000 (A→B) = 1200
+        # solde = 4000 + 500 - 1200 = 3300
         assert result["balance"] == pytest.approx(3300.0)
         assert result["mode"] == "own"
 
     def test_child_B_own_balance(self):
         from backend.core.balance import compute_entity_balance
         result = compute_entity_balance(self.conn, 3)
-        # B: ref=3000
-        # incoming: SUM(amount WHERE to_entity=B) = -1000 (A→B, amount=-1000)
-        # outgoing: SUM(ABS WHERE from_entity=B AND amount<0) = 0
-        # balance = 3000 + (-1000) = 2000
-        assert result["balance"] == pytest.approx(2000.0)
+        # B : ref=3000
+        # entrées  (to=B)   : 1000 (A→B, montant positif)
+        # sorties  (from=B) : 0
+        # solde = 3000 + 1000 = 4000
+        assert result["balance"] == pytest.approx(4000.0)
         assert result["mode"] == "own"
 
     def test_root_consolidated_balance(self):
         from backend.core.balance import compute_consolidated_balance
         result = compute_consolidated_balance(self.conn, 1)
-        # Root aggregate: ref=10000
-        # External inflow: amount=500, to_entity=A (in subtree), from_entity=99 (NOT in subtree) → +500
-        # External outflow: amount=-200, from_entity=A (in subtree), to_entity=99 (NOT in subtree) → -200
-        # A→B: both A and B are in subtree → NOT an external crossing → ignored
-        # consolidated = 10000 + 500 - 200 = 10300
+        # Root aggregate : ref=10000
+        # Entrée externe : amount=500, to=A (dans sous-arbre), from=99 (hors sous-arbre) -> +500
+        # Sortie externe : amount=200, from=A (dans sous-arbre), to=99 (hors sous-arbre) -> -200
+        # A->B : les deux sont dans le sous-arbre -> ignoré
+        # consolidé = 10000 + 500 - 200 = 10300
         assert result["consolidated_balance"] == pytest.approx(10300.0)
         assert result["mode"] == "aggregate"
 
@@ -163,9 +165,8 @@ class TestAggregateDirect:
         from backend.core.balance import compute_entity_balance
         result = compute_entity_balance(self.conn, 1)
         # Root.own = Root.consolidated - A.consolidated - B.consolidated
-        # A.consolidated = 3300, B.consolidated = 2000
-        # Root.own = 10300 - 3300 - 2000 = 5000
-        assert result["balance"] == pytest.approx(5000.0)
+        # = 10300 - 3300 - 4000 = 3000
+        assert result["balance"] == pytest.approx(3000.0)
         assert result["mode"] == "aggregate"
 
     def test_root_consolidated_children_detail(self):
@@ -173,40 +174,36 @@ class TestAggregateDirect:
         result = compute_consolidated_balance(self.conn, 1)
         children_by_id = {c["entity_id"]: c for c in result["children"]}
         assert children_by_id[2]["consolidated_balance"] == pytest.approx(3300.0)
-        assert children_by_id[3]["consolidated_balance"] == pytest.approx(2000.0)
+        assert children_by_id[3]["consolidated_balance"] == pytest.approx(4000.0)
 
     def test_root_own_balance_in_consolidated(self):
         from backend.core.balance import compute_consolidated_balance
         result = compute_consolidated_balance(self.conn, 1)
-        assert result["own_balance"] == pytest.approx(5000.0)
+        assert result["own_balance"] == pytest.approx(3000.0)
 
     def test_internal_transfer_no_aggregate_impact(self):
-        """A→B transfer should not move Root.consolidated (both sides in subtree)."""
+        """Le virement A->B ne doit pas modifier Root.consolidated (les deux côtés sont dans le sous-arbre)."""
         from backend.core.balance import compute_consolidated_balance
-        # Without the internal transfer, consolidated would be:
-        # 10000 + 500 (ext in) - 200 (ext out) = 10300
-        # With A→B (-1000): still 10300 — internal boundary not crossed
+        # Sans le virement : 10000 + 500 - 200 = 10300
+        # Avec le virement A->B (interne) : toujours 10300
         result = compute_consolidated_balance(self.conn, 1)
         assert result["consolidated_balance"] == pytest.approx(10300.0)
 
     def test_as_of_date_before_any_tx(self):
         from backend.core.balance import compute_consolidated_balance
-        # As of 2025-01-01 (reference date itself) — all tx are strictly after
+        # Au 2025-01-15 : aucune tx (toutes sont 2025-02+), consolidé = ref seul = 10000
         result = compute_consolidated_balance(self.conn, 1, as_of_date="2025-01-15")
-        # No tx before 2025-01-15 (all tx are 2025-02-01+) but ref date 2025-01-01 means >= 2025-01-01
-        # So as_of=2025-01-15 filters tx <= 2025-01-15, but tx are all 2025-02+, none pass
         assert result["consolidated_balance"] == pytest.approx(10000.0)
 
     def test_as_of_date_partial(self):
         from backend.core.balance import compute_consolidated_balance
-        # As of 2025-02-10: only +500 (ext→A, 2025-02-01) has happened; A→ext (-200) is 2025-02-15
+        # Au 2025-02-10 : seule ext→A (500, 2025-02-01) a eu lieu ; A→ext (2025-02-15) pas encore
         result = compute_consolidated_balance(self.conn, 1, as_of_date="2025-02-10")
         assert result["consolidated_balance"] == pytest.approx(10500.0)
 
     def test_no_ref_defaults_zero(self):
-        """An aggregate entity with no ref defaults to external_delta only."""
+        """Une entité aggregate sans référence utilise ref=0 (delta externe uniquement)."""
         from backend.core.balance import compute_consolidated_balance
-        # Remove root's ref
         self.conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = 1")
         self.conn.commit()
         result = compute_consolidated_balance(self.conn, 1)
@@ -215,11 +212,11 @@ class TestAggregateDirect:
 
 
 # ---------------------------------------------------------------------------
-# API endpoint tests (via TestClient)
+# Tests via l'API (TestClient)
 # ---------------------------------------------------------------------------
 
 class TestAggregateAPI:
-    """Test the /api/entities/{id}/balance and /consolidated endpoints."""
+    """Tests des endpoints /api/entities/{id}/balance et /consolidated."""
 
     @pytest.fixture(autouse=True)
     def setup_client(self, client_and_db):
@@ -230,7 +227,7 @@ class TestAggregateAPI:
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc).isoformat()
 
-        # Create root (aggregate)
+        # Root (aggregate)
         cur = conn.execute(
             "INSERT INTO entities (name, type, parent_id, is_default, is_divers, color, position, balance_mode, created_at, updated_at) "
             "VALUES ('TestRoot', 'internal', NULL, 0, 0, '#6B7280', 10, 'aggregate', ?, ?)",
@@ -238,7 +235,7 @@ class TestAggregateAPI:
         )
         self.root_id = cur.lastrowid
 
-        # Create child A (own)
+        # Enfant A (own)
         cur = conn.execute(
             "INSERT INTO entities (name, type, parent_id, is_default, is_divers, color, position, balance_mode, created_at, updated_at) "
             "VALUES ('TestA', 'internal', ?, 0, 0, '#6B7280', 11, 'own', ?, ?)",
@@ -246,7 +243,7 @@ class TestAggregateAPI:
         )
         self.a_id = cur.lastrowid
 
-        # Create child B (own)
+        # Enfant B (own)
         cur = conn.execute(
             "INSERT INTO entities (name, type, parent_id, is_default, is_divers, color, position, balance_mode, created_at, updated_at) "
             "VALUES ('TestB', 'internal', ?, 0, 0, '#6B7280', 12, 'own', ?, ?)",
@@ -254,7 +251,7 @@ class TestAggregateAPI:
         )
         self.b_id = cur.lastrowid
 
-        # Create external entity
+        # Entité externe
         cur = conn.execute(
             "INSERT INTO entities (name, type, parent_id, is_default, is_divers, color, position, balance_mode, created_at, updated_at) "
             "VALUES ('TestExt', 'external', NULL, 0, 0, '#6B7280', 13, 'own', ?, ?)",
@@ -262,7 +259,7 @@ class TestAggregateAPI:
         )
         self.ext_id = cur.lastrowid
 
-        # Balance refs
+        # Références de solde (centimes)
         conn.execute(
             "INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (?, '2025-01-01', 10000, ?)",
             (self.root_id, now),
@@ -276,17 +273,20 @@ class TestAggregateAPI:
             (self.b_id, now),
         )
 
-        # Transactions — full schema requires created_at and updated_at
+        # Transactions (montants positifs, sens via from/to)
+        # ext -> A : recette 500 centimes
         conn.execute(
             "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id, created_at, updated_at) VALUES ('2025-02-01', 'ext-A', 500, ?, ?, ?, ?)",
             (self.ext_id, self.a_id, now, now),
         )
+        # A -> ext : dépense 200 centimes
         conn.execute(
-            "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id, created_at, updated_at) VALUES ('2025-02-15', 'A-ext', -200, ?, ?, ?, ?)",
+            "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id, created_at, updated_at) VALUES ('2025-02-15', 'A-ext', 200, ?, ?, ?, ?)",
             (self.a_id, self.ext_id, now, now),
         )
+        # A -> B : virement interne 1000 centimes
         conn.execute(
-            "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id, created_at, updated_at) VALUES ('2025-03-01', 'A-B', -1000, ?, ?, ?, ?)",
+            "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id, created_at, updated_at) VALUES ('2025-03-01', 'A-B', 1000, ?, ?, ?, ?)",
             (self.a_id, self.b_id, now, now),
         )
         conn.commit()
@@ -296,18 +296,21 @@ class TestAggregateAPI:
         r = self.client.get(f"/api/entities/{self.a_id}/balance")
         assert r.status_code == 200
         data = r.json()
+        # A : 4000 + 500 - 1200 = 3300
         assert pytest.approx(data["balance"], abs=0.01) == 3300.0
 
     def test_api_child_b_balance(self):
         r = self.client.get(f"/api/entities/{self.b_id}/balance")
         assert r.status_code == 200
         data = r.json()
-        assert pytest.approx(data["balance"], abs=0.01) == 2000.0
+        # B : 3000 + 1000 = 4000
+        assert pytest.approx(data["balance"], abs=0.01) == 4000.0
 
     def test_api_root_consolidated(self):
         r = self.client.get(f"/api/entities/{self.root_id}/consolidated")
         assert r.status_code == 200
         data = r.json()
+        # Root aggregate : 10000 + 500 - 200 = 10300
         assert pytest.approx(data["consolidated_balance"], abs=0.01) == 10300.0
         assert data.get("mode") == "aggregate"
 
@@ -315,17 +318,18 @@ class TestAggregateAPI:
         r = self.client.get(f"/api/entities/{self.root_id}/balance")
         assert r.status_code == 200
         data = r.json()
-        assert pytest.approx(data["balance"], abs=0.01) == 5000.0
+        # Root.own = 10300 - 3300 - 4000 = 3000
+        assert pytest.approx(data["balance"], abs=0.01) == 3000.0
         assert data.get("mode") == "aggregate"
 
     def test_api_root_consolidated_own_balance(self):
         r = self.client.get(f"/api/entities/{self.root_id}/consolidated")
         assert r.status_code == 200
         data = r.json()
-        assert pytest.approx(data["own_balance"], abs=0.01) == 5000.0
+        assert pytest.approx(data["own_balance"], abs=0.01) == 3000.0
 
     def test_api_create_aggregate_root(self):
-        """Creating a root entity with balance_mode='aggregate' should succeed."""
+        """Créer une entité racine en balance_mode='aggregate' doit réussir."""
         r = self.client.post("/api/entities/", json={
             "name": "AnotherRoot",
             "type": "internal",
@@ -335,7 +339,7 @@ class TestAggregateAPI:
         assert r.json()["balance_mode"] == "aggregate"
 
     def test_api_create_aggregate_child_rejected(self):
-        """Creating a child entity with balance_mode='aggregate' should fail."""
+        """Créer un enfant en balance_mode='aggregate' doit échouer (400)."""
         r = self.client.post("/api/entities/", json={
             "name": "ChildAggregate",
             "type": "internal",
@@ -358,7 +362,7 @@ class TestAggregateAPI:
         assert r.json()["balance_mode"] == "aggregate"
 
     def test_api_update_balance_mode_to_aggregate(self):
-        """Updating a root entity's balance_mode to aggregate should succeed."""
+        """Mettre à jour le balance_mode d'une entité racine en 'aggregate' doit réussir."""
         r = self.client.post("/api/entities/", json={
             "name": "UpdateTestRoot",
             "type": "internal",
@@ -370,17 +374,17 @@ class TestAggregateAPI:
         assert r.json()["balance_mode"] == "aggregate"
 
     def test_api_update_child_to_aggregate_rejected(self):
-        """Updating a child entity's balance_mode to aggregate should fail."""
+        """Mettre à jour le balance_mode d'un enfant en 'aggregate' doit échouer (400)."""
         r = self.client.put(f"/api/entities/{self.a_id}", json={"balance_mode": "aggregate"})
         assert r.status_code == 400
 
 
 # ---------------------------------------------------------------------------
-# Regression: own-mode behaviour unchanged
+# Régression : mode 'own' inchangé
 # ---------------------------------------------------------------------------
 
 class TestOwnModeRegression:
-    """Verify 'own' mode is unaffected when no entity uses aggregate mode."""
+    """Vérifie que le mode 'own' est inchangé quand aucune entité n'utilise aggregate."""
 
     def _make_own_db(self, tmp_path):
         conn = _make_db(tmp_path)
@@ -399,11 +403,13 @@ class TestOwnModeRegression:
         conn.execute(
             "INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (2, '2025-01-01', 500, '2025-01-01')"
         )
+        # Recette pour Parent : ext(99) -> Parent(1), 200 centimes
         conn.execute(
             "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-01', 'Don', 200, 99, 1)"
         )
+        # Dépense pour Child : Child(2) -> ext(99), 100 centimes
         conn.execute(
-            "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-02', 'Dep', -100, 2, 99)"
+            "INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-02', 'Dep', 100, 2, 99)"
         )
         conn.commit()
         return conn
@@ -413,6 +419,7 @@ class TestOwnModeRegression:
         conn = self._make_own_db(tmp_path)
         result = compute_entity_balance(conn, 1)
         conn.close()
+        # Parent : 1000 + 200 (entrée) - 0 (aucune sortie de 1) = 1200
         assert result["balance"] == pytest.approx(1200.0)
         assert result["mode"] == "own"
 
@@ -421,5 +428,8 @@ class TestOwnModeRegression:
         conn = self._make_own_db(tmp_path)
         result = compute_consolidated_balance(conn, 1)
         conn.close()
+        # Parent propre : 1200
+        # Child propre  : 500 + 0 - 100 = 400
+        # Consolidé     : 1200 + 400 = 1600
         assert result["own_balance"] == pytest.approx(1200.0)
         assert result["consolidated_balance"] == pytest.approx(1600.0)

@@ -92,22 +92,38 @@ def apply_migrations(conn, module_id, migrations, installed_version, target_vers
         print(f"  Module '{module_id}': already at version {target_version}, nothing to do.")
         return
 
+    # Chaque version est appliquée dans UNE transaction atomique (commit si OK,
+    # rollback complet sinon) : une migration interrompue ne laisse jamais la
+    # base dans un état partiel. La version installée est enregistrée dans la
+    # même transaction que ses instructions.
     for version, sql_statements in pending:
         print(f"  Module '{module_id}': applying migration {version}...")
-        for sql in sql_statements:
-            sql = sql.strip()
-            if not sql:
-                continue
-            try:
-                conn.execute(sql)
-            except sqlite3.OperationalError as e:
-                if "already exists" in str(e):
-                    print(f"    Skipping (already exists): {sql[:60]}...")
-                else:
-                    raise
-        conn.commit()
+        try:
+            with conn:  # BEGIN ... COMMIT (ROLLBACK si exception)
+                for sql in sql_statements:
+                    sql = sql.strip()
+                    if not sql:
+                        continue
+                    try:
+                        conn.execute(sql)
+                    except sqlite3.OperationalError as e:
+                        if "already exists" in str(e):
+                            print(f"    Skipping (already exists): {sql[:60]}...")
+                        else:
+                            raise
+                now = datetime.utcnow().isoformat()
+                conn.execute(
+                    """INSERT INTO _modules (id, installed_version, updated_at)
+                       VALUES (?, ?, ?)
+                       ON CONFLICT(id) DO UPDATE SET
+                           installed_version = excluded.installed_version,
+                           updated_at = excluded.updated_at""",
+                    (module_id, version, now),
+                )
+        except Exception:
+            print(f"  Module '{module_id}': migration {version} ÉCHOUÉE, rollback effectué.", file=sys.stderr)
+            raise
 
-    set_installed_version(conn, module_id, target_version)
     print(f"  Module '{module_id}': migrated to version {target_version}.")
 
 

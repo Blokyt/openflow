@@ -18,7 +18,8 @@ def _create_entity(client, name, type_="internal", **kwargs):
     return resp.json()
 
 
-def _create_tx(client, label="TX", amount=100.0, **kwargs):
+def _create_tx(client, label="TX", amount=10000, **kwargs):
+    """Crée une transaction via l'API. amount en centimes, toujours positif."""
     payload = {"date": "2025-06-01", "label": label, "amount": amount, **kwargs}
     resp = client.post("/api/transactions/", json=payload)
     assert resp.status_code == 201, resp.text
@@ -34,10 +35,11 @@ def test_create_transaction_with_entity_ids(client):
     root = _create_entity(client, "Root")
     ext = _create_entity(client, "External", type_="external")
 
+    # 500,00 € = 50000 centimes ; sens recette : from externe -> to interne
     resp = client.post("/api/transactions/", json={
         "date": "2025-06-01",
         "label": "Sale",
-        "amount": 500.0,
+        "amount": 50000,
         "from_entity_id": ext["id"],
         "to_entity_id": root["id"],
     })
@@ -53,7 +55,7 @@ def test_create_transaction_without_entity_ids(client):
     resp = client.post("/api/transactions/", json={
         "date": "2025-06-01",
         "label": "Legacy TX",
-        "amount": 100.0,
+        "amount": 10000,
         "from_entity_id": None,
         "to_entity_id": None,
     })
@@ -63,10 +65,11 @@ def test_create_transaction_without_entity_ids(client):
 def test_create_transaction_with_unknown_entity(client):
     """Create transaction with non-existing entity → 400."""
     root = _create_entity(client, "RootUnknown")
+    # 1,00 € = 100 centimes
     resp = client.post("/api/transactions/", json={
         "date": "2025-06-01",
         "label": "Bad",
-        "amount": 1.0,
+        "amount": 100,
         "from_entity_id": root["id"],
         "to_entity_id": 99999,
     })
@@ -90,12 +93,13 @@ def test_filter_transactions_by_entity_id(client):
     """Filter by entity_id returns only transactions involving that entity."""
     root = _create_entity(client, "Root2")
     other = _create_entity(client, "Other", type_="external")
-    unrelated = _create_entity(client, "Unrelated", type_="external")
+    unrelated_a = _create_entity(client, "UnrelatedA", type_="external")
+    unrelated_b = _create_entity(client, "UnrelatedB", type_="internal")
 
     # Transaction involving root
     tx1 = _create_tx(client, label="TX with root", from_entity_id=other["id"], to_entity_id=root["id"])
-    # Transaction NOT involving root
-    _create_tx(client, label="TX without root", from_entity_id=unrelated["id"], to_entity_id=unrelated["id"])
+    # Transaction NOT involving root : deux entités distinctes sans root
+    _create_tx(client, label="TX without root", from_entity_id=unrelated_a["id"], to_entity_id=unrelated_b["id"])
 
     resp = client.get(f"/api/transactions/?entity_id={root['id']}")
     assert resp.status_code == 200
@@ -111,8 +115,10 @@ def test_filter_by_entity_id_matches_from_or_to(client):
     root = _create_entity(client, "BothSides")
     ext = _create_entity(client, "Ext1", type_="external")
 
+    # Recette : from externe -> to interne
     tx_as_to = _create_tx(client, label="income", from_entity_id=ext["id"], to_entity_id=root["id"])
-    tx_as_from = _create_tx(client, label="expense", amount=-100.0, from_entity_id=root["id"], to_entity_id=ext["id"])
+    # Dépense : from interne -> to externe (montant positif, sens via from/to)
+    tx_as_from = _create_tx(client, label="expense", amount=10000, from_entity_id=root["id"], to_entity_id=ext["id"])
 
     resp = client.get(f"/api/transactions/?entity_id={root['id']}")
     assert resp.status_code == 200
@@ -126,13 +132,15 @@ def test_filter_by_entity_id_include_children(client):
     parent = _create_entity(client, "ParentEnt")
     child = _create_entity(client, "ChildEnt", parent_id=parent["id"])
     ext = _create_entity(client, "ExtForChildren", type_="external")
+    # Entité distincte pour la transaction "non liée" (ne peut pas être ext->ext)
+    other_int = _create_entity(client, "OtherIntForChildren", type_="internal")
 
     # Transaction linked to child
     tx_child = _create_tx(client, label="child tx", from_entity_id=ext["id"], to_entity_id=child["id"])
     # Transaction linked to parent directly
     tx_parent = _create_tx(client, label="parent tx", from_entity_id=ext["id"], to_entity_id=parent["id"])
-    # Unrelated transaction
-    _create_tx(client, label="unrelated", from_entity_id=ext["id"], to_entity_id=ext["id"])
+    # Unrelated transaction (deux entités distinctes sans parent ni child)
+    _create_tx(client, label="unrelated", from_entity_id=ext["id"], to_entity_id=other_int["id"])
 
     resp = client.get(f"/api/transactions/?entity_id={parent['id']}&include_children=true")
     assert resp.status_code == 200
@@ -207,6 +215,8 @@ def test_migration_helper_backfill(client_and_db):
     from backend.modules.entities.migration_helper import run_backfill
 
     # Insert legacy transactions directly (API now enforces from/to — we simulate pre-migration rows)
+    # Ces lignes pré-migration utilisent encore l'ancienne convention (montants signés)
+    # pour que run_backfill puisse inférer le sens via le signe.
     now = "2025-01-15T00:00:00"
     conn_seed = sqlite3.connect(str(db_path))
     conn_seed.execute(

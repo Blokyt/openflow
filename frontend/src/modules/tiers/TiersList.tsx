@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
-import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users, GitMerge, AlertTriangle } from "lucide-react";
 import EmptyState from "../../core/EmptyState";
+import { formatEuros } from "../../utils/format";
 
 const BASE_URL = "/api";
-const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+const PAGE_SIZE = 80;
 
 async function apiTiers<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}/tiers${path}`, {
@@ -38,23 +39,11 @@ interface Transaction {
 
 type ContactForm = Omit<Contact, "id" | "created_at" | "updated_at">;
 
-const emptyForm: ContactForm = {
-  name: "",
-  type: "other",
-  email: "",
-  phone: "",
-  address: "",
-  notes: "",
-};
+const emptyForm: ContactForm = { name: "", type: "other", email: "", phone: "", address: "", notes: "" };
 
 const TYPE_LABELS: Record<string, string> = {
-  client: "Client",
-  fournisseur: "Fournisseur",
-  membre: "Membre",
-  sponsor: "Sponsor",
-  other: "Autre",
+  client: "Client", fournisseur: "Fournisseur", membre: "Membre", sponsor: "Sponsor", other: "Autre",
 };
-
 const TYPE_COLORS: Record<string, string> = {
   client: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   fournisseur: "bg-orange-500/15 text-orange-400 border-orange-500/30",
@@ -63,12 +52,24 @@ const TYPE_COLORS: Record<string, string> = {
   other: "bg-[#222] text-[#B0B0B0] border-[#333]",
 };
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function TiersList() {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const debouncedSearch = useDebounce(search, 320);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [form, setForm] = useState<ContactForm>(emptyForm);
@@ -77,66 +78,82 @@ export default function TiersList() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [txnsLoading, setTxnsLoading] = useState(false);
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSearch, setMergeSearch] = useState("");
+  const [mergeTarget, setMergeTarget] = useState<Contact | null>(null);
+  const [merging, setMerging] = useState(false);
 
-  const fetchContacts = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (typeFilter) params.set("type", typeFilter);
-    const query = params.toString() ? `?${params.toString()}` : "";
-    apiTiers<Contact[]>(`/${query}`)
-      .then(setContacts)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [search, typeFilter]);
+  // All contacts cache for merge picker (loaded once, no pagination)
+  const [allContacts, setAllContacts] = useState<Contact[]>([]);
+  const allContactsLoaded = useRef(false);
 
-  useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
-
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyForm);
-    setShowForm(true);
-    setSelected(null);
+  function buildQuery(offset = 0) {
+    const p = new URLSearchParams();
+    if (debouncedSearch) p.set("search", debouncedSearch);
+    if (typeFilter) p.set("type", typeFilter);
+    p.set("limit", String(PAGE_SIZE));
+    p.set("offset", String(offset));
+    return `/?${p.toString()}`;
   }
 
+  const fetchContacts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiTiers<{ total: number; items: Contact[] }>(buildQuery(0));
+      setContacts(data.items);
+      setTotal(data.total);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, typeFilter]);
+
+  useEffect(() => { fetchContacts(); }, [fetchContacts]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await apiTiers<{ total: number; items: Contact[] }>(buildQuery(contacts.length));
+      setContacts((prev) => [...prev, ...data.items]);
+      setTotal(data.total);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function ensureAllContacts() {
+    if (allContactsLoaded.current) return;
+    try {
+      const data = await apiTiers<{ total: number; items: Contact[] }>("/?limit=10000&offset=0");
+      setAllContacts(data.items);
+      allContactsLoaded.current = true;
+    } catch {}
+  }
+
+  function openCreate() { setEditing(null); setForm(emptyForm); setShowForm(true); setSelected(null); }
   function openEdit(c: Contact) {
     setEditing(c);
-    setForm({
-      name: c.name,
-      type: c.type,
-      email: c.email,
-      phone: c.phone,
-      address: c.address,
-      notes: c.notes,
-    });
+    setForm({ name: c.name, type: c.type, email: c.email, phone: c.phone, address: c.address, notes: c.notes });
     setShowForm(true);
     setSelected(null);
   }
-
-  function cancelForm() {
-    setShowForm(false);
-    setEditing(null);
-    setForm(emptyForm);
-  }
+  function cancelForm() { setShowForm(false); setEditing(null); setForm(emptyForm); }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
       if (editing) {
-        await apiTiers(`/${editing.id}`, {
-          method: "PUT",
-          body: JSON.stringify(form),
-        });
+        await apiTiers(`/${editing.id}`, { method: "PUT", body: JSON.stringify(form) });
       } else {
-        await apiTiers("/", {
-          method: "POST",
-          body: JSON.stringify(form),
-        });
+        await apiTiers("/", { method: "POST", body: JSON.stringify(form) });
       }
       cancelForm();
+      allContactsLoaded.current = false;
       fetchContacts();
     } catch (e: any) {
       setError(e.message);
@@ -149,8 +166,9 @@ export default function TiersList() {
     try {
       await apiTiers(`/${id}`, { method: "DELETE" });
       setConfirmDelete(null);
-      fetchContacts();
       if (selected?.id === id) setSelected(null);
+      allContactsLoaded.current = false;
+      fetchContacts();
     } catch (e: any) {
       setError(e.message);
     }
@@ -159,6 +177,9 @@ export default function TiersList() {
   async function openDetail(c: Contact) {
     setSelected(c);
     setShowForm(false);
+    setMergeMode(false);
+    setMergeTarget(null);
+    setMergeSearch("");
     setTxnsLoading(true);
     try {
       const data = await apiTiers<Transaction[]>(`/${c.id}/transactions`);
@@ -171,6 +192,36 @@ export default function TiersList() {
     }
   }
 
+  async function handleMerge() {
+    if (!selected || !mergeTarget) return;
+    setMerging(true);
+    try {
+      await apiTiers(`/${selected.id}/merge-into/${mergeTarget.id}`, { method: "POST" });
+      setSelected(null);
+      setMergeMode(false);
+      setMergeTarget(null);
+      allContactsLoaded.current = false;
+      fetchContacts();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  function openMergeMode() {
+    setMergeMode(true);
+    ensureAllContacts();
+  }
+
+  const mergeFiltered = mergeSearch.length >= 2
+    ? allContacts.filter(
+        (c) => c.id !== selected?.id && c.name.toLowerCase().includes(mergeSearch.toLowerCase())
+      )
+    : [];
+
+  const hasMore = contacts.length < total;
+
   const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
   const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
 
@@ -178,17 +229,10 @@ export default function TiersList() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
-            Contacts
-          </h1>
-          <p className="text-sm text-[#666] mt-1">
-            Clients, fournisseurs, membres, sponsors.
-          </p>
+          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Contacts</h1>
+          <p className="text-sm text-[#666] mt-1">Clients, fournisseurs, membres, sponsors.</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
-        >
+        <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
           <Plus size={15} /> Ajouter
         </button>
       </div>
@@ -196,9 +240,7 @@ export default function TiersList() {
       {error && (
         <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
-            <X size={16} />
-          </button>
+          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={16} /></button>
         </div>
       )}
 
@@ -226,39 +268,28 @@ export default function TiersList() {
           <option value="other">Autre</option>
         </select>
         {(search || typeFilter) && (
-          <button
-            onClick={() => { setSearch(""); setTypeFilter(""); }}
-            className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
-          >
+          <button onClick={() => { setSearch(""); setTypeFilter(""); }} className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors">
             <X size={14} /> Effacer
           </button>
+        )}
+        {!loading && (
+          <span className="text-xs text-[#555]">
+            {contacts.length < total ? `${contacts.length} / ${total}` : `${total}`} contact{total > 1 ? "s" : ""}
+          </span>
         )}
       </div>
 
       {showForm && (
         <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
-          <h2 className="text-base font-semibold text-white mb-5">
-            {editing ? "Modifier le contact" : "Nouveau contact"}
-          </h2>
+          <h2 className="text-base font-semibold text-white mb-5">{editing ? "Modifier le contact" : "Nouveau contact"}</h2>
           <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Nom</label>
-              <input
-                type="text"
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className={inputClass}
-                placeholder="Nom du contact"
-              />
+              <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="Nom du contact" />
             </div>
             <div>
               <label className={labelClass}>Type</label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className={inputClass}
-              >
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={inputClass}>
                 <option value="client">Client</option>
                 <option value="fournisseur">Fournisseur</option>
                 <option value="membre">Membre</option>
@@ -268,59 +299,23 @@ export default function TiersList() {
             </div>
             <div>
               <label className={labelClass}>Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={inputClass}
-                placeholder="exemple@mail.fr"
-              />
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputClass} placeholder="exemple@mail.fr" />
             </div>
             <div>
               <label className={labelClass}>Téléphone</label>
-              <input
-                type="tel"
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className={inputClass}
-                placeholder="06 00 00 00 00"
-              />
+              <input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputClass} placeholder="06 00 00 00 00" />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Adresse</label>
-              <input
-                type="text"
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                className={inputClass}
-                placeholder="Rue, ville, code postal…"
-              />
+              <input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputClass} placeholder="Rue, ville, code postal…" />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className={inputClass}
-                rows={3}
-                placeholder="(optionnel)"
-              />
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} rows={3} placeholder="(optionnel)" />
             </div>
             <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={cancelForm}
-                className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
-              >
-                {saving ? "Enregistrement..." : "Enregistrer"}
-              </button>
+              <button type="button" onClick={cancelForm} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
+              <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">{saving ? "Enregistrement..." : "Enregistrer"}</button>
             </div>
           </form>
         </div>
@@ -330,100 +325,88 @@ export default function TiersList() {
         <EmptyState
           icon={Users}
           title="Aucun contact pour l'instant"
-          description="Ton carnet d'adresses : sponsors, fournisseurs, membres, organismes. Lie tes transactions à un contact pour suivre les flux par tiers."
-          examples={[
-            "Schneider Electric (sponsor) — email pour relances",
-            "Marie Dupont (membre) — pour les remboursements",
-          ]}
+          description="Ton carnet d'adresses : sponsors, fournisseurs, membres, organismes."
+          examples={["Schneider Electric (sponsor)", "Marie Dupont (membre)"]}
           ctaLabel="Ajouter mon premier contact"
           onCta={openCreate}
         />
       ) : (
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#1a1a1a]">
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Nom</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Type</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Téléphone</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contacts.map((c, idx) => (
-                <tr
-                  key={c.id}
-                  onClick={() => openDetail(c)}
-                  className={`cursor-pointer hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
-                >
-                  <td className="px-5 py-3.5 font-medium text-white">{c.name}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${TYPE_COLORS[c.type] || TYPE_COLORS.other}`}>
-                      {TYPE_LABELS[c.type] || c.type}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">
-                    {c.email || <span className="text-[#444]">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">
-                    {c.phone || <span className="text-[#444]">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    {confirmDelete === c.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-[#666]">Supprimer ?</span>
-                        <button
-                          onClick={() => handleDelete(c.id)}
-                          className="text-xs font-medium text-[#FF5252] hover:text-red-400"
-                        >
-                          Oui
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(null)}
-                          className="text-xs font-medium text-[#666] hover:text-white"
-                        >
-                          Non
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => openEdit(c)}
-                          className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
-                          title="Modifier"
-                        >
-                          <Pencil size={14} strokeWidth={1.5} />
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(c.id)}
-                          className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 size={14} strokeWidth={1.5} />
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+            </div>
+          ) : (
+            <>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#1a1a1a]">
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Nom</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Type</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Téléphone</th>
+                    <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.map((c, idx) => (
+                    <tr
+                      key={c.id}
+                      onClick={() => openDetail(c)}
+                      className={`cursor-pointer hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
+                    >
+                      <td className="px-5 py-3.5 font-medium text-white">{c.name}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${TYPE_COLORS[c.type] || TYPE_COLORS.other}`}>
+                          {TYPE_LABELS[c.type] || c.type}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-[#B0B0B0]">{c.email || <span className="text-[#444]">—</span>}</td>
+                      <td className="px-5 py-3.5 text-[#B0B0B0]">{c.phone || <span className="text-[#444]">—</span>}</td>
+                      <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        {confirmDelete === c.id ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="text-xs text-[#666]">Supprimer ?</span>
+                            <button onClick={() => handleDelete(c.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
+                            <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#666] hover:text-white">Non</button>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <button onClick={() => openEdit(c)} className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors" title="Modifier">
+                              <Pencil size={14} strokeWidth={1.5} />
+                            </button>
+                            <button onClick={() => setConfirmDelete(c.id)} className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
+                              <Trash2 size={14} strokeWidth={1.5} />
+                            </button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {hasMore && (
+                <div className="border-t border-[#1a1a1a] px-5 py-4 flex items-center justify-between">
+                  <span className="text-xs text-[#555]">{contacts.length} affichés sur {total}</span>
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-4 py-2 text-sm font-medium text-[#F2C48D] border border-[#F2C48D]/30 rounded-full hover:bg-[#F2C48D]/10 disabled:opacity-50 transition-colors"
+                  >
+                    {loadingMore ? "Chargement…" : `Charger ${Math.min(PAGE_SIZE, total - contacts.length)} de plus`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
 
+      {/* Panneau de détail */}
       {selected && (
         <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setSelected(null)}>
-          <div
-            className="w-full max-w-md bg-[#0a0a0a] border-l border-[#222] h-full overflow-y-auto p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="w-full max-w-md bg-[#0a0a0a] border-l border-[#222] h-full overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h2 className="text-xl font-bold text-white">{selected.name}</h2>
@@ -431,12 +414,7 @@ export default function TiersList() {
                   {TYPE_LABELS[selected.type] || selected.type}
                 </span>
               </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="text-[#666] hover:text-white p-1"
-              >
-                <X size={18} />
-              </button>
+              <button onClick={() => setSelected(null)} className="text-[#666] hover:text-white p-1"><X size={18} /></button>
             </div>
 
             <div className="space-y-3 mb-6">
@@ -459,16 +437,12 @@ export default function TiersList() {
                 </div>
               )}
               {selected.notes && (
-                <div className="mt-3 text-sm text-[#B0B0B0] bg-[#111] border border-[#222] rounded-xl p-3">
-                  {selected.notes}
-                </div>
+                <div className="mt-3 text-sm text-[#B0B0B0] bg-[#111] border border-[#222] rounded-xl p-3">{selected.notes}</div>
               )}
             </div>
 
-            <div className="border-t border-[#1a1a1a] pt-4">
-              <h3 className="text-sm font-semibold text-white mb-3">
-                Transactions liées ({txns.length})
-              </h3>
+            <div className="border-t border-[#1a1a1a] pt-4 mb-6">
+              <h3 className="text-sm font-semibold text-white mb-3">Transactions liées ({txns.length})</h3>
               {txnsLoading ? (
                 <div className="py-4 text-center text-[#666] text-sm">Chargement…</div>
               ) : txns.length === 0 ? (
@@ -482,7 +456,7 @@ export default function TiersList() {
                         <div className="text-xs text-[#666]">{t.date}</div>
                       </div>
                       <div className={`text-sm font-semibold ${t.amount >= 0 ? "text-emerald-400" : "text-[#FF5252]"}`}>
-                        {eurFormatter.format(t.amount)}
+                        {formatEuros(t.amount)}
                       </div>
                     </div>
                   ))}
@@ -490,11 +464,67 @@ export default function TiersList() {
               )}
             </div>
 
+            <div className="border-t border-[#1a1a1a] pt-4">
+              {!mergeMode ? (
+                <button onClick={openMergeMode} className="flex items-center gap-2 text-sm text-[#666] hover:text-[#F2C48D] transition-colors">
+                  <GitMerge size={14} /> Fusionner avec un autre contact…
+                </button>
+              ) : mergeTarget ? (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={15} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-300 leading-relaxed">
+                      <span className="font-semibold">{selected.name}</span> sera supprimé. Toutes ses transactions, remboursements et factures seront réattribués à <span className="font-semibold">{mergeTarget.name}</span>. Irréversible.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleMerge} disabled={merging} className="flex-1 px-4 py-2 text-sm font-semibold text-black bg-amber-400 rounded-full hover:bg-amber-300 disabled:opacity-50 transition-colors">
+                      {merging ? "Fusion..." : "Confirmer la fusion"}
+                    </button>
+                    <button onClick={() => setMergeTarget(null)} className="px-4 py-2 text-sm text-[#666] border border-[#333] rounded-full hover:text-white transition-colors">
+                      Changer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-[#666] mb-2">Fusionner <span className="text-white">{selected.name}</span> dans :</p>
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666]" />
+                    <input
+                      type="text"
+                      value={mergeSearch}
+                      onChange={(e) => setMergeSearch(e.target.value)}
+                      placeholder="Rechercher le contact cible…"
+                      autoFocus
+                      className="w-full bg-[#111] border border-[#333] rounded-xl pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder-[#444]"
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {mergeSearch.length < 2 ? (
+                      <p className="text-xs text-[#555] px-3 py-2">Tape au moins 2 caractères…</p>
+                    ) : mergeFiltered.length === 0 ? (
+                      <p className="text-xs text-[#555] px-3 py-2">Aucun résultat</p>
+                    ) : mergeFiltered.slice(0, 20).map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setMergeTarget(c)}
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#1a1a1a] rounded-lg transition-colors flex items-center justify-between"
+                      >
+                        <span>{c.name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full border ${TYPE_COLORS[c.type] || TYPE_COLORS.other}`}>
+                          {TYPE_LABELS[c.type] || c.type}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => setMergeMode(false)} className="text-xs text-[#555] hover:text-white transition-colors">Annuler</button>
+                </div>
+              )}
+            </div>
+
             <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => openEdit(selected)}
-                className="flex-1 px-4 py-2 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
-              >
+              <button onClick={() => openEdit(selected)} className="flex-1 px-4 py-2 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
                 Modifier
               </button>
             </div>

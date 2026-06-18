@@ -54,7 +54,7 @@ def test_check_dependencies_satisfied():
     from backend.core.module_loader import check_dependencies
     manifests = [
         {**VALID_MANIFEST, "id": "transactions", "dependencies": []},
-        {**VALID_MANIFEST, "id": "invoices", "dependencies": ["transactions"]},
+        {**VALID_MANIFEST, "id": "reimbursements", "dependencies": ["transactions"]},
     ]
     errors = check_dependencies(manifests)
     assert errors == []
@@ -62,7 +62,7 @@ def test_check_dependencies_satisfied():
 def test_check_dependencies_missing():
     from backend.core.module_loader import check_dependencies
     manifests = [
-        {**VALID_MANIFEST, "id": "invoices", "dependencies": ["transactions"]},
+        {**VALID_MANIFEST, "id": "reimbursements", "dependencies": ["transactions"]},
     ]
     errors = check_dependencies(manifests)
     assert len(errors) > 0

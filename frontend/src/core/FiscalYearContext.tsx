@@ -5,9 +5,10 @@ export interface FiscalYear {
   id: number;
   name: string;
   start_date: string;
-  end_date: string;
-  is_current: number;
+  end_date: string | null;
   notes: string;
+  president_name?: string;
+  tresorier_name?: string;
 }
 
 interface FiscalYearContextType {
@@ -56,7 +57,7 @@ export function FiscalYearProvider({ children }: { children: ReactNode }) {
     else localStorage.setItem("openflow_fiscal_year_id", String(id));
   }, []);
 
-  const currentYear = years.find((y) => y.is_current === 1) ?? null;
+  const currentYear = years.find((y) => y.end_date === null) ?? null;
   const selectedYear =
     (selectedYearId ? years.find((y) => y.id === selectedYearId) : null) ?? currentYear;
 

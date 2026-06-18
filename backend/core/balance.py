@@ -1,4 +1,16 @@
-"""Centralized balance computation for OpenFlow entities."""
+"""Calcul centralisé des soldes d'entités OpenFlow.
+
+Convention (refonte C1) : `amount` est TOUJOURS positif. Le sens d'une
+transaction vient UNIQUEMENT de from_entity_id -> to_entity_id :
+  - entrée pour X : transactions où to_entity_id = X
+  - sortie pour X : transactions où from_entity_id = X
+Solde propre d'une entité = reference + SUM(entrées) - SUM(sorties).
+
+Ce modèle gère correctement les trois cas, y compris les virements internes
+(from interne -> to interne), contrairement à l'ancien modèle basé sur le signe.
+Les montants sont des entiers de centimes (refonte C2), mais ce module est
+agnostique à l'unité : il ne fait que des sommes et des différences.
+"""
 import sqlite3
 from typing import Optional
 
@@ -6,9 +18,11 @@ from backend.core.config import load_config
 
 
 def compute_legacy_balance(conn: sqlite3.Connection, config_path: str) -> dict:
-    """Backward-compatible balance: reference_amount + SUM(transactions) since reference_date.
+    """Solde global rétro-compatible pour les modules non entity-aware.
 
-    Used by modules not yet entity-aware. Returns same shape as the old endpoints.
+    Avec des entités internes : net = entrées depuis l'extérieur - sorties vers
+    l'extérieur, agrégé sur toutes les entités internes. Sans entité (très
+    anciens installs) : somme brute des montants.
     """
     try:
         config = load_config(config_path)
@@ -18,7 +32,26 @@ def compute_legacy_balance(conn: sqlite3.Connection, config_path: str) -> dict:
         reference_amount = 0.0
         reference_date = None
 
-    if reference_date:
+    internal = [r[0] for r in conn.execute(
+        "SELECT id FROM entities WHERE type = 'internal'"
+    ).fetchall()]
+
+    if internal:
+        ph = ",".join("?" * len(internal))
+        date_clause = " AND date >= ?" if reference_date else ""
+        params = list(internal) + list(internal) + ([reference_date] if reference_date else [])
+        incoming = conn.execute(
+            f"SELECT COALESCE(SUM(amount), 0) FROM transactions "
+            f"WHERE to_entity_id IN ({ph}) AND from_entity_id NOT IN ({ph}){date_clause}",
+            params,
+        ).fetchone()[0]
+        outgoing = conn.execute(
+            f"SELECT COALESCE(SUM(amount), 0) FROM transactions "
+            f"WHERE from_entity_id IN ({ph}) AND to_entity_id NOT IN ({ph}){date_clause}",
+            params,
+        ).fetchone()[0]
+        total = incoming - outgoing
+    elif reference_date:
         total = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE date >= ?",
             (reference_date,),
@@ -44,7 +77,6 @@ def _get_balance_mode(conn: sqlite3.Connection, entity_id: int) -> str:
         ).fetchone()
         if not row:
             return "own"
-        # Handle both sqlite3.Row and plain tuple
         try:
             return row["balance_mode"] if row["balance_mode"] else "own"
         except (IndexError, TypeError):
@@ -53,25 +85,9 @@ def _get_balance_mode(conn: sqlite3.Connection, entity_id: int) -> str:
         return "own"
 
 
-def _compute_aggregate_consolidated(
-    conn: sqlite3.Connection,
-    entity_id: int,
-    as_of_date: Optional[str] = None,
-) -> dict:
-    """For an aggregate-mode entity, consolidated = ref + external-tx deltas on subtree.
-
-    'External' means transactions that cross the subtree boundary (one side inside,
-    the other outside). Internal transfers between subtree members are ignored.
-    """
-    ref = conn.execute(
-        "SELECT reference_date, reference_amount FROM entity_balance_refs WHERE entity_id = ?",
-        (entity_id,),
-    ).fetchone()
-    reference_amount = ref["reference_amount"] if ref else 0.0
-    reference_date = ref["reference_date"] if ref else None
-
-    # Build full subtree of internal entities
-    subtree = [
+def _subtree_ids(conn: sqlite3.Connection, entity_id: int) -> list:
+    """IDs de l'entité et de tous ses descendants internes (CTE récursive)."""
+    return [
         row[0] for row in conn.execute(
             """WITH RECURSIVE tree(id) AS (
                    SELECT ? UNION ALL
@@ -81,9 +97,28 @@ def _compute_aggregate_consolidated(
             (entity_id,),
         ).fetchall()
     ]
+
+
+def _compute_aggregate_consolidated(
+    conn: sqlite3.Connection,
+    entity_id: int,
+    as_of_date: Optional[str] = None,
+) -> dict:
+    """Pour une entité en mode 'aggregate', le consolidé = ref + flux externes
+    du sous-arbre (transactions qui traversent la frontière du sous-arbre).
+    Les transferts internes au sous-arbre s'annulent et sont ignorés.
+    """
+    ref = conn.execute(
+        "SELECT reference_date, reference_amount FROM entity_balance_refs WHERE entity_id = ?",
+        (entity_id,),
+    ).fetchone()
+    reference_amount = ref["reference_amount"] if ref else 0
+    reference_date = ref["reference_date"] if ref else None
+
+    subtree = _subtree_ids(conn, entity_id)
     placeholders = ",".join("?" * len(subtree))
 
-    # Incoming: to_entity in subtree, from_entity NOT in subtree
+    # Entrant : to dans le sous-arbre, from hors du sous-arbre.
     conds_in = [
         f"to_entity_id IN ({placeholders})",
         f"from_entity_id NOT IN ({placeholders})",
@@ -100,11 +135,10 @@ def _compute_aggregate_consolidated(
         params_in,
     ).fetchone()[0]
 
-    # Outgoing: from_entity in subtree, to_entity NOT in subtree, amount < 0
+    # Sortant : from dans le sous-arbre, to hors du sous-arbre.
     conds_out = [
         f"from_entity_id IN ({placeholders})",
         f"to_entity_id NOT IN ({placeholders})",
-        "amount < 0",
     ]
     params_out = list(subtree) + list(subtree)
     if reference_date:
@@ -114,27 +148,25 @@ def _compute_aggregate_consolidated(
         conds_out.append("date <= ?")
         params_out.append(as_of_date)
     outgoing = conn.execute(
-        f"SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions WHERE {' AND '.join(conds_out)}",
+        f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {' AND '.join(conds_out)}",
         params_out,
     ).fetchone()[0]
 
     external_delta = incoming - outgoing
     consolidated = reference_amount + external_delta
 
-    # Compute children consolidated for own_balance derivation
     children = []
     for row in conn.execute(
         "SELECT id FROM entities WHERE parent_id = ? AND type = 'internal'", (entity_id,)
     ).fetchall():
         child_id = row[0] if isinstance(row, tuple) else row["id"]
-        child_c = compute_consolidated_balance(conn, child_id, as_of_date)
-        children.append(child_c)
+        children.append(compute_consolidated_balance(conn, child_id, as_of_date))
 
     own_balance = consolidated - sum(c["consolidated_balance"] for c in children)
 
     return {
         "entity_id": entity_id,
-        "balance": consolidated,  # alias for compat
+        "balance": consolidated,
         "consolidated_balance": consolidated,
         "own_balance": own_balance,
         "reference_amount": reference_amount,
@@ -150,11 +182,7 @@ def compute_entity_balance(
     entity_id: int,
     as_of_date: Optional[str] = None,
 ) -> dict:
-    """Compute balance for an internal entity: reference + incoming - outgoing.
-
-    For 'own' mode: direct transactions only.
-    For 'aggregate' mode: own = consolidated - sum(children.consolidated).
-    """
+    """Solde propre d'une entité interne : reference + entrées - sorties."""
     mode = _get_balance_mode(conn, entity_id)
 
     if mode == "aggregate":
@@ -170,17 +198,16 @@ def compute_entity_balance(
             "mode": "aggregate",
         }
 
-    # --- 'own' mode (unchanged logic) ---
+    # --- mode 'own' ---
     ref = conn.execute(
         "SELECT reference_date, reference_amount FROM entity_balance_refs WHERE entity_id = ?",
         (entity_id,),
     ).fetchone()
-
-    reference_amount = ref["reference_amount"] if ref else 0.0
+    reference_amount = ref["reference_amount"] if ref else 0
     reference_date = ref["reference_date"] if ref else None
 
     conditions_in = ["to_entity_id = ?"]
-    conditions_out = ["from_entity_id = ?", "amount < 0"]
+    conditions_out = ["from_entity_id = ?"]
     params_in = [entity_id]
     params_out = [entity_id]
 
@@ -195,23 +222,14 @@ def compute_entity_balance(
         params_in.append(as_of_date)
         params_out.append(as_of_date)
 
-    where_in = " AND ".join(conditions_in)
-    where_out = " AND ".join(conditions_out)
-
-    try:
-        incoming = conn.execute(
-            f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {where_in}",
-            params_in,
-        ).fetchone()[0]
-
-        outgoing = conn.execute(
-            f"SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions WHERE {where_out}",
-            params_out,
-        ).fetchone()[0]
-    except Exception:
-        # from_entity_id / to_entity_id columns not yet added (Task 4)
-        incoming = 0.0
-        outgoing = 0.0
+    incoming = conn.execute(
+        f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {' AND '.join(conditions_in)}",
+        params_in,
+    ).fetchone()[0]
+    outgoing = conn.execute(
+        f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {' AND '.join(conditions_out)}",
+        params_out,
+    ).fetchone()[0]
 
     transactions_sum = incoming - outgoing
 
@@ -230,32 +248,18 @@ def compute_consolidated_balance(
     entity_id: int,
     as_of_date: Optional[str] = None,
 ) -> dict:
-    """Consolidated balance: own + all descendant internal entities (recursive CTE).
-
-    For aggregate-mode entities, delegates to _compute_aggregate_consolidated
-    which treats the ref as the full subtree's consolidated value.
-    """
+    """Solde consolidé : propre + tous les descendants internes."""
     mode = _get_balance_mode(conn, entity_id)
 
     if mode == "aggregate":
         return _compute_aggregate_consolidated(conn, entity_id, as_of_date)
 
-    # --- 'own' mode (unchanged logic) ---
-    rows = conn.execute(
-        """WITH RECURSIVE tree(id) AS (
-            SELECT ? UNION ALL
-            SELECT e.id FROM entities e JOIN tree t ON e.parent_id = t.id
-            WHERE e.type = 'internal'
-        ) SELECT id FROM tree""",
-        (entity_id,),
-    ).fetchall()
-
+    ids = _subtree_ids(conn, entity_id)
     own = compute_entity_balance(conn, entity_id, as_of_date)
     children = []
     consolidated = own["balance"]
 
-    for row in rows:
-        eid = row[0] if isinstance(row, tuple) else row["id"]
+    for eid in ids:
         if eid != entity_id:
             child_bal = compute_entity_balance(conn, eid, as_of_date)
             children.append(child_bal)
@@ -276,17 +280,15 @@ def compute_entity_balance_for_period(
     end_date: str,
     opening: float = 0.0,
 ) -> dict:
-    """Realized flow and closing balance for an entity on a date interval.
+    """Flux réalisé et solde de clôture d'une entité sur un intervalle de dates.
 
-    Uses the same sign convention as compute_entity_balance:
-        net = SUM(amount when to_entity=entity) + SUM(amount when from_entity=entity AND amount<0)
-
-    Returns {opening, realized, closing}.
+    net = SUM(amount entrant : to=entity) - SUM(amount sortant : from=entity)
+    Renvoie {opening, realized, closing}.
     """
     row = conn.execute(
         """SELECT COALESCE(SUM(CASE
                 WHEN to_entity_id = ? THEN amount
-                WHEN from_entity_id = ? AND amount < 0 THEN amount
+                WHEN from_entity_id = ? THEN -amount
                 ELSE 0
             END), 0) AS realized
            FROM transactions

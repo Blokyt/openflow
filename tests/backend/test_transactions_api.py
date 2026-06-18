@@ -16,7 +16,8 @@ def test_list_transactions_empty(client):
 
 def test_create_transaction(client, entity_pair):
     src, dst = entity_pair
-    tx = {"date": "2026-01-15", "label": "Achat", "amount": -45.50, "from_entity_id": src, "to_entity_id": dst}
+    # 45,50 € = 4550 centimes ; sens dépense : from externe -> to interne
+    tx = {"date": "2026-01-15", "label": "Achat", "amount": 4550, "from_entity_id": src, "to_entity_id": dst}
     response = client.post("/api/transactions/", json=tx)
     assert response.status_code == 201
     assert response.json()["label"] == "Achat"
@@ -24,20 +25,23 @@ def test_create_transaction(client, entity_pair):
 
 def test_get_transaction(client, entity_pair):
     src, dst = entity_pair
-    tx = client.post("/api/transactions/", json={"date": "2026-01-15", "label": "Test", "amount": 100.0, "from_entity_id": src, "to_entity_id": dst}).json()
+    # 100,00 € = 10000 centimes
+    tx = client.post("/api/transactions/", json={"date": "2026-01-15", "label": "Test", "amount": 10000, "from_entity_id": src, "to_entity_id": dst}).json()
     response = client.get(f"/api/transactions/{tx['id']}")
     assert response.status_code == 200
 
 def test_update_transaction(client, entity_pair):
     src, dst = entity_pair
-    tx = client.post("/api/transactions/", json={"date": "2026-01-15", "label": "Old", "amount": 50.0, "from_entity_id": src, "to_entity_id": dst}).json()
+    # 50,00 € = 5000 centimes
+    tx = client.post("/api/transactions/", json={"date": "2026-01-15", "label": "Old", "amount": 5000, "from_entity_id": src, "to_entity_id": dst}).json()
     response = client.put(f"/api/transactions/{tx['id']}", json={"label": "New"})
     assert response.status_code == 200
     assert response.json()["label"] == "New"
 
 def test_delete_transaction(client, entity_pair):
     src, dst = entity_pair
-    tx = client.post("/api/transactions/", json={"date": "2026-01-15", "label": "Del", "amount": -10.0, "from_entity_id": src, "to_entity_id": dst}).json()
+    # 10,00 € = 1000 centimes
+    tx = client.post("/api/transactions/", json={"date": "2026-01-15", "label": "Del", "amount": 1000, "from_entity_id": src, "to_entity_id": dst}).json()
     response = client.delete(f"/api/transactions/{tx['id']}")
     assert response.status_code == 200
     assert client.get(f"/api/transactions/{tx['id']}").status_code == 404
@@ -54,28 +58,28 @@ def test_list_transactions_reimb_status_filter(client_and_db):
     dst = client.post("/api/entities/", json={"name": "Dst", "type": "internal"}).json()
     src_id, dst_id = src["id"], dst["id"]
 
-    # Create 3 transactions
+    # Create 3 transactions (montants en centimes, tous positifs)
     tx_pending = client.post("/api/transactions/", json={
-        "date": "2026-01-01", "label": "Pending", "amount": -10.0,
+        "date": "2026-01-01", "label": "Pending", "amount": 1000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
     tx_reimbursed = client.post("/api/transactions/", json={
-        "date": "2026-01-02", "label": "Reimbursed", "amount": -20.0,
+        "date": "2026-01-02", "label": "Reimbursed", "amount": 2000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
     tx_none = client.post("/api/transactions/", json={
-        "date": "2026-01-03", "label": "NoReimb", "amount": -30.0,
+        "date": "2026-01-03", "label": "NoReimb", "amount": 3000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
 
-    # Attach reimbursements
+    # Attach reimbursements (montants en centimes)
     client.post("/api/reimbursements/", json={
         "transaction_id": tx_pending["id"], "person_name": "Alice",
-        "amount": 10.0, "status": "pending",
+        "amount": 1000, "status": "pending",
     })
     client.post("/api/reimbursements/", json={
         "transaction_id": tx_reimbursed["id"], "person_name": "Bob",
-        "amount": 20.0, "status": "reimbursed",
+        "amount": 2000, "status": "reimbursed",
     })
 
     # Filter: pending → only tx_pending
@@ -108,44 +112,44 @@ def test_list_transactions_reimb_status_filter(client_and_db):
 
 
 def test_list_transactions_amount_filter(client_and_db):
-    """amount_min / amount_max filter on ABS(amount)."""
+    """amount_min / amount_max filter sur les montants en centimes."""
     client, _ = client_and_db
     src = client.post("/api/entities/", json={"name": "Src", "type": "external"}).json()
     dst = client.post("/api/entities/", json={"name": "Dst", "type": "internal"}).json()
     src_id, dst_id = src["id"], dst["id"]
 
-    # Create transactions with various amounts
+    # Montants en centimes : 30 € = 3000, 75 € = 7500, 200 € = 20000
     tx_small = client.post("/api/transactions/", json={
-        "date": "2026-01-01", "label": "Small", "amount": -30.0,
+        "date": "2026-01-01", "label": "Small", "amount": 3000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
     tx_medium = client.post("/api/transactions/", json={
-        "date": "2026-01-02", "label": "Medium", "amount": 75.0,
+        "date": "2026-01-02", "label": "Medium", "amount": 7500,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
     tx_large = client.post("/api/transactions/", json={
-        "date": "2026-01-03", "label": "Large", "amount": -200.0,
+        "date": "2026-01-03", "label": "Large", "amount": 20000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
 
-    # amount_min=100 → only tx_large (abs(-200) >= 100)
-    r = client.get("/api/transactions/?amount_min=100")
+    # amount_min=10000 → only tx_large (20000 >= 10000)
+    r = client.get("/api/transactions/?amount_min=10000")
     assert r.status_code == 200
     ids = [t["id"] for t in r.json()]
     assert tx_large["id"] in ids
     assert tx_medium["id"] not in ids
     assert tx_small["id"] not in ids
 
-    # amount_max=50 → only tx_small (abs(-30) <= 50)
-    r = client.get("/api/transactions/?amount_max=50")
+    # amount_max=5000 → only tx_small (3000 <= 5000)
+    r = client.get("/api/transactions/?amount_max=5000")
     assert r.status_code == 200
     ids = [t["id"] for t in r.json()]
     assert tx_small["id"] in ids
     assert tx_medium["id"] not in ids
     assert tx_large["id"] not in ids
 
-    # amount_min=50 & amount_max=100 → only tx_medium (abs(75) in [50, 100])
-    r = client.get("/api/transactions/?amount_min=50&amount_max=100")
+    # amount_min=5000 & amount_max=10000 → only tx_medium (7500 in [5000, 10000])
+    r = client.get("/api/transactions/?amount_min=5000&amount_max=10000")
     assert r.status_code == 200
     ids = [t["id"] for t in r.json()]
     assert tx_medium["id"] in ids
@@ -153,7 +157,7 @@ def test_list_transactions_amount_filter(client_and_db):
     assert tx_large["id"] not in ids
 
     # amount_min > amount_max → 400
-    r = client.get("/api/transactions/?amount_min=200&amount_max=50")
+    r = client.get("/api/transactions/?amount_min=20000&amount_max=5000")
     assert r.status_code == 400
 
 
@@ -175,8 +179,9 @@ def test_create_transaction_with_payer(client_and_db, contact_and_entities):
     client, db_path = client_and_db
     contact_id, src_id, dst_id = contact_and_entities
 
+    # 50,00 € = 5000 centimes
     r = client.post("/api/transactions/", json={
-        "date": "2026-01-15", "label": "Achat avancé", "amount": -50.0,
+        "date": "2026-01-15", "label": "Achat avancé", "amount": 5000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
         "payer_contact_id": contact_id,
     })
@@ -194,7 +199,8 @@ def test_create_transaction_with_payer(client_and_db, contact_and_entities):
     assert rembo is not None
     assert rembo["contact_id"] == contact_id
     assert rembo["status"] == "pending"
-    assert rembo["amount"] == 50.0  # abs(-50)
+    # Le remboursement est stocké en centimes (même convention que la transaction)
+    assert rembo["amount"] == 5000
 
 
 def test_create_transaction_with_payer_returns_contact_id_in_list(client_and_db, contact_and_entities):
@@ -202,8 +208,9 @@ def test_create_transaction_with_payer_returns_contact_id_in_list(client_and_db,
     client, db_path = client_and_db
     contact_id, src_id, dst_id = contact_and_entities
 
+    # 30,00 € = 3000 centimes
     r = client.post("/api/transactions/", json={
-        "date": "2026-01-15", "label": "Avance test", "amount": -30.0,
+        "date": "2026-01-15", "label": "Avance test", "amount": 3000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
         "payer_contact_id": contact_id,
     })
@@ -220,8 +227,9 @@ def test_update_transaction_set_payer(client_and_db, contact_and_entities):
     client, db_path = client_and_db
     contact_id, src_id, dst_id = contact_and_entities
 
+    # 20,00 € = 2000 centimes
     tx = client.post("/api/transactions/", json={
-        "date": "2026-01-15", "label": "No payer", "amount": -20.0,
+        "date": "2026-01-15", "label": "No payer", "amount": 2000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
     }).json()
 
@@ -246,8 +254,9 @@ def test_update_transaction_remove_payer(client_and_db, contact_and_entities):
     client, db_path = client_and_db
     contact_id, src_id, dst_id = contact_and_entities
 
+    # 40,00 € = 4000 centimes
     tx = client.post("/api/transactions/", json={
-        "date": "2026-01-15", "label": "Has payer", "amount": -40.0,
+        "date": "2026-01-15", "label": "Has payer", "amount": 4000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
         "payer_contact_id": contact_id,
     }).json()
@@ -272,8 +281,9 @@ def test_update_transaction_change_payer(client_and_db, contact_and_entities):
     contact_b = client.post("/api/tiers/", json={"name": "Bob", "type": "membre"}).json()
     contact_b_id = contact_b["id"]
 
+    # 60,00 € = 6000 centimes
     tx = client.post("/api/transactions/", json={
-        "date": "2026-01-15", "label": "Change payer", "amount": -60.0,
+        "date": "2026-01-15", "label": "Change payer", "amount": 6000,
         "from_entity_id": src_id, "to_entity_id": dst_id,
         "payer_contact_id": contact_a_id,
     }).json()
@@ -298,8 +308,9 @@ def test_update_transaction_no_payer_key_leaves_rembo_untouched(client_and_db, c
     client, db_path = client_and_db
     contact_id, src_id, dst_id = contact_and_entities
 
+    # 15,00 € = 1500 centimes
     tx = client.post("/api/transactions/", json={
-        "date": "2026-01-15", "label": "Stable payer", "amount": -15.0,
+        "date": "2026-01-15", "label": "Stable payer", "amount": 1500,
         "from_entity_id": src_id, "to_entity_id": dst_id,
         "payer_contact_id": contact_id,
     }).json()
@@ -318,3 +329,141 @@ def test_update_transaction_no_payer_key_leaves_rembo_untouched(client_and_db, c
 
     assert rembo is not None
     assert rembo["contact_id"] == contact_id
+
+
+# ---------------------------------------------------------------------------
+# Description field
+# ---------------------------------------------------------------------------
+
+def test_create_transaction_with_description(client, entity_pair):
+    """description est sauvegardé et renvoyé dans la liste."""
+    src, dst = entity_pair
+    # 10,00 € = 1000 centimes
+    r = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "AvecDesc", "amount": 1000,
+        "from_entity_id": src, "to_entity_id": dst,
+        "description": "Détail important de la dépense",
+    })
+    assert r.status_code == 201
+    tx_id = r.json()["id"]
+
+    txs = client.get("/api/transactions/").json()
+    tx = next(t for t in txs if t["id"] == tx_id)
+    assert tx.get("description") == "Détail important de la dépense"
+
+
+def test_description_searchable(client, entity_pair):
+    """Le champ description est inclus dans la recherche plein-texte."""
+    src, dst = entity_pair
+    # 5,00 € = 500 centimes
+    r = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Libelle neutre", "amount": 500,
+        "from_entity_id": src, "to_entity_id": dst,
+        "description": "MotClefUnique9876",
+    })
+    assert r.status_code == 201
+    tx_id = r.json()["id"]
+
+    results = client.get("/api/transactions/?search=MotClefUnique9876").json()
+    assert any(t["id"] == tx_id for t in results)
+
+
+def test_description_empty_by_default(client, entity_pair):
+    """Une transaction sans description ne renvoie pas de description non-vide."""
+    src, dst = entity_pair
+    # 1,00 € = 100 centimes
+    r = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "SansDesc", "amount": 100,
+        "from_entity_id": src, "to_entity_id": dst,
+    })
+    assert r.status_code == 201
+    tx_id = r.json()["id"]
+
+    txs = client.get("/api/transactions/").json()
+    tx = next(t for t in txs if t["id"] == tx_id)
+    assert not tx.get("description")
+
+
+def test_update_transaction_description(client, entity_pair):
+    """PUT peut mettre à jour la description."""
+    src, dst = entity_pair
+    # 8,00 € = 800 centimes
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Edit desc", "amount": 800,
+        "from_entity_id": src, "to_entity_id": dst,
+        "description": "Ancienne description",
+    }).json()
+
+    r = client.put(f"/api/transactions/{tx['id']}", json={"description": "Nouvelle description"})
+    assert r.status_code == 200
+
+    txs = client.get("/api/transactions/").json()
+    updated = next(t for t in txs if t["id"] == tx["id"])
+    assert updated.get("description") == "Nouvelle description"
+
+
+# ---------------------------------------------------------------------------
+# contact_id sur transaction
+# ---------------------------------------------------------------------------
+
+def test_create_transaction_with_contact_id(client, entity_pair):
+    """contact_id est sauvegardé et renvoyé dans la liste des transactions."""
+    src, dst = entity_pair
+    contact = client.post("/api/tiers/", json={"name": "Contact Test", "type": "membre"}).json()
+
+    # 20,00 € = 2000 centimes
+    r = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Tx avec contact", "amount": 2000,
+        "from_entity_id": src, "to_entity_id": dst,
+        "contact_id": contact["id"],
+    })
+    assert r.status_code == 201
+    tx_id = r.json()["id"]
+
+    txs = client.get("/api/transactions/").json()
+    tx = next(t for t in txs if t["id"] == tx_id)
+    assert tx.get("contact_id") == contact["id"]
+
+
+def test_transaction_appears_in_contact_transactions(client, entity_pair):
+    """Une transaction liée à un contact apparaît dans GET /tiers/{id}/transactions."""
+    src, dst = entity_pair
+    contact = client.post("/api/tiers/", json={"name": "Alice", "type": "membre"}).json()
+
+    # 15,00 € = 1500 centimes
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Achat Alice", "amount": 1500,
+        "from_entity_id": src, "to_entity_id": dst,
+        "contact_id": contact["id"],
+    }).json()
+
+    r = client.get(f"/api/tiers/{contact['id']}/transactions")
+    assert r.status_code == 200
+    ids = [t["id"] for t in r.json()]
+    assert tx["id"] in ids
+
+
+# ---------------------------------------------------------------------------
+# Contrat getContacts (limit=10000 doit renvoyer {total, items})
+# ---------------------------------------------------------------------------
+
+def test_tiers_large_limit_returns_paginated_format(client):
+    """api.getContacts() utilise limit=10000 — le format paginé doit être valide."""
+    r = client.get("/api/tiers/?limit=10000&offset=0")
+    assert r.status_code == 200
+    data = r.json()
+    assert "total" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+def test_tiers_large_limit_returns_all_contacts(client):
+    """Avec limit=10000, tous les contacts créés doivent être dans items."""
+    for i in range(5):
+        client.post("/api/tiers/", json={"name": f"Bulk {i}", "type": "membre"})
+
+    r = client.get("/api/tiers/?limit=10000&offset=0")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] >= 5
+    assert len(data["items"]) == data["total"]

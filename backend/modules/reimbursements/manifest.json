@@ -3,7 +3,7 @@
   "name": "Remboursements",
   "description": "Avances de frais et remboursements membres",
   "help": "Suivez les avances de frais et remboursements. Enregistrez qui a avance combien, le statut (en attente, rembourse), et consultez le recapitulatif par personne pour savoir qui doit combien.",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": [

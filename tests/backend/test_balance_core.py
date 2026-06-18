@@ -73,8 +73,9 @@ def test_entity_balance_with_transactions(tmp_path):
     conn.execute("INSERT INTO entities (id, name, type) VALUES (1, 'BDA', 'internal')")
     conn.execute("INSERT INTO entities (id, name, type) VALUES (2, 'Fournisseur', 'external')")
     conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (1, '2025-01-01', 1000, '2025-01-01')")
+    # Montants toujours positifs ; le sens vient de from/to.
     conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-01', 'Vente', 500, 2, 1)")
-    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-02', 'Achat', -300, 1, 2)")
+    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-02', 'Achat', 300, 1, 2)")
     conn.commit()
     result = compute_entity_balance(conn, 1)
     conn.close()
@@ -88,7 +89,7 @@ def test_entity_balance_ignores_unrelated(tmp_path):
     conn.execute("INSERT INTO entities (id, name, type) VALUES (2, 'Club', 'internal')")
     conn.execute("INSERT INTO entities (id, name, type) VALUES (3, 'Ext', 'external')")
     conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (1, '2025-01-01', 0, '2025-01-01')")
-    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-01', 'X', -100, 2, 3)")
+    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-01', 'X', 100, 2, 3)")
     conn.commit()
     result = compute_entity_balance(conn, 1)
     conn.close()
@@ -104,12 +105,34 @@ def test_consolidated_balance(tmp_path):
     conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (1, '2025-01-01', 1000, '2025-01-01')")
     conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (2, '2025-01-01', 500, '2025-01-01')")
     conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-01', 'Don', 200, 3, 1)")
-    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-02', 'Dep', -100, 2, 3)")
+    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-02', 'Dep', 100, 2, 3)")
     conn.commit()
     result = compute_consolidated_balance(conn, 1)
     conn.close()
     assert result["own_balance"] == pytest.approx(1200.0)
     assert result["consolidated_balance"] == pytest.approx(1600.0)
+
+
+def test_internal_transfer_conserves_total(tmp_path):
+    """Un virement interne (entité interne -> entité interne) débite la source,
+    crédite la cible, et laisse le consolidé inchangé. Cassé par l'ancien
+    modèle de signe ; correct avec la convention from/to."""
+    from backend.core.balance import compute_entity_balance, compute_consolidated_balance
+    conn = _make_db(tmp_path)
+    conn.execute("INSERT INTO entities (id, name, type, parent_id) VALUES (1, 'BDA', 'internal', NULL)")
+    conn.execute("INSERT INTO entities (id, name, type, parent_id) VALUES (2, 'Cine', 'internal', 1)")
+    conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (1, '2025-01-01', 1000, '2025-01-01')")
+    conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (2, '2025-01-01', 500, '2025-01-01')")
+    # Dotation interne : BDA (1) vire 100 a Cine (2), montant positif.
+    conn.execute("INSERT INTO transactions (date, label, amount, from_entity_id, to_entity_id) VALUES ('2025-06-01', 'Dotation Cine', 100, 1, 2)")
+    conn.commit()
+    bda = compute_entity_balance(conn, 1)
+    cine = compute_entity_balance(conn, 2)
+    cons = compute_consolidated_balance(conn, 1)
+    conn.close()
+    assert bda["balance"] == pytest.approx(900.0)            # 1000 - 100
+    assert cine["balance"] == pytest.approx(600.0)           # 500 + 100
+    assert cons["consolidated_balance"] == pytest.approx(1500.0)  # inchangé
 
 
 def test_entity_balance_no_ref(tmp_path):

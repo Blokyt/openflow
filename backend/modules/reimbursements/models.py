@@ -38,4 +38,29 @@ migrations = {
         "DROP TABLE reimbursements",
         "ALTER TABLE reimbursements_new RENAME TO reimbursements",
     ],
+    "1.3.0": [
+        # C2 : amount en centimes entiers (montants toujours positifs).
+        """CREATE TABLE reimbursements_v3 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id INTEGER,
+            person_name TEXT DEFAULT '',
+            amount INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            reimbursed_date TEXT,
+            reimbursement_transaction_id INTEGER,
+            notes TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            contact_id INTEGER REFERENCES contacts(id),
+            FOREIGN KEY (transaction_id) REFERENCES transactions(id),
+            FOREIGN KEY (reimbursement_transaction_id) REFERENCES transactions(id)
+        )""",
+        """INSERT INTO reimbursements_v3 (id, transaction_id, person_name, amount, status, reimbursed_date, reimbursement_transaction_id, notes, created_at, updated_at, contact_id)
+           SELECT id, transaction_id, person_name,
+                  CAST(ROUND(amount * 100) AS INTEGER),
+                  status, reimbursed_date, reimbursement_transaction_id, notes, created_at, updated_at, contact_id
+           FROM reimbursements""",
+        "DROP TABLE reimbursements",
+        "ALTER TABLE reimbursements_v3 RENAME TO reimbursements",
+    ],
 }

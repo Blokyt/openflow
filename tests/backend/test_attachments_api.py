@@ -107,3 +107,33 @@ def test_download_nonexistent_attachment(client):
 def test_delete_nonexistent_attachment(client):
     response = client.delete("/api/attachments/999999")
     assert response.status_code == 404
+
+
+def test_preview_attachment_image(client, transaction):
+    tx_id = transaction["id"]
+    # PNG factice minimal (1x1 pixel, valide pour simuler une image)
+    fake_png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
+        b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00"
+        b"\x00\x00\x00IEND\xaeB`\x82"
+    )
+    upload = client.post(
+        f"/api/attachments/transaction/{tx_id}",
+        files={"file": ("photo.png", fake_png, "image/png")},
+    )
+    assert upload.status_code == 201
+    att_id = upload.json()["id"]
+
+    response = client.get(f"/api/attachments/{att_id}/preview")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    # Content-Disposition ne doit pas contenir "attachment"
+    disposition = response.headers.get("content-disposition", "")
+    assert "attachment" not in disposition
+
+
+def test_preview_nonexistent_attachment(client):
+    response = client.get("/api/attachments/999999/preview")
+    assert response.status_code == 404

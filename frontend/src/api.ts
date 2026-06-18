@@ -38,21 +38,14 @@ export const api = {
   // Budget & Exercices
   listFiscalYears: () => request<any[]>("/budget/fiscal-years"),
   getCurrentFiscalYear: () => request<any>("/budget/fiscal-years/current"),
-  createFiscalYear: (fy: any) =>
+  createFiscalYear: (fy: { name: string; start_date: string; notes?: string; president_name?: string; tresorier_name?: string }) =>
     request<any>("/budget/fiscal-years", { method: "POST", body: JSON.stringify(fy) }),
+  closeFiscalYear: (id: number, end_date?: string) =>
+    request<any>(`/budget/fiscal-years/${id}/close`, { method: "POST", body: JSON.stringify({ end_date: end_date ?? null }) }),
   updateFiscalYear: (id: number, fy: any) =>
     request<any>(`/budget/fiscal-years/${id}`, { method: "PUT", body: JSON.stringify(fy) }),
   deleteFiscalYear: (id: number) =>
     request<any>(`/budget/fiscal-years/${id}`, { method: "DELETE" }),
-  listOpeningBalances: (id: number) =>
-    request<any[]>(`/budget/fiscal-years/${id}/opening-balances`),
-  upsertOpeningBalances: (id: number, entries: any[]) =>
-    request<any[]>(`/budget/fiscal-years/${id}/opening-balances`, {
-      method: "PUT",
-      body: JSON.stringify(entries),
-    }),
-  getSuggestedOpening: (id: number) =>
-    request<any[]>(`/budget/fiscal-years/${id}/suggested-opening`),
   listAllocations: (fyId: number) =>
     request<any[]>(`/budget/fiscal-years/${fyId}/allocations`),
   createAllocation: (fyId: number, a: any) =>
@@ -69,27 +62,37 @@ export const api = {
     request<any>(`/budget/allocations/${id}`, { method: "DELETE" }),
   getBudgetView: (fyId: number) =>
     request<any>(`/budget/view?fiscal_year_id=${fyId}`),
+  getBudgetCategoryView: (fyId: number) =>
+    request<any>(`/budget/view/categories?fiscal_year_id=${fyId}`),
   getTimeseries: (entityId?: number, months = 12) => {
     const q = new URLSearchParams();
     q.set("months", String(months));
     if (entityId) q.set("entity_id", String(entityId));
     return request<any[]>(`/dashboard/timeseries?${q.toString()}`);
   },
-  getTopCategories: (entityId?: number, limit = 5) => {
+  getTopCategories: (entityId?: number, limit = 5, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
     q.set("limit", String(limit));
     if (entityId) q.set("entity_id", String(entityId));
+    if (dateFrom) q.set("date_from", dateFrom);
+    if (dateTo) q.set("date_to", dateTo);
     return request<any[]>(`/dashboard/top-categories?${q.toString()}`);
   },
-  getRecentTransactions: (entityId?: number, limit = 5) => {
+  getRecentTransactions: (entityId?: number, limit = 5, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
     q.set("limit", String(limit));
     if (entityId) q.set("entity_id", String(entityId));
+    if (dateFrom) q.set("date_from", dateFrom);
+    if (dateTo) q.set("date_to", dateTo);
     return request<any[]>(`/dashboard/recent?${q.toString()}`);
   },
-  getSummary: (entityId?: number) => {
-    const query = entityId ? `?entity_id=${entityId}` : "";
-    return request<any>(`/dashboard/summary${query}`);
+  getSummary: (entityId?: number, dateFrom?: string, dateTo?: string) => {
+    const q = new URLSearchParams();
+    if (entityId) q.set("entity_id", String(entityId));
+    if (dateFrom) q.set("date_from", dateFrom);
+    if (dateTo) q.set("date_to", dateTo);
+    const qs = q.toString();
+    return request<any>(`/dashboard/summary${qs ? "?" + qs : ""}`);
   },
   // Entities
   getEntities: (type?: string) => {
@@ -107,25 +110,15 @@ export const api = {
   getWidgets: () => request<any[]>("/dashboard/widgets"),
   getLayout: () => request<any[]>("/dashboard/layout"),
   saveLayout: (layout: any[]) => request<any>("/dashboard/layout", { method: "PUT", body: JSON.stringify(layout) }),
-  // Auth
-  login: (username: string, password: string) =>
-    request<any>("/multi_users/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-  logout: () => request<any>("/multi_users/logout", { method: "POST" }),
-  getMe: () => request<any>("/multi_users/me"),
-  changePassword: (old_password: string, new_password: string) =>
-    request<any>("/multi_users/me/password", { method: "PUT", body: JSON.stringify({ old_password, new_password }) }),
-  // User management (admin)
-  getUsers: () => request<any[]>("/multi_users/"),
-  createUser: (user: any) => request<any>("/multi_users/", { method: "POST", body: JSON.stringify(user) }),
-  deleteUser: (id: number) => request<any>(`/multi_users/${id}`, { method: "DELETE" }),
-  getUserEntities: (userId: number) => request<any[]>(`/multi_users/${userId}/entities`),
-  assignUserEntity: (userId: number, data: any) =>
-    request<any>(`/multi_users/${userId}/entities`, { method: "POST", body: JSON.stringify(data) }),
-  removeUserEntity: (userId: number, entityId: number) =>
-    request<any>(`/multi_users/${userId}/entities/${entityId}`, { method: "DELETE" }),
   // Tiers / Contacts
-  getTiers: () => request<any[]>("/tiers/"),
-  getContacts: () => request<any[]>("/tiers/"),
+  getTiers: (params?: Record<string, string | number>) => {
+    const q = params ? "?" + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : "";
+    return request<{ total: number; items: any[] }>(`/tiers/${q}`);
+  },
+  getContacts: () =>
+    request<{ total: number; items: any[] }>("/tiers/?limit=10000").then((r) => r.items),
+  createContact: (data: { name: string; type: string; email?: string; phone?: string }) =>
+    request<any>("/tiers/", { method: "POST", body: JSON.stringify(data) }),
   // Backup
   getBackupPreview: () => request<any>("/backup/preview"),
   exportBackup: async () => {

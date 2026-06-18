@@ -26,20 +26,11 @@ EXPORT_TABLES = [
     "budgets",
     "recurring_transactions",
     "reimbursements",
-    "invoices",
-    "invoice_lines",
     "attachments",
-    "bank_statements",
     "alert_rules",
     "tax_receipts",
-    "grants",
     "accounts",
     "transfers",
-    "audit_log",
-    "annotations",
-    "users",
-    "sessions",
-    "user_entities",
 ]
 
 

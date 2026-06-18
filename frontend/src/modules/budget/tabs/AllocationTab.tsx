@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
 import { Entity, Category } from "../../../types";
-import { eur } from "../../../utils/format";
+import { formatEuros, eurosToCents, centsToEuros } from "../../../utils/format";
 import { Plus, Trash2 } from "lucide-react";
 
 interface Props {
@@ -44,10 +44,11 @@ export default function AllocationTab({ year, onChange }: Props) {
     setError(null);
     if (!newEntity || !newAmount) { setError("Entité et montant obligatoires."); return; }
     try {
+      // La saisie est en euros -> envoyer en centimes à l'API
       await api.createAllocation(year!.id, {
         entity_id: parseInt(newEntity, 10),
         category_id: newCategory ? parseInt(newCategory, 10) : null,
-        amount: parseFloat(newAmount),
+        amount: eurosToCents(newAmount),
       });
       setNewEntity(""); setNewCategory(""); setNewAmount("");
       setAdding(false);
@@ -160,7 +161,7 @@ export default function AllocationTab({ year, onChange }: Props) {
                     <td className="px-4 py-3 text-[#B0B0B0]">
                       {cat ? cat.name : <span className="text-[#666] italic">Globale</span>}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-white">{eur.format(a.amount)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-white">{formatEuros(a.amount)}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => remove(a.id)}

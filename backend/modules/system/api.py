@@ -32,7 +32,6 @@ router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-TEMP_IMPORT_DIR = DATA_DIR / "smart_import_temp"
 ATTACHMENTS_DIR = DATA_DIR / "attachments"
 PRISTINE_ZIP = PROJECT_ROOT / "install" / "pristine.zip"
 SYSTEM_SETTINGS_FILE = DATA_DIR / "system_settings.json"
@@ -111,47 +110,6 @@ def _list_db_backups() -> list[dict]:
     return backups
 
 
-def _clean_old_temp_imports(max_age_hours: int) -> tuple[int, int]:
-    """Delete smart_import temp files older than max_age_hours. Return (count, bytes_freed)."""
-    if not TEMP_IMPORT_DIR.exists():
-        return 0, 0
-    max_age = max_age_hours * 3600
-    now = time.time()
-    count = 0
-    freed = 0
-    for p in TEMP_IMPORT_DIR.iterdir():
-        if not p.is_file():
-            continue
-        try:
-            if now - p.stat().st_mtime > max_age:
-                freed += p.stat().st_size
-                p.unlink()
-                count += 1
-        except OSError:
-            pass
-    return count, freed
-
-
-def _list_temp_imports() -> list[dict]:
-    """List uncommitted smart_import upload files."""
-    files = []
-    if TEMP_IMPORT_DIR.exists():
-        for p in TEMP_IMPORT_DIR.iterdir():
-            if not p.is_file():
-                continue
-            try:
-                st = p.stat()
-                files.append({
-                    "name": p.name,
-                    "size": st.st_size,
-                    "size_human": _format_bytes(st.st_size),
-                    "age_seconds": time.time() - st.st_mtime,
-                    "age_hours": (time.time() - st.st_mtime) / 3600,
-                })
-            except OSError:
-                continue
-    return files
-
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 
@@ -162,20 +120,17 @@ def status():
     db_path = Path(get_db_path())
 
     backups = _list_db_backups()
-    temp_imports = _list_temp_imports()
 
     usage = {
         "database": db_path.stat().st_size if db_path.exists() else 0,
         "attachments": _dir_size(ATTACHMENTS_DIR),
         "auto_backups": sum(b["size"] for b in backups),
-        "temp_imports": sum(f["size"] for f in temp_imports),
         "backend_code": _dir_size(PROJECT_ROOT / "backend"),
         "frontend_src": _dir_size(PROJECT_ROOT / "frontend" / "src"),
         "frontend_dist": _dir_size(PROJECT_ROOT / "frontend" / "dist"),
     }
     usage_human = {k: _format_bytes(v) for k, v in usage.items()}
     total_user_data = usage["database"] + usage["attachments"] + usage["auto_backups"]
-    total_temp = usage["temp_imports"]
     total_code = usage["backend_code"] + usage["frontend_src"] + usage["frontend_dist"]
 
     # DB health
@@ -189,7 +144,6 @@ def status():
         ).fetchone()[0]
         db_health["transactions"] = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
         db_health["entities"] = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
-        db_health["users"] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         db_health["modules"] = [
             {"id": r["id"], "version": r["installed_version"]}
             for r in conn.execute("SELECT id, installed_version FROM _modules ORDER BY id").fetchall()
@@ -213,15 +167,12 @@ def status():
         "totals": {
             "user_data": total_user_data,
             "user_data_human": _format_bytes(total_user_data),
-            "temp": total_temp,
-            "temp_human": _format_bytes(total_temp),
             "code": total_code,
             "code_human": _format_bytes(total_code),
         },
         "db": db_health,
         "pristine": pristine,
         "backups": backups,
-        "temp_imports": temp_imports,
     }
 
 
@@ -267,7 +218,6 @@ def delete_backup(name: str):
 
 
 class CleanupRequest(BaseModel):
-    clean_temp_imports: bool = True
     prune_backups: bool = True
     clean_pycache: bool = False
 
@@ -276,12 +226,7 @@ class CleanupRequest(BaseModel):
 def cleanup(body: CleanupRequest):
     """Clean temp files and prune old backups."""
     settings = _load_settings()
-    removed = {"temp_imports": 0, "pruned_backups": 0, "pycache_dirs": 0, "total_bytes": 0}
-
-    if body.clean_temp_imports:
-        count, freed = _clean_old_temp_imports(settings["temp_max_age_hours"])
-        removed["temp_imports"] = count
-        removed["total_bytes"] += freed
+    removed = {"pruned_backups": 0, "pycache_dirs": 0, "total_bytes": 0}
 
     if body.prune_backups:
         backups = sorted(_list_db_backups(), key=lambda b: b["mtime"], reverse=True)
@@ -494,10 +439,7 @@ def repair(body: RepairRequest):
             report["steps"].append(f"[ERR] Frontend: {e}")
 
     if body.cleanup_temp:
-        count, _ = _clean_old_temp_imports(_load_settings()["temp_max_age_hours"])
-        report["temp_cleaned"] = count
-        if count:
-            report["steps"].append(f"[OK] {count} fichiers temp supprimes")
+        report["temp_cleaned"] = 0
 
     report["success"] = all("[OK]" in s for s in report["steps"]) or len(report["steps"]) == 0
     return report

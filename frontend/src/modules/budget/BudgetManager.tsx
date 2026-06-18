@@ -3,11 +3,13 @@ import { useFiscalYear } from "../../core/FiscalYearContext";
 import OverviewTab from "./tabs/OverviewTab";
 import AllocationTab from "./tabs/AllocationTab";
 import FiscalYearsTab from "./tabs/FiscalYearsTab";
+import CategoriesTab from "./tabs/CategoriesTab";
 
-type TabId = "overview" | "allocation" | "years";
+type TabId = "overview" | "categories" | "allocation" | "years";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
+  { id: "categories", label: "Catégories" },
   { id: "allocation", label: "Allocation" },
   { id: "years", label: "Exercices" },
 ];
@@ -35,7 +37,7 @@ export default function BudgetManager() {
           >
             {years.map((y) => (
               <option key={y.id} value={y.id}>
-                {y.name}{y.is_current === 1 ? " ●" : ""}
+                {y.name}{y.end_date === null ? " ●" : ""}
               </option>
             ))}
           </select>
@@ -59,6 +61,7 @@ export default function BudgetManager() {
       </div>
 
       {tab === "overview" && <OverviewTab year={selectedYear} />}
+      {tab === "categories" && <CategoriesTab year={selectedYear} />}
       {tab === "allocation" && <AllocationTab year={selectedYear} onChange={reload} />}
       {tab === "years" && <FiscalYearsTab />}
     </div>

@@ -8,12 +8,13 @@ def test_list_reimbursements_empty(client):
     assert isinstance(response.json(), list)
 
 def test_create_reimbursement(client):
-    payload = {"person_name": "Alice Dupont", "amount": 42.50}
+    # Les montants sont des entiers de centimes (42,50 € = 4250 centimes)
+    payload = {"person_name": "Alice Dupont", "amount": 4250}
     response = client.post("/api/reimbursements/", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert data["person_name"] == "Alice Dupont"
-    assert data["amount"] == 42.50
+    assert data["amount"] == 4250
     assert data["status"] == "pending"
     assert "id" in data
 
@@ -35,8 +36,10 @@ def test_get_reimbursement_not_found(client):
     assert response.status_code == 404
 
 def test_filter_by_status(client):
-    client.post("/api/reimbursements/", json={"person_name": "Pending Person", "amount": 10.0, "status": "pending"})
-    client.post("/api/reimbursements/", json={"person_name": "Validated Person", "amount": 20.0, "status": "validated"})
+    # "validated" n'existe plus dans le workflow — on utilise "approved"
+    client.post("/api/reimbursements/", json={"person_name": "Pending Person", "amount": 1000, "status": "pending"})
+    r_approved = client.post("/api/reimbursements/", json={"person_name": "Approved Person", "amount": 2000, "status": "pending"})
+    client.put(f"/api/reimbursements/{r_approved.json()['id']}", json={"status": "approved"})
     response = client.get("/api/reimbursements/?status=pending")
     assert response.status_code == 200
     results = response.json()
@@ -51,19 +54,25 @@ def test_filter_by_status_reimbursed(client):
     assert all(r["status"] == "reimbursed" for r in results)
 
 def test_update_status(client):
-    created = client.post("/api/reimbursements/", json={"person_name": "Status Test", "amount": 50.0}).json()
+    # Transition valide : pending -> approved
+    created = client.post("/api/reimbursements/", json={"person_name": "Status Test", "amount": 5000}).json()
     assert created["status"] == "pending"
-    response = client.put(f"/api/reimbursements/{created['id']}", json={"status": "validated"})
+    response = client.put(f"/api/reimbursements/{created['id']}", json={"status": "approved"})
     assert response.status_code == 200
-    assert response.json()["status"] == "validated"
+    assert response.json()["status"] == "approved"
 
-def test_update_reimbursed_with_date(client):
-    created = client.post("/api/reimbursements/", json={"person_name": "DateTest", "amount": 25.0}).json()
-    response = client.put(f"/api/reimbursements/{created['id']}", json={"status": "reimbursed", "reimbursed_date": "2026-04-11"})
+def test_update_reimbursed_date_field(client):
+    """Vérifier que reimbursed_date est bien persisté indépendamment du statut."""
+    created = client.post("/api/reimbursements/", json={"person_name": "DateTest", "amount": 2500}).json()
+    # Mettre à jour uniquement reimbursed_date sans changer le statut
+    response = client.put(
+        f"/api/reimbursements/{created['id']}", json={"reimbursed_date": "2026-04-11"}
+    )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "reimbursed"
     assert data["reimbursed_date"] == "2026-04-11"
+    # Le statut reste pending (pas de transition)
+    assert data["status"] == "pending"
 
 def test_delete_reimbursement(client):
     created = client.post("/api/reimbursements/", json={"person_name": "To Delete", "amount": 5.0}).json()

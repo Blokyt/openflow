@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from typing import Optional
 
 from backend.core.database import get_conn, row_to_dict
-from backend.core.audit import record_audit
 
 router = APIRouter()
 
@@ -46,7 +45,7 @@ def get_tree():
 
         # Aggregate transaction counts and totals per category
         tx_rows = conn.execute(
-            "SELECT category_id, COUNT(*) AS cnt, SUM(ABS(amount)) AS total "
+            "SELECT category_id, COUNT(*) AS cnt, SUM(amount) AS total "
             "FROM transactions WHERE category_id IS NOT NULL GROUP BY category_id"
         ).fetchall()
         for tx_row in tx_rows:
@@ -93,7 +92,6 @@ def create_category(data: CategoryIn):
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM categories WHERE id = ?", (new_id,)).fetchone()
         new_data = row_to_dict(row)
-        record_audit(conn, "CREATE", "categories", new_id, old_value=None, new_value=new_data)
         conn.commit()
         return new_data
     finally:
@@ -120,7 +118,6 @@ def update_category(cat_id: int, data: CategoryUpdate):
         if row is None:
             raise HTTPException(status_code=404, detail="Category not found")
         current = row_to_dict(row)
-        old_data = dict(current)
         name = data.name if data.name is not None else current["name"]
         parent_id = data.parent_id if data.parent_id is not None else current["parent_id"]
         color = data.color if data.color is not None else current["color"]
@@ -132,7 +129,6 @@ def update_category(cat_id: int, data: CategoryUpdate):
         )
         updated = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
         new_data = row_to_dict(updated)
-        record_audit(conn, "UPDATE", "categories", cat_id, old_value=old_data, new_value=new_data)
         conn.commit()
         return new_data
     finally:
@@ -146,9 +142,7 @@ def delete_category(cat_id: int):
         row = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Category not found")
-        old_data = row_to_dict(row)
         conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
-        record_audit(conn, "DELETE", "categories", cat_id, old_value=old_data)
         conn.commit()
         return {"deleted": cat_id}
     finally:

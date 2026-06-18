@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-
-const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+import { formatEuros } from "../../../utils/format";
 
 interface BudgetStatus {
   id: number;
@@ -65,7 +64,7 @@ export default function BudgetProgress() {
                 {item.label || `Budget #${item.id}`}
               </span>
               <span className="text-[#B0B0B0]">
-                {eurFormatter.format(spentAbs)} / {eurFormatter.format(item.budgeted)}
+                {formatEuros(spentAbs)} / {formatEuros(item.budgeted)}
               </span>
             </div>
             <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden">
@@ -76,11 +75,11 @@ export default function BudgetProgress() {
             </div>
             {isOver ? (
               <p className="text-xs text-[#FF5252] mt-1">
-                Dépassement : +{eurFormatter.format(spentAbs - item.budgeted)}
+                Dépassement : +{formatEuros(spentAbs - item.budgeted)}
               </p>
             ) : (
               <p className="text-xs mt-0.5 text-right text-[#888]">
-                Restant : {eurFormatter.format(item.remaining)}
+                Restant : {formatEuros(item.remaining)}
               </p>
             )}
           </div>

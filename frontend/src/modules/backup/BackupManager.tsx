@@ -23,15 +23,8 @@ const TABLE_LABELS: Record<string, string> = {
   transactions: "Transactions",
   budgets: "Budgets",
   reimbursements: "Remboursements",
-  invoices: "Factures",
-  invoice_lines: "Lignes factures",
   attachments: "Pièces jointes",
   transfers: "Virements",
-  audit_log: "Journal audit",
-  annotations: "Annotations",
-  users: "Utilisateurs",
-  sessions: "Sessions",
-  user_entities: "Accès utilisateurs",
 };
 
 export default function BackupManager() {
@@ -121,7 +114,7 @@ export default function BackupManager() {
         Exporte ou restaure <strong>l'intégralité</strong> de la base (toutes les entités,
         catégories, transactions, contacts, etc.) dans un fichier ZIP. Pour ajouter de
         nouvelles transactions à partir d'un fichier Excel ou CSV,
-        utilise plutôt <a href="/smart-import" className="text-[#F2C48D] hover:underline">Import intelligent</a>.
+        utilise plutôt un import manuel des transactions.
       </p>
 
       {/* Error */}
@@ -179,7 +172,7 @@ export default function BackupManager() {
         <button
           onClick={handleExport}
           disabled={exporting || loading}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#F2C48D] text-black font-medium rounded-lg hover:bg-[#e5b57a] disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#F2C48D] text-black font-medium rounded-full hover:bg-[#e5b57a] disabled:opacity-50 transition-colors"
         >
           <Download className="w-4 h-4" />
           {exporting ? "Export en cours..." : "Exporter (.zip)"}
@@ -210,13 +203,13 @@ export default function BackupManager() {
                 <div className="flex gap-3 mt-3">
                   <button
                     onClick={handleImport}
-                    className="px-4 py-2 bg-yellow-500 text-black font-medium rounded-lg hover:bg-yellow-400 transition-colors text-sm"
+                    className="px-4 py-2 bg-yellow-500 text-black font-medium rounded-full hover:bg-yellow-400 transition-colors text-sm"
                   >
                     Confirmer l'import
                   </button>
                   <button
                     onClick={cancelImport}
-                    className="px-4 py-2 bg-[#333] text-[#ccc] rounded-lg hover:bg-[#444] transition-colors text-sm"
+                    className="px-4 py-2 bg-[#333] text-[#ccc] rounded-full hover:bg-[#444] transition-colors text-sm"
                   >
                     Annuler
                   </button>

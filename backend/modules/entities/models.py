@@ -23,4 +23,21 @@ migrations = {
     "1.1.0": [
         """ALTER TABLE entities ADD COLUMN balance_mode TEXT NOT NULL DEFAULT 'own' CHECK(balance_mode IN ('own', 'aggregate'))""",
     ],
+    "1.2.0": [
+        # C2 : reference_amount en centimes entiers. On conserve le SIGNE
+        # (un solde de reference peut etre negatif : decouvert bancaire).
+        """CREATE TABLE entity_balance_refs_v2 (
+            entity_id        INTEGER PRIMARY KEY,
+            reference_date   TEXT    NOT NULL,
+            reference_amount INTEGER NOT NULL DEFAULT 0,
+            updated_at       TEXT    NOT NULL
+        )""",
+        """INSERT INTO entity_balance_refs_v2 (entity_id, reference_date, reference_amount, updated_at)
+           SELECT entity_id, reference_date,
+                  CAST(ROUND(reference_amount * 100) AS INTEGER),
+                  updated_at
+           FROM entity_balance_refs""",
+        "DROP TABLE entity_balance_refs",
+        "ALTER TABLE entity_balance_refs_v2 RENAME TO entity_balance_refs",
+    ],
 }

@@ -11,7 +11,7 @@ def test_load_config_from_file():
         yaml.dump({
             "entity": {"name": "Test Asso", "type": "association", "currency": "EUR"},
             "balance": {"date": "2025-06-01", "amount": 3200.0},
-            "modules": {"transactions": True, "categories": True, "dashboard": True, "invoices": False},
+            "modules": {"transactions": True, "categories": True, "dashboard": True, "tiers": False},
         }, f)
         f.flush()
         config = load_config(f.name)
@@ -19,7 +19,7 @@ def test_load_config_from_file():
     assert config.entity.type == "association"
     assert config.balance.amount == 3200.0
     assert config.modules["transactions"] is True
-    assert config.modules["invoices"] is False
+    assert config.modules["tiers"] is False
     os.unlink(f.name)
 
 
@@ -52,12 +52,12 @@ def test_toggle_module():
         yaml.dump({
             "entity": {"name": "Test", "type": "association", "currency": "EUR"},
             "balance": {"date": "2025-01-01", "amount": 0.0},
-            "modules": {"transactions": True, "categories": True, "dashboard": True, "invoices": False},
+            "modules": {"transactions": True, "categories": True, "dashboard": True, "tiers": False},
         }, f)
         path = f.name
     config = load_config(path)
-    config.modules["invoices"] = True
+    config.modules["tiers"] = True
     save_config(config, path)
     reloaded = load_config(path)
-    assert reloaded.modules["invoices"] is True
+    assert reloaded.modules["tiers"] is True
     os.unlink(path)

@@ -1,4 +1,5 @@
 """Attachments API module for OpenFlow."""
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +13,21 @@ from backend.core.database import get_conn, row_to_dict
 router = APIRouter()
 
 ATTACHMENTS_DIR = Path(__file__).parent.parent.parent.parent / "data" / "attachments"
+
+# Taille maximale d'un justificatif (20 Mo). Au-delà : 413.
+MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024
+
+
+def _sanitize_filename(name: str) -> str:
+    """Réduit un nom de fichier client à un basename sûr, sans séquence de
+    traversal (`..`, `/`, `\\`) ni caractère de contrôle. Renvoie "upload"
+    si rien d'exploitable ne reste."""
+    base = Path(name or "").name
+    base = base.replace("\\", "/").split("/")[-1]   # dernier segment, cross-OS
+    base = re.sub(r"[^\w.\-]", "_", base)            # caractères sûrs uniquement
+    base = re.sub(r"\.{2,}", "_", base)              # neutralise les séquences ".."
+    base = base.strip("._ ")                         # bords sans points/underscores/espaces
+    return base[:128] or "upload"
 
 
 def ensure_attachments_dir():
@@ -45,11 +61,22 @@ async def upload_attachment(tx_id: int, file: UploadFile = File(...)):
         if tx is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
 
-        original_name = file.filename or "upload"
+        # Limite de taille : on lit au plus MAX+1 octets pour détecter le dépassement.
+        content = await file.read(MAX_ATTACHMENT_SIZE + 1)
+        if len(content) > MAX_ATTACHMENT_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Fichier trop volumineux (max {MAX_ATTACHMENT_SIZE // (1024 * 1024)} Mo)",
+            )
+
+        # Assainissement du nom de fichier (anti path traversal).
+        original_name = _sanitize_filename(file.filename or "upload")
         unique_filename = f"{uuid.uuid4()}_{original_name}"
         file_path = ATTACHMENTS_DIR / unique_filename
+        # Défense en profondeur : le chemin résolu doit rester dans ATTACHMENTS_DIR.
+        if not file_path.resolve().is_relative_to(ATTACHMENTS_DIR.resolve()):
+            raise HTTPException(status_code=400, detail="Nom de fichier invalide")
 
-        content = await file.read()
         file_path.write_bytes(content)
 
         mime_type = file.content_type or ""
@@ -61,11 +88,36 @@ async def upload_attachment(tx_id: int, file: UploadFile = File(...)):
             "VALUES (?, ?, ?, ?, ?, ?)",
             (tx_id, unique_filename, original_name, mime_type, size, now),
         )
+        attach_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM attachments WHERE id = ?", (attach_id,)).fetchone()
+        attach_data = row_to_dict(row)
         conn.commit()
-        row = conn.execute("SELECT * FROM attachments WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return row_to_dict(row)
+        return attach_data
     finally:
         conn.close()
+
+
+@router.get("/{id}/preview")
+def preview_attachment(id: int):
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM attachments WHERE id = ?", (id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Attachment {id} not found")
+        attachment = row_to_dict(row)
+    finally:
+        conn.close()
+
+    file_path = ATTACHMENTS_DIR / attachment["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # Renvoie le fichier en inline (pas de Content-Disposition: attachment)
+    # afin qu'il s'affiche directement dans le navigateur.
+    return FileResponse(
+        path=str(file_path),
+        media_type=attachment["mime_type"] or "application/octet-stream",
+    )
 
 
 @router.get("/{id}/download")

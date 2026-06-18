@@ -18,6 +18,22 @@ CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 MODULES_DIR = PROJECT_ROOT / "backend" / "modules"
 
 
+def _period_conds(date_from: Optional[str], date_to: Optional[str], col: str = "date"):
+    """Build SQL conditions + params bounding `col` to [date_from, date_to].
+
+    Returns (conds, params) where conds is a list of "col >= ?"/"col <= ?"
+    snippets to AND together. Empty when no bounds are given, so callers stay
+    period-agnostic when no exercise is selected.
+    """
+    conds: list[str] = []
+    params: list = []
+    if date_from:
+        conds.append(f"{col} >= ?")
+        params.append(date_from)
+    if date_to:
+        conds.append(f"{col} <= ?")
+        params.append(date_to)
+    return conds, params
 
 
 class WidgetLayout(BaseModel):
@@ -93,10 +109,18 @@ def save_layout(layout: list[WidgetLayout]):
 
 
 @router.get("/summary")
-def get_summary(entity_id: Optional[int] = None):
+def get_summary(
+    entity_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
     """Compute financial summary from config reference + transactions.
 
-    If entity_id is provided, scope the balance and aggregates to that entity.
+    If entity_id is provided, scope the aggregates to that entity.
+    If date_from/date_to are provided (e.g. an exercise period), the recettes,
+    dépenses and transaction count are bounded to that period. The headline
+    `balance` always stays the real current balance ("solde actuel"), which is
+    a point-in-time figure independent of the selected exercise.
     """
     conn = get_conn()
     try:
@@ -106,19 +130,21 @@ def get_summary(entity_id: Optional[int] = None):
 
         if entity_id is not None:
             bal = compute_entity_balance(conn, entity_id)
+            conds, pp = _period_conds(date_from, date_to)
+            income_where = " AND ".join(["to_entity_id = ?"] + conds)
+            expense_where = " AND ".join(["from_entity_id = ?"] + conds)
+            count_where = " AND ".join(["(from_entity_id = ? OR to_entity_id = ?)"] + conds)
             total_income = conn.execute(
-                """SELECT COALESCE(SUM(amount), 0) FROM transactions
-                   WHERE amount > 0 AND (from_entity_id = ? OR to_entity_id = ?)""",
-                (entity_id, entity_id),
+                f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {income_where}",
+                (entity_id, *pp),
             ).fetchone()[0]
-            total_expenses = abs(conn.execute(
-                """SELECT COALESCE(SUM(amount), 0) FROM transactions
-                   WHERE amount < 0 AND (from_entity_id = ? OR to_entity_id = ?)""",
-                (entity_id, entity_id),
-            ).fetchone()[0])
+            total_expenses = conn.execute(
+                f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {expense_where}",
+                (entity_id, *pp),
+            ).fetchone()[0]
             transaction_count = conn.execute(
-                "SELECT COUNT(*) FROM transactions WHERE from_entity_id = ? OR to_entity_id = ?",
-                (entity_id, entity_id),
+                f"SELECT COUNT(*) FROM transactions WHERE {count_where}",
+                (entity_id, entity_id, *pp),
             ).fetchone()[0]
             balance = bal["balance"]
         else:
@@ -132,13 +158,29 @@ def get_summary(entity_id: Optional[int] = None):
             else:
                 bal = compute_legacy_balance(conn, str(CONFIG_PATH))
                 balance = bal["balance"]
+            conds, pp = _period_conds(date_from, date_to, "t.date")
+            period_and = ("" if not conds else " AND " + " AND ".join(conds))
+            # Recettes globales : flux vers une entité interne venant d'une externe
             total_income = conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount > 0"
+                f"""SELECT COALESCE(SUM(t.amount), 0) FROM transactions t
+                   WHERE t.to_entity_id   IN (SELECT id FROM entities WHERE type='internal')
+                     AND t.from_entity_id NOT IN (SELECT id FROM entities WHERE type='internal')
+                     {period_and}""",
+                tuple(pp),
             ).fetchone()[0]
-            total_expenses = abs(conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE amount < 0"
-            ).fetchone()[0])
-            transaction_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+            # Dépenses globales : flux depuis une entité interne vers une externe
+            total_expenses = conn.execute(
+                f"""SELECT COALESCE(SUM(t.amount), 0) FROM transactions t
+                   WHERE t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')
+                     AND t.to_entity_id   NOT IN (SELECT id FROM entities WHERE type='internal')
+                     {period_and}""",
+                tuple(pp),
+            ).fetchone()[0]
+            count_conds, cpp = _period_conds(date_from, date_to)
+            count_sql = "SELECT COUNT(*) FROM transactions" + (
+                " WHERE " + " AND ".join(count_conds) if count_conds else ""
+            )
+            transaction_count = conn.execute(count_sql, tuple(cpp)).fetchone()[0]
 
         return {
             "balance": balance,
@@ -157,6 +199,10 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
     We compute the current balance, then walk backwards in time to reconstruct
     balance at the end of each past month. This avoids any reference-amount
     accounting ambiguity for consolidated views.
+
+    This widget is a trailing "evolution du solde" view anchored on the real
+    current balance; it is intentionally NOT bounded to the selected exercise
+    (anchoring a past exercise's last month to today's balance would be wrong).
     """
     conn = get_conn()
     try:
@@ -167,12 +213,12 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
             # compute_entity_balance). Incoming = amount when the entity is the
             # destination. Outgoing = amount (already negative) when the entity
             # is the source on an expense. Matches the signed-amount convention
-            # used by smart_import and the transactions API.
+            # used by the transactions API.
             net_rows = conn.execute(
                 """SELECT substr(date,1,7) AS month,
                           COALESCE(SUM(CASE
                               WHEN to_entity_id = ? THEN amount
-                              WHEN from_entity_id = ? AND amount < 0 THEN amount
+                              WHEN from_entity_id = ? THEN -amount
                               ELSE 0
                           END), 0) AS net
                    FROM transactions
@@ -189,8 +235,18 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
             else:
                 current_balance = compute_legacy_balance(conn, str(CONFIG_PATH))["balance"]
             net_rows = conn.execute(
-                """SELECT substr(date,1,7) AS month, SUM(amount) AS net
-                   FROM transactions GROUP BY month ORDER BY month"""
+                """SELECT substr(date,1,7) AS month,
+                          COALESCE(SUM(CASE
+                              WHEN t.to_entity_id   IN (SELECT id FROM entities WHERE type='internal')
+                               AND t.from_entity_id NOT IN (SELECT id FROM entities WHERE type='internal')
+                              THEN t.amount
+                              WHEN t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')
+                               AND t.to_entity_id   NOT IN (SELECT id FROM entities WHERE type='internal')
+                              THEN -t.amount
+                              ELSE 0
+                          END), 0) AS net
+                   FROM transactions t
+                   GROUP BY month ORDER BY month"""
             ).fetchall()
 
         nets = [(r["month"], r["net"] or 0.0) for r in net_rows]
@@ -209,27 +265,36 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
 
 
 @router.get("/top-categories")
-def top_categories(entity_id: Optional[int] = None, limit: int = 5):
-    """Top categories by expense magnitude."""
+def top_categories(
+    entity_id: Optional[int] = None,
+    limit: int = 5,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Top categories by expense magnitude, optionally bounded to an exercise."""
     conn = get_conn()
     try:
+        conds, pp = _period_conds(date_from, date_to, "t.date")
         if entity_id is not None:
+            where = " AND ".join(["t.from_entity_id = ?"] + conds)
             rows = conn.execute(
-                """SELECT c.name AS name, c.color AS color, SUM(ABS(t.amount)) AS total
+                f"""SELECT c.name AS name, c.color AS color, SUM(t.amount) AS total
                    FROM transactions t
                    LEFT JOIN categories c ON t.category_id = c.id
-                   WHERE t.amount < 0 AND (t.from_entity_id = ? OR t.to_entity_id = ?)
+                   WHERE {where}
                    GROUP BY t.category_id ORDER BY total DESC LIMIT ?""",
-                (entity_id, entity_id, limit),
+                (entity_id, *pp, limit),
             ).fetchall()
         else:
+            base = "t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')"
+            where = " AND ".join([base] + conds)
             rows = conn.execute(
-                """SELECT c.name AS name, c.color AS color, SUM(ABS(t.amount)) AS total
+                f"""SELECT c.name AS name, c.color AS color, SUM(t.amount) AS total
                    FROM transactions t
                    LEFT JOIN categories c ON t.category_id = c.id
-                   WHERE t.amount < 0
+                   WHERE {where}
                    GROUP BY t.category_id ORDER BY total DESC LIMIT ?""",
-                (limit,),
+                (*pp, limit),
             ).fetchall()
         return [{"name": r["name"] or "— Sans catégorie —", "color": r["color"] or "#6B7280", "total": r["total"]} for r in rows]
     finally:
@@ -237,8 +302,13 @@ def top_categories(entity_id: Optional[int] = None, limit: int = 5):
 
 
 @router.get("/recent")
-def recent_transactions(entity_id: Optional[int] = None, limit: int = 5):
-    """Return the N most recent transactions with entity names."""
+def recent_transactions(
+    entity_id: Optional[int] = None,
+    limit: int = 5,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Return the N most recent transactions, optionally bounded to an exercise."""
     conn = get_conn()
     try:
         query = """SELECT t.id, t.date, t.label, t.amount,
@@ -248,10 +318,15 @@ def recent_transactions(entity_id: Optional[int] = None, limit: int = 5):
                    LEFT JOIN entities ef ON t.from_entity_id = ef.id
                    LEFT JOIN entities et ON t.to_entity_id = et.id
                    LEFT JOIN categories c ON t.category_id = c.id"""
-        params: list = []
+        conds, params = [], []
         if entity_id is not None:
-            query += " WHERE t.from_entity_id = ? OR t.to_entity_id = ?"
+            conds.append("(t.from_entity_id = ? OR t.to_entity_id = ?)")
             params += [entity_id, entity_id]
+        period_conds, pp = _period_conds(date_from, date_to, "t.date")
+        conds += period_conds
+        params += pp
+        if conds:
+            query += " WHERE " + " AND ".join(conds)
         query += " ORDER BY t.date DESC, t.id DESC LIMIT ?"
         params.append(limit)
         rows = conn.execute(query, params).fetchall()

@@ -18,45 +18,18 @@ from backend.core.module_loader import discover_modules, filter_active
 from backend.core.rate_limit import limiter
 
 
-def _bootstrap_admin(db_path: Path):
-    """Create default admin user (admin/admin) if no users exist."""
-    import sqlite3
-    from datetime import datetime, timezone
-    from backend.modules.multi_users.api import _hash_password
-
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+def safe_static_file(build_dir: Path, path: str) -> Path | None:
+    """Renvoie le chemin du fichier demandé s'il existe ET reste confiné dans
+    build_dir. Renvoie None sinon (anti path traversal sur le SPA fallback)."""
     try:
-        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        if count > 0:
-            return
+        base = build_dir.resolve()
+        target = (build_dir / path).resolve()
+    except (ValueError, OSError):
+        return None
+    if target.is_file() and target.is_relative_to(base):
+        return target
+    return None
 
-        now = datetime.now(timezone.utc).isoformat()
-        password_hash = _hash_password("admin")
-
-        conn.execute(
-            """INSERT INTO users (username, password_hash, role, display_name, created_at, active)
-               VALUES ('admin', ?, 'admin', 'Administrateur', ?, 1)""",
-            (password_hash, now),
-        )
-        admin_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-        # Assign admin as trésorier of root entity
-        root = conn.execute(
-            "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
-        ).fetchone()
-        if root:
-            conn.execute(
-                "INSERT INTO user_entities (user_id, entity_id, role) VALUES (?, ?, 'tresorier')",
-                (admin_id, root[0]),
-            )
-
-        conn.commit()
-        print(f"  Bootstrap: admin user created (login: admin / password: admin)")
-    except Exception as e:
-        print(f"  Bootstrap admin skipped: {e}")
-    finally:
-        conn.close()
 
 
 def _migrate_reimbursement_contacts(db_path: Path):
@@ -146,11 +119,6 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
     # (dernier add_middleware = premier middleware traversé à l'entrée de la requête)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    # Auth middleware — only active when multi_users module is enabled
-    if config.modules.get("multi_users", False):
-        from backend.core.auth import AuthMiddleware
-        app.add_middleware(AuthMiddleware)
-
     modules_dir = project_root / "backend" / "modules"
     all_modules = discover_modules(str(modules_dir))
     active_modules = filter_active(all_modules, config.modules)
@@ -169,10 +137,6 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
                         app.include_router(mod.router, prefix=f"/api/{module_id}", tags=[manifest["name"]])
                 except Exception as e:
                     print(f"Warning: failed to load routes for {module_id}: {e}")
-
-    # Bootstrap: create default admin user if multi_users is active and no users exist
-    if bootstrap and config.modules.get("multi_users", False):
-        _bootstrap_admin(project_root / db_path)
 
     # Migrate existing person_names to contacts
     if bootstrap and config.modules.get("reimbursements", False):
@@ -226,12 +190,13 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
         # Serve static assets (JS, CSS, images)
         app.mount("/assets", StaticFiles(directory=str(build_dir / "assets")), name="assets")
 
-        # SPA fallback: any non-API route serves index.html
+        # SPA fallback: any non-API route serves index.html.
+        # Le chemin est confiné à build_dir via safe_static_file (anti path traversal).
         @app.get("/{path:path}")
         async def spa_fallback(path: str):
-            file_path = build_dir / path
-            if file_path.is_file():
-                return FileResponse(str(file_path))
+            target = safe_static_file(build_dir, path)
+            if target is not None:
+                return FileResponse(str(target))
             return FileResponse(str(build_dir / "index.html"))
 
     return app

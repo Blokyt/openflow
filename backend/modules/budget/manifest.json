@@ -3,7 +3,7 @@
   "name": "Budget & Exercices",
   "description": "Allocations budgétaires par entité et catégorie, suivi du réalisé et comparaison inter-exercices",
   "help": "Définis des exercices budgétaires (ex: année universitaire), alloue un budget par pôle/club et par catégorie, suis le réalisé en temps réel et compare à l'exercice précédent.",
-  "version": "1.2.0",
+  "version": "1.6.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["entities", "categories", "transactions"],

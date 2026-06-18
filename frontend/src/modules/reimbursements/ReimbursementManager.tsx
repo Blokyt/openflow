@@ -2,9 +2,9 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, CheckCircle2, Clock, RotateCcw } from "lucide-react";
 import { api } from "../../api";
 import EmptyState from "../../core/EmptyState";
+import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
 
 const BASE_URL = "/api";
-const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
 async function apiReimb<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}/reimbursements${path}`, {
@@ -69,7 +69,8 @@ function toPayload(form: ReimbForm) {
   return {
     transaction_id: form.transaction_id ? parseInt(form.transaction_id) : null,
     person_name: form.person_name,
-    amount: parseFloat(form.amount),
+    // La saisie est en euros -> envoyer en centimes entiers
+    amount: eurosToCents(form.amount),
     status: form.status,
     reimbursed_date: form.reimbursed_date || null,
     notes: form.notes,
@@ -127,7 +128,8 @@ export default function ReimbursementManager() {
     setForm({
       transaction_id: r.transaction_id ? String(r.transaction_id) : "",
       person_name: r.person_name,
-      amount: String(r.amount),
+      // amount est en centimes dans l'API -> convertir en euros pour le champ de saisie
+      amount: String(centsToEuros(r.amount)),
       status: r.status,
       reimbursed_date: r.reimbursed_date || "",
       notes: r.notes,
@@ -224,7 +226,7 @@ export default function ReimbursementManager() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
           <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Total en attente</div>
-          <div className="text-2xl font-bold text-[#F2C48D]">{eurFormatter.format(totalPending)}</div>
+          <div className="text-2xl font-bold text-[#F2C48D]">{formatEuros(totalPending)}</div>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
           <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Avances ouvertes</div>
@@ -238,14 +240,14 @@ export default function ReimbursementManager() {
 
       {summary.length > 0 && (
         <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-white mb-3">Qui doit combien ?</h2>
+          <h2 className="text-sm font-semibold text-white mb-3">Ce que le BDA doit rembourser</h2>
           <div className="space-y-2">
             {summary.map((s) => (
               <div key={s.person_name} className="flex items-center justify-between py-1.5">
                 <div className="text-sm text-[#B0B0B0]">
                   {s.person_name} <span className="text-[#555] text-xs ml-2">({s.count} avance{s.count > 1 ? "s" : ""})</span>
                 </div>
-                <div className="text-sm font-semibold text-[#F2C48D]">{eurFormatter.format(s.total_pending)}</div>
+                <div className="text-sm font-semibold text-[#F2C48D]">{formatEuros(s.total_pending)}</div>
               </div>
             ))}
           </div>
@@ -325,7 +327,7 @@ export default function ReimbursementManager() {
                 <option value="">— Aucune —</option>
                 {txOptions.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.label} — {t.date} — {eurFormatter.format(t.amount)}
+                    {t.label} — {t.date} — {formatEuros(t.amount)}
                   </option>
                 ))}
               </select>
@@ -417,7 +419,7 @@ export default function ReimbursementManager() {
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right font-semibold text-[#F2C48D] whitespace-nowrap">
-                    {eurFormatter.format(r.amount)}
+                    {formatEuros(r.amount)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {confirmDelete === r.id ? (

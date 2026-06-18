@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { UserPlus, X } from "lucide-react";
 import { api } from "../../api";
 import { Transaction, Category, Entity, Contact } from "../../types";
+import { eurosToCents, centsToEuros } from "../../utils/format";
+
+/** Retourne la date locale du jour au format YYYY-MM-DD (sans décalage UTC). */
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 interface TransactionFormProps {
   initial?: Partial<Transaction>;
@@ -8,13 +19,190 @@ interface TransactionFormProps {
   onCancel: () => void;
 }
 
+const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
+const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
+
+const CONTACT_TYPES: { value: string; label: string }[] = [
+  { value: "membre", label: "Membre" },
+  { value: "fournisseur", label: "Fournisseur" },
+  { value: "client", label: "Client" },
+  { value: "sponsor", label: "Sponsor" },
+  { value: "other", label: "Autre" },
+];
+
+function ContactCombobox({
+  contacts,
+  value,
+  onChange,
+  onContactCreated,
+  placeholder,
+}: {
+  contacts: Contact[];
+  value: string;
+  onChange: (id: string) => void;
+  onContactCreated: (c: Contact) => void;
+  placeholder: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("membre");
+  const [saving, setSaving] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const selected = contacts.find((c) => String(c.id) === value);
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreating(false);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const filtered = contacts.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function selectContact(c: Contact) {
+    onChange(String(c.id));
+    setSearch("");
+    setOpen(false);
+    setCreating(false);
+  }
+
+  function clearContact() {
+    onChange("");
+    setSearch("");
+  }
+
+  async function handleCreate() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    try {
+      const created = await api.createContact({ name: newName.trim(), type: newType });
+      onContactCreated(created);
+      onChange(String(created.id));
+      setCreating(false);
+      setNewName("");
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      {selected ? (
+        <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5">
+          <span className="text-sm text-white">{selected.name}</span>
+          <button
+            type="button"
+            onClick={clearContact}
+            className="text-[#555] hover:text-[#FF5252] transition-colors ml-2"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setOpen(true); setCreating(false); }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder}
+          className={inputClass}
+          autoComplete="off"
+        />
+      )}
+
+      {open && !selected && (
+        <div className="absolute z-50 mt-1 w-full bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+          {filtered.length > 0 ? (
+            filtered.slice(0, 30).map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onMouseDown={() => selectContact(c)}
+                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#1a1a1a] transition-colors flex items-center justify-between"
+              >
+                <span>{c.name}</span>
+                <span className="text-xs text-[#555] ml-2">{c.type}</span>
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-sm text-[#555]">Aucun résultat</p>
+          )}
+
+          {!creating ? (
+            <button
+              type="button"
+              onMouseDown={() => { setCreating(true); setOpen(true); }}
+              className="w-full text-left px-3 py-2 text-sm text-[#F2C48D] hover:bg-[#1a1a1a] transition-colors flex items-center gap-2 border-t border-[#1a1a1a]"
+            >
+              <UserPlus size={13} /> Créer un nouveau contact
+            </button>
+          ) : (
+            <div className="border-t border-[#1a1a1a] p-3 space-y-2">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Nom du contact"
+                className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder-[#444]"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreate(); } }}
+              />
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value)}
+                className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+              >
+                {CONTACT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onMouseDown={handleCreate}
+                  disabled={saving || !newName.trim()}
+                  className="flex-1 px-3 py-1.5 text-xs font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+                >
+                  {saving ? "Création..." : "Créer"}
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={() => setCreating(false)}
+                  className="px-3 py-1.5 text-xs text-[#666] border border-[#333] rounded-full hover:text-white transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TransactionForm({ initial, onSave, onCancel }: TransactionFormProps) {
-  const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(initial?.date ?? localToday());
   const [label, setLabel] = useState(initial?.label ?? "");
-  const [amount, setAmount] = useState(initial?.amount !== undefined ? String(initial.amount) : "");
+  // Le champ montant est en euros (pas en centimes). Si une transaction existante est passée,
+  // son amount est en centimes -> on convertit en euros pour le pré-remplissage.
+  const [amount, setAmount] = useState(initial?.amount !== undefined ? String(centsToEuros(initial.amount)) : "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [categoryId, setCategoryId] = useState<string>(
     initial?.category_id !== undefined ? String(initial.category_id) : ""
+  );
+  const [contactId, setContactId] = useState<string>(
+    (initial as any)?.contact_id !== undefined ? String((initial as any).contact_id) : ""
   );
   const [fromEntityId, setFromEntityId] = useState<string>(
     initial?.from_entity_id !== undefined ? String(initial.from_entity_id) : ""
@@ -37,12 +225,17 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
     api.getContacts().then(setContacts).catch(() => {});
   }, []);
 
+  function handleContactCreated(c: Contact) {
+    setContacts((prev) => [...prev, c].sort((a, b) => a.name.localeCompare(b.name)));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const parsedAmount = parseFloat(amount);
+    const parsedAmount = parseFloat(String(amount).replace(",", "."));
     if (!label.trim()) { setError("Le libellé est obligatoire."); return; }
     if (isNaN(parsedAmount)) { setError("Le montant doit être un nombre."); return; }
+    if (parsedAmount <= 0) { setError("Le montant doit être strictement positif."); return; }
     if (!fromEntityId) { setError("L'entité source est obligatoire."); return; }
     if (!toEntityId) { setError("L'entité destination est obligatoire."); return; }
     if (fromEntityId === toEntityId) { setError("La source et la destination doivent être différentes."); return; }
@@ -51,9 +244,11 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
       await onSave({
         date,
         label: label.trim(),
-        amount: parsedAmount,
+        // Conversion euros (saisie) -> centimes entiers (API)
+        amount: eurosToCents(amount),
         description: description.trim() || undefined,
         category_id: categoryId ? parseInt(categoryId) : undefined,
+        contact_id: contactId ? parseInt(contactId) : null,
         from_entity_id: parseInt(fromEntityId),
         to_entity_id: parseInt(toEntityId),
         payer_contact_id: payerContactId ? parseInt(payerContactId) : null,
@@ -64,9 +259,6 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
     }
   }
 
-  const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
-  const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
@@ -74,6 +266,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           {error}
         </div>
       )}
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelClass}>Date</label>
@@ -90,6 +283,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           <input
             type="number"
             step="0.01"
+            min="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
@@ -98,6 +292,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           />
         </div>
       </div>
+
       <div>
         <label className={labelClass}>Libellé</label>
         <input
@@ -109,15 +304,11 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           className={inputClass}
         />
       </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelClass}>Source</label>
-          <select
-            value={fromEntityId}
-            onChange={(e) => setFromEntityId(e.target.value)}
-            required
-            className={inputClass}
-          >
+          <select value={fromEntityId} onChange={(e) => setFromEntityId(e.target.value)} required className={inputClass}>
             <option value="">— Choisir —</option>
             {entities.map((ent) => (
               <option key={ent.id} value={ent.id}>
@@ -128,12 +319,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         </div>
         <div>
           <label className={labelClass}>Destination</label>
-          <select
-            value={toEntityId}
-            onChange={(e) => setToEntityId(e.target.value)}
-            required
-            className={inputClass}
-          >
+          <select value={toEntityId} onChange={(e) => setToEntityId(e.target.value)} required className={inputClass}>
             <option value="">— Choisir —</option>
             {entities.map((ent) => (
               <option key={ent.id} value={ent.id}>
@@ -143,39 +329,43 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           </select>
         </div>
       </div>
+
       <div>
         <label className={labelClass}>Catégorie</label>
-        <select
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          className={inputClass}
-        >
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
           <option value="">— Sans catégorie —</option>
           {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
+            <option key={cat.id} value={cat.id}>{cat.name}</option>
           ))}
         </select>
       </div>
+
+      <div>
+        <label className={labelClass}>Contact associé</label>
+        <ContactCombobox
+          contacts={contacts}
+          value={contactId}
+          onChange={setContactId}
+          onContactCreated={handleContactCreated}
+          placeholder="Rechercher un contact..."
+        />
+      </div>
+
       {contacts.length > 0 && (
         <div>
-          <label className={labelClass}>Payeur (avance)</label>
-          <select
-            value={payerContactId}
-            onChange={(e) => setPayerContactId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">— Aucun, pas de remboursement —</option>
+          <label className={labelClass}>Payeur (avance de frais)</label>
+          <select value={payerContactId} onChange={(e) => setPayerContactId(e.target.value)} className={inputClass}>
+            <option value="">— Aucun remboursement —</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
           <p className="text-xs text-[#555] mt-1">
-            Si un membre a avancé l'argent, sélectionne-le ici pour créer un remboursement.
+            Si un membre a avancé l'argent, sélectionne-le pour créer un remboursement automatique.
           </p>
         </div>
       )}
+
       <div>
         <label className={labelClass}>Description</label>
         <textarea
@@ -186,6 +376,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           className={inputClass}
         />
       </div>
+
       <div className="flex justify-end gap-3 pt-2">
         <button
           type="button"

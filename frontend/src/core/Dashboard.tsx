@@ -4,19 +4,20 @@ import { DashboardSummary } from "../types";
 import { TrendingUp, TrendingDown, Hash, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useEntity } from "./EntityContext";
+import { useFiscalYear } from "./FiscalYearContext";
 import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
 import BudgetOverview from "../modules/budget/widgets/BudgetOverview";
+import { formatEuros, txTone } from "../utils/format";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-
-const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
 interface TimePoint { month: string; balance: number; }
 interface TopCat { name: string; color: string; total: number; }
 interface RecentTx {
   id: number; date: string; label: string; amount: number;
   from_entity_name?: string; to_entity_name?: string;
+  from_entity_type?: string; to_entity_type?: string;
   category_name?: string; category_color?: string;
 }
 
@@ -68,7 +69,7 @@ function BalanceTooltip({ active, payload, label }: {
       fontSize: 12,
     }}>
       <p style={{ color: "#B0B0B0", marginBottom: 4 }}>{label}</p>
-      <p style={{ fontWeight: 600 }}>{eurFormatter.format(payload[0].value)}</p>
+      <p style={{ fontWeight: 600 }}>{formatEuros(payload[0].value)}</p>
     </div>
   );
 }
@@ -159,7 +160,7 @@ function TopCategories({ cats }: { cats: TopCat[] }) {
           <div key={c.name}>
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="text-[#B0B0B0]">{c.name}</span>
-              <span className="text-white font-medium">{eurFormatter.format(c.total)}</span>
+              <span className="text-white font-medium">{formatEuros(c.total)}</span>
             </div>
             <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
               <div
@@ -195,9 +196,14 @@ function RecentTransactions({ txs }: { txs: RecentTx[] }) {
                   {t.date} · {t.from_entity_name || "—"} → {t.to_entity_name || "—"}
                 </p>
               </div>
-              <p className={`text-sm font-semibold whitespace-nowrap ${t.amount >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>
-                {eurFormatter.format(t.amount)}
-              </p>
+              {(() => {
+                const { color, sign } = txTone(t);
+                return (
+                  <p className="text-sm font-semibold whitespace-nowrap" style={{ color }}>
+                    {sign}{formatEuros(t.amount)}
+                  </p>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -214,15 +220,19 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { selectedEntityId } = useEntity();
+  const { selectedYear } = useFiscalYear();
 
   useEffect(() => {
     setLoading(true);
     const eid = selectedEntityId ?? undefined;
+    const today = new Date().toISOString().slice(0, 10);
+    const dateFrom = selectedYear?.start_date;
+    const dateTo = selectedYear ? (selectedYear.end_date ?? today) : undefined;
     Promise.all([
-      api.getSummary(eid),
+      api.getSummary(eid, dateFrom, dateTo),
       api.getTimeseries(eid),
-      api.getTopCategories(eid),
-      api.getRecentTransactions(eid),
+      api.getTopCategories(eid, 5, dateFrom, dateTo),
+      api.getRecentTransactions(eid, 5, dateFrom, dateTo),
     ])
       .then(([s, ts, tc, rt]) => {
         setSummary(s);
@@ -232,7 +242,7 @@ export default function Dashboard() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [selectedEntityId]);
+  }, [selectedEntityId, selectedYear?.id]);
 
   if (loading) {
     return (
@@ -264,21 +274,26 @@ export default function Dashboard() {
             className={`relative text-5xl font-bold tracking-tight ${balancePositive ? "text-white" : "text-[#FF5252]"}`}
             style={{ letterSpacing: "-0.02em" }}
           >
-            {eurFormatter.format(summary.balance)}
+            {formatEuros(summary.balance)}
           </h1>
         </div>
         {summary.reference_date && summary.reference_amount !== undefined && (
           <p className="mt-3 text-sm text-[#666]">
             Référence au{" "}
             <span className="text-[#B0B0B0] font-medium">{summary.reference_date}</span>{" "}:{" "}
-            <span className="text-[#B0B0B0] font-medium">{eurFormatter.format(summary.reference_amount)}</span>
+            <span className="text-[#B0B0B0] font-medium">{formatEuros(summary.reference_amount)}</span>
           </p>
         )}
       </div>
 
+      {selectedYear && (
+        <p className="-mb-2 text-xs text-[#666]">
+          Activité de l'exercice <span className="text-[#F2C48D] font-medium">{selectedYear.name}</span>
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <SummaryCard label="Recettes" value={eurFormatter.format(summary.total_income)} icon={TrendingUp} valueColor="text-[#00C853]" />
-        <SummaryCard label="Dépenses" value={eurFormatter.format(summary.total_expenses)} icon={TrendingDown} valueColor="text-[#FF5252]" />
+        <SummaryCard label="Recettes" value={formatEuros(summary.total_income)} icon={TrendingUp} valueColor="text-[#00C853]" />
+        <SummaryCard label="Dépenses" value={formatEuros(summary.total_expenses)} icon={TrendingDown} valueColor="text-[#FF5252]" />
         <SummaryCard label="Transactions" value={String(summary.transaction_count)} icon={Hash} valueColor="text-white" />
       </div>
 

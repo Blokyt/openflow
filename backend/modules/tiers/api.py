@@ -35,20 +35,33 @@ class ContactUpdate(BaseModel):
 def list_contacts(
     type: Optional[str] = None,
     search: Optional[str] = None,
+    limit: int = 80,
+    offset: int = 0,
 ):
     conn = get_conn()
     try:
-        query = "SELECT * FROM contacts WHERE 1=1"
-        params = []
+        where = "WHERE 1=1"
+        params: list = []
         if type:
-            query += " AND type = ?"
+            where += " AND type = ?"
             params.append(type)
         if search:
-            query += " AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)"
+            where += " AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)"
             params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
-        query += " ORDER BY name ASC, id ASC"
-        cur = conn.execute(query, params)
-        return [row_to_dict(r) for r in cur.fetchall()]
+
+        total = conn.execute(f"SELECT COUNT(*) FROM contacts {where}", params).fetchone()[0]
+        rows = conn.execute(
+            f"""SELECT c.* FROM contacts c
+                LEFT JOIN (
+                    SELECT contact_id, MAX(date) as last_date FROM transactions
+                    WHERE contact_id IS NOT NULL GROUP BY contact_id
+                ) t ON t.contact_id = c.id
+                {where}
+                ORDER BY COALESCE(t.last_date, '') DESC, c.name ASC, c.id ASC
+                LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+        return {"total": total, "items": [row_to_dict(r) for r in rows]}
     finally:
         conn.close()
 
@@ -132,6 +145,36 @@ def update_contact(contact_id: int, contact: ContactUpdate):
         conn.commit()
         row = conn.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,)).fetchone()
         return row_to_dict(row)
+    finally:
+        conn.close()
+
+
+@router.post("/{source_id}/merge-into/{target_id}")
+def merge_contacts(source_id: int, target_id: int):
+    """Fusionne source dans target : réassigne toutes les FK puis supprime source."""
+    conn = get_conn()
+    try:
+        source = conn.execute("SELECT * FROM contacts WHERE id = ?", (source_id,)).fetchone()
+        target = conn.execute("SELECT * FROM contacts WHERE id = ?", (target_id,)).fetchone()
+        if source is None:
+            raise HTTPException(status_code=404, detail=f"Contact source {source_id} introuvable")
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"Contact cible {target_id} introuvable")
+        if source_id == target_id:
+            raise HTTPException(status_code=400, detail="Source et cible identiques")
+
+        for table in ("transactions", "reimbursements"):
+            try:
+                conn.execute(
+                    f"UPDATE {table} SET contact_id = ? WHERE contact_id = ?",
+                    (target_id, source_id),
+                )
+            except Exception:
+                pass
+
+        conn.execute("DELETE FROM contacts WHERE id = ?", (source_id,))
+        conn.commit()
+        return {"merged": source_id, "into": target_id, "target": row_to_dict(target)}
     finally:
         conn.close()
 

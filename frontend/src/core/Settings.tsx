@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
-import { Pencil, Check, X, Info, FileSpreadsheet, Download, MapPin, ArrowRight } from "lucide-react";
+import { Pencil, Check, X, Info, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
-import { useAuth } from "./AuthContext";
 import { eur } from "../utils/format";
 import BalanceRefsSection from "./BalanceRefsSection";
 
@@ -118,130 +117,6 @@ function EditableField({
   );
 }
 
-function FecExportSection() {
-  const [year, setYear] = useState(String(new Date().getFullYear()));
-  return (
-    <section className="mb-8">
-      <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-        <FileSpreadsheet size={16} className="text-[#F2C48D]" />
-        Export FEC
-      </h2>
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-        <p className="text-xs text-[#666] mb-4">
-          Génère le Fichier des Écritures Comptables (FEC) au format légal français
-          pour une année fiscale. Obligatoire en cas de contrôle fiscal.
-        </p>
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="block text-xs text-[#666] mb-1.5">Année fiscale</label>
-            <input
-              type="number"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
-              placeholder="2026"
-            />
-          </div>
-          <a
-            href={`/api/fec_export/generate?fiscal_year=${year}`}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
-          >
-            <Download size={14} /> Télécharger
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PasswordSection() {
-  const { user } = useAuth();
-  const [oldPassword, setOldPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
-
-  if (!user) return null;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setSuccess(false);
-    if (newPassword !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas");
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError("Le mot de passe doit faire au moins 6 caractères");
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.changePassword(oldPassword, newPassword);
-      setSuccess(true);
-      setOldPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err: any) {
-      setError(err.message || "Erreur lors du changement de mot de passe");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="mb-8">
-      <h2 className="text-base font-semibold text-white mb-3">Mon compte</h2>
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-[#666] text-sm">Identifiant</span>
-          <span className="font-medium text-white text-sm">{user.username}</span>
-        </div>
-        <div className="border-t border-[#1a1a1a] pt-4">
-          <p className="text-xs text-[#666] mb-3">Changer le mot de passe</p>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="password"
-              value={oldPassword}
-              onChange={(e) => setOldPassword(e.target.value)}
-              placeholder="Mot de passe actuel"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder:text-[#444]"
-              required
-            />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Nouveau mot de passe"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder:text-[#444]"
-              required
-            />
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirmer le nouveau mot de passe"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder:text-[#444]"
-              required
-            />
-            {error && <p className="text-[#FF5252] text-xs">{error}</p>}
-            {success && <p className="text-[#00C853] text-xs">Mot de passe modifié avec succès.</p>}
-            <button
-              type="submit"
-              disabled={saving}
-              className="bg-[#F2C48D] text-black font-medium rounded-lg px-4 py-2.5 text-sm hover:bg-[#e5b87e] transition-colors disabled:opacity-50"
-            >
-              {saving ? "Enregistrement..." : "Enregistrer"}
-            </button>
-          </form>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export default function Settings() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [modules, setModules] = useState<DisplayModule[]>([]);
@@ -347,8 +222,6 @@ export default function Settings() {
     );
   }
 
-  const moduleMap = new Map(modules.map((m) => [m.id, m]));
-
   function renderModuleRow(mod: DisplayModule, idx: number) {
     const isCore = coreModuleIds.has(mod.id);
     const isExpanded = expandedHelp === mod.id;
@@ -365,8 +238,7 @@ export default function Settings() {
     let actionPath: string | null = null;
     if (mod.active) {
       if (MODULE_ROUTES[mod.id]) actionPath = MODULE_ROUTES[mod.id].path;
-      else if (["annotations", "attachments", "export"].includes(mod.id)) actionPath = "/transactions";
-      else if (["audit", "fec_export"].includes(mod.id)) actionPath = "/settings";
+      else if (["attachments"].includes(mod.id)) actionPath = "/transactions";
     }
 
     return (
@@ -441,7 +313,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold text-white mb-8" style={{ letterSpacing: "-0.02em" }}>
         Paramètres
       </h1>
@@ -502,10 +374,6 @@ export default function Settings() {
       )}
 
       <BalanceRefsSection />
-
-      <PasswordSection />
-
-      {moduleMap.get("fec_export")?.active && <FecExportSection />}
 
       <section className="space-y-6">
         <h2 className="text-base font-semibold text-white">Modules</h2>

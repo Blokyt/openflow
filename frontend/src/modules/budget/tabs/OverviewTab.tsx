@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
-import { eur, budgetColor } from "../../../utils/format";
+import { formatEuros, budgetColor } from "../../../utils/format";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 interface Props { year: FiscalYear | null }
@@ -67,16 +67,16 @@ export default function OverviewTab({ year }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-white font-medium">{ent.entity_name}</td>
-                  <td className="px-4 py-3 text-right text-[#B0B0B0]">{eur.format(ent.opening_balance)}</td>
-                  <td className="px-4 py-3 text-right text-[#B0B0B0]">{eur.format(ent.allocated_total)}</td>
+                  <td className="px-4 py-3 text-right text-[#B0B0B0]">{formatEuros(ent.opening_balance)}</td>
+                  <td className="px-4 py-3 text-right text-[#B0B0B0]">{formatEuros(ent.allocated_total)}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${ent.realized_total >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>
-                    {eur.format(ent.realized_total)}
+                    {formatEuros(ent.realized_total)}
                   </td>
                   <td className="px-4 py-3 text-right" style={{ color: budgetColor(pct) }}>
                     {ent.allocated_total > 0 ? `${pct.toFixed(1)} %` : "—"}
                   </td>
                   {hasNMinus1 && (
-                    <td className="px-4 py-3 text-right text-[#B0B0B0]">{eur.format(ent.realized_n_minus_1)}</td>
+                    <td className="px-4 py-3 text-right text-[#B0B0B0]">{formatEuros(ent.realized_n_minus_1)}</td>
                   )}
                   {hasNMinus1 && (
                     <td className="px-4 py-3 text-right text-xs">
@@ -93,12 +93,12 @@ export default function OverviewTab({ year }: Props) {
                     <td className="px-4 py-2"></td>
                     <td className="px-8 py-2 text-[#B0B0B0]">↳ {c.category_name}</td>
                     <td className="px-4 py-2 text-right text-[#555]">—</td>
-                    <td className="px-4 py-2 text-right text-[#B0B0B0]">{eur.format(c.allocated)}</td>
-                    <td className="px-4 py-2 text-right">{eur.format(c.realized)}</td>
+                    <td className="px-4 py-2 text-right text-[#B0B0B0]">{formatEuros(c.allocated)}</td>
+                    <td className="px-4 py-2 text-right">{formatEuros(c.realized)}</td>
                     <td className="px-4 py-2 text-right" style={{ color: budgetColor(c.percent_consumed) }}>
                       {c.percent_consumed.toFixed(1)} %
                     </td>
-                    {hasNMinus1 && <td className="px-4 py-2 text-right text-[#B0B0B0]">{eur.format(c.realized_n_minus_1)}</td>}
+                    {hasNMinus1 && <td className="px-4 py-2 text-right text-[#B0B0B0]">{formatEuros(c.realized_n_minus_1)}</td>}
                     {hasNMinus1 && <td className="px-4 py-2 text-right">—</td>}
                   </tr>
                 ))}
@@ -111,8 +111,8 @@ export default function OverviewTab({ year }: Props) {
             <td></td>
             <td className="px-4 py-3 text-white font-semibold">Total</td>
             <td></td>
-            <td className="px-4 py-3 text-right text-white font-semibold">{eur.format(data.totals.allocated)}</td>
-            <td className="px-4 py-3 text-right text-white font-semibold">{eur.format(data.totals.realized)}</td>
+            <td className="px-4 py-3 text-right text-white font-semibold">{formatEuros(data.totals.allocated)}</td>
+            <td className="px-4 py-3 text-right text-white font-semibold">{formatEuros(data.totals.realized)}</td>
             <td colSpan={hasNMinus1 ? 3 : 1}></td>
           </tr>
         </tfoot>

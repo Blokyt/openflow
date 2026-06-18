@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Save } from "lucide-react";
 import { api } from "../api";
-import { eur } from "../utils/format";
+import { formatEuros, eurosToCents, centsToEuros } from "../utils/format";
 
 interface EntityRow {
   id: number;
@@ -77,7 +77,8 @@ export default function BalanceRefsSection() {
       flat.forEach((e, i) => {
         const [ref, bal] = results[i];
         const date = ref.reference_date ?? "";
-        const amount = ref.reference_amount != null ? String(ref.reference_amount) : "";
+        // L'API renvoie reference_amount en centimes -> convertir en euros pour l'affichage
+        const amount = ref.reference_amount != null ? String(centsToEuros(ref.reference_amount)) : "";
         const currentBalance = bal?.balance ?? null;
         newRows[e.id] = {
           loadedMode: e.balance_mode,
@@ -134,9 +135,10 @@ export default function BalanceRefsSection() {
         await api.updateEntityNode(entity.id, { balance_mode: r.mode });
       }
       if (refChanged) {
+        // La saisie utilisateur est en euros -> envoyer en centimes
         await api.updateBalanceRef(entity.id, {
           reference_date: r.date || null,
-          reference_amount: r.amount !== "" ? parseFloat(r.amount) : 0,
+          reference_amount: r.amount !== "" ? eurosToCents(r.amount) : 0,
         });
       }
 
@@ -146,7 +148,8 @@ export default function BalanceRefsSection() {
         api.getEntityBalance(entity.id).catch(() => null),
       ]);
       const newDate = newRef.reference_date ?? "";
-      const newAmount = newRef.reference_amount != null ? String(newRef.reference_amount) : "";
+      // L'API renvoie reference_amount en centimes -> convertir en euros pour l'affichage
+      const newAmount = newRef.reference_amount != null ? String(centsToEuros(newRef.reference_amount)) : "";
 
       updateRow(entity.id, {
         saving: false,
@@ -292,7 +295,7 @@ export default function BalanceRefsSection() {
                 <div className="text-sm text-right">
                   {r.currentBalance !== null ? (
                     <span className={r.currentBalance >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}>
-                      {eur.format(r.currentBalance)}
+                      {formatEuros(r.currentBalance)}
                     </span>
                   ) : (
                     <span className="text-[#444]">—</span>

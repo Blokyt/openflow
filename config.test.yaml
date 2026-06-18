@@ -16,16 +16,10 @@ modules:
   transactions: true
   categories: true
   dashboard: true
-  invoices: true
   reimbursements: true
   budget: true
   tiers: true
   attachments: true
-  annotations: true
-  export: true
-  audit: true
-  fec_export: true
-  multi_users: true
   backup: true
-  smart_import: true
   system: true
+  reports: true

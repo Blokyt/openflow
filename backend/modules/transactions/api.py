@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.audit import record_audit
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
 
@@ -18,13 +17,30 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
 
+def _date_in_closed_period(conn: sqlite3.Connection, date: str) -> bool:
+    """Retourne True si `date` tombe dans un exercice clôturé (end_date IS NOT NULL).
+
+    Retourne False si la table fiscal_years n'existe pas (module budget absent).
+    """
+    try:
+        row = conn.execute(
+            """SELECT 1 FROM fiscal_years
+               WHERE end_date IS NOT NULL
+                 AND ? BETWEEN start_date AND end_date""",
+            (date,),
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
 
 
 class TransactionCreate(BaseModel):
     date: str
     label: str
     description: str = ""
-    amount: float
+    amount: int  # centimes, toujours positif ; le sens vient de from/to
     category_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: str = ""
@@ -37,7 +53,7 @@ class TransactionUpdate(BaseModel):
     date: Optional[str] = None
     label: Optional[str] = None
     description: Optional[str] = None
-    amount: Optional[float] = None
+    amount: Optional[int] = None  # centimes, toujours positif
     category_id: Optional[int] = None
     contact_id: Optional[int] = None
     created_by: Optional[str] = None
@@ -55,15 +71,15 @@ def list_transactions(
     entity_id: Optional[int] = None,
     include_children: bool = False,
     reimb_status: Optional[str] = None,
-    amount_min: Optional[float] = None,
-    amount_max: Optional[float] = None,
+    amount_min: Optional[int] = None,
+    amount_max: Optional[int] = None,
 ):
     conn = get_conn()
     try:
         query = """SELECT t.*,
                    c.name AS category_name, c.color AS category_color,
-                   ef.name AS from_entity_name, ef.color AS from_entity_color,
-                   et.name AS to_entity_name, et.color AS to_entity_color,
+                   ef.name AS from_entity_name, ef.color AS from_entity_color, ef.type AS from_entity_type,
+                   et.name AS to_entity_name, et.color AS to_entity_color, et.type AS to_entity_type,
                    co.name AS contact_name,
                    rb.reimb_person_name, rb.reimb_status, rb.reimb_count, rb.reimb_contact_id
             FROM transactions t
@@ -143,9 +159,20 @@ def list_transactions(
 
 @router.post("/", status_code=201)
 def create_transaction(tx: TransactionCreate):
+    # Convention : montant strictement positif, sens porté par from/to distincts.
+    if tx.amount <= 0:
+        raise HTTPException(status_code=400, detail="Le montant doit être strictement positif")
+    if tx.from_entity_id == tx.to_entity_id:
+        raise HTTPException(status_code=400, detail="Les entités source et destination doivent être différentes")
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
+        # Verrou de clôture : la date ne doit pas tomber dans un exercice clôturé.
+        if _date_in_closed_period(conn, tx.date):
+            raise HTTPException(
+                status_code=409,
+                detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
+            )
         for field, value in (("from_entity_id", tx.from_entity_id), ("to_entity_id", tx.to_entity_id)):
             exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (value,)).fetchone()
             if exists is None:
@@ -171,7 +198,6 @@ def create_transaction(tx: TransactionCreate):
         )
         tx_id = cur.lastrowid
         new_row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
-        record_audit(conn, "create", "transactions", tx_id, None, row_to_dict(new_row), tx.created_by)
 
         if tx.payer_contact_id is not None:
             contact_row = conn.execute(
@@ -223,6 +249,17 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
 
+        # Verrou de clôture : la tx existante ou la nouvelle date ne doivent pas
+        # tomber dans un exercice clôturé.
+        updates_preview = tx.model_dump(exclude_unset=True)
+        existing_date = existing["date"]
+        new_date = updates_preview.get("date", existing_date)
+        if _date_in_closed_period(conn, existing_date) or _date_in_closed_period(conn, new_date):
+            raise HTTPException(
+                status_code=409,
+                detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
+            )
+
         updates = tx.model_dump(exclude_unset=True)
         # Separate payer_contact_id from tx-column updates
         payer_contact_id_provided = "payer_contact_id" in updates
@@ -238,6 +275,13 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
                 exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (updates[field],)).fetchone()
                 if exists is None:
                     raise HTTPException(status_code=400, detail=f"{field}={updates[field]} does not reference an existing entity")
+
+        if "amount" in updates and updates["amount"] is not None and updates["amount"] <= 0:
+            raise HTTPException(status_code=400, detail="Le montant doit être strictement positif")
+        final_from = updates.get("from_entity_id", existing["from_entity_id"])
+        final_to = updates.get("to_entity_id", existing["to_entity_id"])
+        if final_from is not None and final_from == final_to:
+            raise HTTPException(status_code=400, detail="Les entités source et destination doivent être différentes")
 
         if updates:
             set_clauses = ", ".join(f"{k} = ?" for k in updates)
@@ -270,7 +314,6 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
                 )
 
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
-        record_audit(conn, "update", "transactions", tx_id, row_to_dict(existing), row_to_dict(row))
         conn.commit()
         return row_to_dict(row)
     finally:
@@ -284,8 +327,13 @@ def delete_transaction(tx_id: int):
         existing = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
+        # Verrou de clôture.
+        if _date_in_closed_period(conn, existing["date"]):
+            raise HTTPException(
+                status_code=409,
+                detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
+            )
         conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
-        record_audit(conn, "delete", "transactions", tx_id, row_to_dict(existing), None)
         conn.commit()
         return {"deleted": tx_id}
     finally:

@@ -4,9 +4,13 @@ import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
 import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
-import { useFiscalYear } from "../../core/FiscalYearContext";
+import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
 
-const eurFormatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+/** Retourne la date locale du jour au format YYYY-MM-DD. */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // ─── Entity tree node ────────────────────────────────────────────────────────
 
@@ -237,22 +241,7 @@ function EntityBalancePanel({
   const [consolidated, setConsolidated] = useState<ConsolidatedBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const { entities: entityTree, setSelectedEntityId } = useEntity();
-  const { currentYear } = useFiscalYear();
-  const [opening, setOpening] = useState<{ amount: number; source: string } | null>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!currentYear) { setOpening(null); return; }
-    let cancelled = false;
-    api.listOpeningBalances(currentYear.id)
-      .then((rows: any[]) => {
-        if (cancelled) return;
-        const row = rows.find((r) => r.entity_id === entityId);
-        setOpening(row ? { amount: row.amount, source: row.source || "" } : null);
-      })
-      .catch(() => { if (!cancelled) setOpening(null); });
-    return () => { cancelled = true; };
-  }, [entityId, currentYear?.id]);
 
   // Ref edition form state
   const [editingRef, setEditingRef] = useState(false);
@@ -305,8 +294,9 @@ function EntityBalancePanel({
   }, [entityId]);
 
   function openEditForm() {
-    setRefDate(balance?.reference_date ?? new Date().toISOString().slice(0, 10));
-    setRefAmount(balance?.reference_amount != null ? String(balance.reference_amount) : "");
+    setRefDate(balance?.reference_date ?? localToday());
+    // reference_amount est en centimes -> convertir en euros pour le champ de saisie
+    setRefAmount(balance?.reference_amount != null ? String(centsToEuros(balance.reference_amount)) : "");
     setRefError(null);
     setEditingRef(true);
   }
@@ -316,9 +306,10 @@ function EntityBalancePanel({
     setRefSaving(true);
     setRefError(null);
     try {
+      // La saisie est en euros -> envoyer en centimes entiers à l'API
       await api.updateBalanceRef(entityId, {
         reference_date: refDate,
-        reference_amount: parseFloat(refAmount),
+        reference_amount: eurosToCents(refAmount),
       });
       await loadBalances();
       setEditingRef(false);
@@ -333,8 +324,10 @@ function EntityBalancePanel({
   const sumChildren = hasChildren
     ? consolidated!.children.reduce((acc, c) => acc + c.balance, 0)
     : 0;
+  // L'utilisateur saisit le total bancaire en euros ; on convertit en centimes pour comparer aux soldes
   const bankTotalNum = bankTotal !== "" ? parseFloat(bankTotal) : null;
-  const calculatedOwn = bankTotalNum !== null ? bankTotalNum - sumChildren : null;
+  const bankTotalCents = bankTotalNum !== null ? Math.round(bankTotalNum * 100) : null;
+  const calculatedOwn = bankTotalCents !== null ? bankTotalCents - sumChildren : null;
 
   return (
     <div className="bg-[#0d0d0d] border border-[#222] rounded-2xl p-5">
@@ -392,22 +385,17 @@ function EntityBalancePanel({
                 )}
               </div>
               <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-[#FF5252]"}`}>
-                {eurFormatter.format(balance.balance)}
+                {formatEuros(balance.balance)}
               </p>
               {isAggregate ? (
                 balance.reference_date && (
                   <p className="text-xs text-[#555] mt-1">
-                    Solde agrégé {balance.reference_date} : {eurFormatter.format(balance.reference_amount)} (bancaire)
+                    Solde agrégé {balance.reference_date} : {formatEuros(balance.reference_amount)} (bancaire)
                   </p>
                 )
-              ) : opening ? (
-                <p className="text-xs text-[#555] mt-1">
-                  Ouverture {currentYear?.name} : {eurFormatter.format(opening.amount)}
-                  {opening.source && <span className="text-[#444]"> ({opening.source})</span>}
-                </p>
               ) : balance.reference_date ? (
                 <p className="text-xs text-[#555] mt-1">
-                  Réf. {balance.reference_date} : {eurFormatter.format(balance.reference_amount)}
+                  Réf. {balance.reference_date} : {formatEuros(balance.reference_amount)}
                 </p>
               ) : null}
 
@@ -459,7 +447,7 @@ function EntityBalancePanel({
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
               <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Solde consolidé</p>
               <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-[#F2C48D]" : "text-[#FF5252]"}`}>
-                {eurFormatter.format(consolidated!.consolidated_balance)}
+                {formatEuros(consolidated!.consolidated_balance)}
               </p>
               {isAggregate && (
                 <p className="text-xs text-[#555] mt-1">= solde agrégé de référence + variations depuis</p>
@@ -469,7 +457,7 @@ function EntityBalancePanel({
                   <div key={child.entity_id} className="flex justify-between text-xs">
                     <span className="text-[#B0B0B0]">{findName(entityTree, child.entity_id) ?? `Entité #${child.entity_id}`}</span>
                     <span className={child.balance >= 0 ? "text-[#B0B0B0]" : "text-[#FF5252]"}>
-                      {eurFormatter.format(child.balance)}
+                      {formatEuros(child.balance)}
                     </span>
                   </div>
                 ))}
@@ -495,19 +483,20 @@ function EntityBalancePanel({
                 <div className="mt-3 space-y-2">
                   <p className="text-xs text-[#666]">
                     Solde propre calculé ={" "}
-                    <span className="text-[#B0B0B0]">{eurFormatter.format(bankTotalNum!)}</span>
+                    <span className="text-[#B0B0B0]">{formatEuros(bankTotalCents!)}</span>
                     {" − "}
-                    <span className="text-[#B0B0B0]">{eurFormatter.format(sumChildren)}</span>
+                    <span className="text-[#B0B0B0]">{formatEuros(sumChildren)}</span>
                     {" = "}
                     <span className={`font-bold ${calculatedOwn >= 0 ? "text-white" : "text-[#FF5252]"}`}>
-                      {eurFormatter.format(calculatedOwn)}
+                      {formatEuros(calculatedOwn)}
                     </span>
                   </p>
                   <button
                     type="button"
                     onClick={() => {
-                      setRefAmount(String(calculatedOwn));
-                      setRefDate(balance?.reference_date ?? new Date().toISOString().slice(0, 10));
+                      // Le champ de référence attend des euros -> convertir les centimes
+                      setRefAmount(String(centsToEuros(calculatedOwn!)));
+                      setRefDate(balance?.reference_date ?? localToday());
                       setRefError(null);
                       setEditingRef(true);
                     }}

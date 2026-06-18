@@ -1,101 +1,166 @@
-"""Coherence tests: balance consistency across modules."""
+"""Coherence tests: cohérence des soldes entre les modules.
+
+Convention (refonte C1+C2) :
+  - `amount` est un entier de centimes, TOUJOURS POSITIF.
+  - Le sens vient de from_entity_id -> to_entity_id :
+      recette  = from EXTERNE -> to INTERNE
+      dépense  = from INTERNE -> to EXTERNE
+  - Solde = reference + SUM(entrées) - SUM(sorties).
+
+La fixture `client` injecte automatiquement from=_TestDefaultFrom (INTERNE)
+/ to=_TestDefaultTo (EXTERNE) quand from/to sont absents (= dépense par défaut).
+Pour créer des recettes, il faut expliciter les deux champs.
+"""
 import pytest
 
 
+def _setup_entities_for_income_expense(client):
+    """Crée une paire interne/externe et retourne (internal_id, external_id)."""
+    internal = client.post(
+        "/api/entities/", json={"name": "_CoherenceInternal", "type": "internal"}
+    ).json()
+    external = client.post(
+        "/api/entities/", json={"name": "_CoherenceExternal", "type": "external"}
+    ).json()
+    return internal["id"], external["id"]
+
+
 def _create_transactions(client):
-    """Create a known set of transactions for testing."""
-    txs = [
-        {"date": "2025-03-15", "label": "Vente A", "amount": 1000.0},
-        {"date": "2025-04-10", "label": "Vente B", "amount": 500.0},
-        {"date": "2025-05-20", "label": "Achat fournisseur", "amount": -300.0},
-        {"date": "2025-06-01", "label": "Loyer", "amount": -700.0},
-        {"date": "2025-07-15", "label": "Prestation", "amount": 2000.0},
+    """Crée un ensemble connu de transactions.
+
+    Tous les montants sont en centimes, toujours positifs. Le sens est
+    encodé via from/to :
+      recettes  : 100000 + 50000 + 200000 = 350000 centimes
+      dépenses  : 30000 + 70000           = 100000 centimes
+      net       : 350000 - 100000         = 250000 centimes
+
+    On utilise une paire interne/externe dédiée pour isoler ces transactions
+    des entités injectées par le fixture client (qui sont aussi de type
+    interne/externe, mais pour d'autres tests).
+    """
+    int_id, ext_id = _setup_entities_for_income_expense(client)
+
+    txs_raw = [
+        # recettes (from externe, to interne)
+        {"date": "2025-03-15", "label": "Vente A",     "amount": 100000, "is_income": True},
+        {"date": "2025-04-10", "label": "Vente B",     "amount": 50000,  "is_income": True},
+        {"date": "2025-07-15", "label": "Prestation",  "amount": 200000, "is_income": True},
+        # dépenses (from interne, to externe)
+        {"date": "2025-05-20", "label": "Achat fournisseur", "amount": 30000, "is_income": False},
+        {"date": "2025-06-01", "label": "Loyer",             "amount": 70000, "is_income": False},
     ]
-    for tx in txs:
-        resp = client.post("/api/transactions/", json=tx)
-        assert resp.status_code == 201, f"Failed to create tx: {resp.text}"
-    return txs
+    for tx in txs_raw:
+        is_income = tx.pop("is_income")
+        from_id = ext_id if is_income else int_id
+        to_id   = int_id if is_income else ext_id
+        payload = dict(tx, from_entity_id=from_id, to_entity_id=to_id)
+        resp = client.post("/api/transactions/", json=payload)
+        assert resp.status_code == 201, f"Échec création tx: {resp.text}"
+    return int_id, ext_id
 
 
-# --- Balance calculations ---
+# --- Calcul du solde ---
 
 def test_balance_with_no_transactions(client):
-    """Empty DB: balance = reference_amount (0.0)."""
+    """DB vide : balance = reference_amount (0)."""
     resp = client.get("/api/transactions/balance")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["balance"] == 0.0
-    assert data["transactions_sum"] == 0.0
+    assert data["balance"] == 0
+    assert data["transactions_sum"] == 0
 
 
 def test_balance_matches_manual_sum(client):
-    """Balance must equal reference_amount + sum of all transaction amounts."""
-    txs = _create_transactions(client)
-    expected_sum = sum(t["amount"] for t in txs)  # 1000+500-300-700+2000 = 2500
+    """Balance = reference_amount + (recettes - dépenses)."""
+    _create_transactions(client)
+    # net global sur toutes les entités internes = 350000 - 100000 = 250000 centimes
+    expected_net = 250000
     resp = client.get("/api/transactions/balance")
     data = resp.json()
-    assert data["transactions_sum"] == pytest.approx(expected_sum)
-    assert data["balance"] == pytest.approx(data["reference_amount"] + expected_sum)
+    assert data["transactions_sum"] == pytest.approx(expected_net)
+    assert data["balance"] == pytest.approx(data["reference_amount"] + expected_net)
 
 
 def test_balance_income_minus_expenses(client):
-    """Verify income - expenses = net (transactions_sum)."""
+    """Vérifier que recettes - dépenses = net (transactions_sum)."""
     _create_transactions(client)
     resp = client.get("/api/transactions/balance")
     data = resp.json()
-    # Manual: income=3500, expenses=1000, net=2500
-    assert data["transactions_sum"] == pytest.approx(2500.0)
+    # recettes = 350000, dépenses = 100000, net = 250000
+    assert data["transactions_sum"] == pytest.approx(250000)
 
 
-# --- Cross-module: transactions/balance == dashboard/summary.balance ---
+# --- Cross-module : transactions/balance == dashboard/summary.balance ---
 
 def test_dashboard_balance_equals_transactions_balance(client):
-    """Dashboard summary balance must match transactions balance endpoint."""
+    """Le solde du dashboard doit correspondre à celui de l'endpoint transactions."""
     _create_transactions(client)
-    bal = client.get("/api/transactions/balance").json()
+    bal  = client.get("/api/transactions/balance").json()
     dash = client.get("/api/dashboard/summary").json()
     assert dash["balance"] == pytest.approx(bal["balance"])
 
 
 def test_dashboard_income_expenses_coherent(client):
-    """Dashboard total_income and total_expenses must match actual transactions."""
+    """Les totaux income/expenses du dashboard doivent correspondre aux transactions."""
     _create_transactions(client)
     dash = client.get("/api/dashboard/summary").json()
-    # Income: 1000 + 500 + 2000 = 3500
-    assert dash["total_income"] == pytest.approx(3500.0)
-    # Expenses: abs(-300 + -700) = 1000
-    assert dash["total_expenses"] == pytest.approx(1000.0)
+    # Recettes (from externe -> to interne) : 100000 + 50000 + 200000 = 350000
+    assert dash["total_income"] == pytest.approx(350000)
+    # Dépenses (from interne -> to externe) : 30000 + 70000 = 100000
+    assert dash["total_expenses"] == pytest.approx(100000)
 
 
 def test_dashboard_transaction_count(client):
-    """Dashboard must report correct transaction count."""
-    txs = _create_transactions(client)
+    """Le dashboard doit reporter le nombre correct de transactions."""
+    _create_transactions(client)
     dash = client.get("/api/dashboard/summary").json()
-    assert dash["transaction_count"] == len(txs)
+    assert dash["transaction_count"] == 5
 
 
-# --- Balance with only income or only expenses ---
+# --- Solde avec uniquement des recettes ou uniquement des dépenses ---
 
 def test_balance_income_only(client):
-    """Balance with only positive transactions."""
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "Don", "amount": 100.0})
-    client.post("/api/transactions/", json={"date": "2025-06-02", "label": "Don2", "amount": 250.0})
+    """Solde avec uniquement des recettes (entrées)."""
+    int_id, ext_id = _setup_entities_for_income_expense(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-06-01", "label": "Don",
+        "amount": 10000,
+        "from_entity_id": ext_id, "to_entity_id": int_id,
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-06-02", "label": "Don2",
+        "amount": 25000,
+        "from_entity_id": ext_id, "to_entity_id": int_id,
+    })
     bal = client.get("/api/transactions/balance").json()
-    assert bal["balance"] == pytest.approx(350.0)
-    assert bal["transactions_sum"] == pytest.approx(350.0)
+    assert bal["balance"] == pytest.approx(35000)
+    assert bal["transactions_sum"] == pytest.approx(35000)
 
 
 def test_balance_expenses_only(client):
-    """Balance with only negative transactions — should be negative."""
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "Achat", "amount": -150.0})
-    client.post("/api/transactions/", json={"date": "2025-06-02", "label": "Achat2", "amount": -50.0})
+    """Solde avec uniquement des dépenses (sorties). Doit être négatif si ref=0."""
+    int_id, ext_id = _setup_entities_for_income_expense(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-06-01", "label": "Achat",
+        "amount": 15000,
+        "from_entity_id": int_id, "to_entity_id": ext_id,
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-06-02", "label": "Achat2",
+        "amount": 5000,
+        "from_entity_id": int_id, "to_entity_id": ext_id,
+    })
     bal = client.get("/api/transactions/balance").json()
-    assert bal["balance"] == pytest.approx(-200.0)
+    # reference=0, net = 0 - 20000 = -20000
+    assert bal["balance"] == pytest.approx(-20000)
 
 
-def test_balance_zero_amount_transaction(client):
-    """Zero-amount transaction should not affect balance."""
-    client.post("/api/transactions/", json={"date": "2025-06-01", "label": "Nul", "amount": 0.0})
-    bal = client.get("/api/transactions/balance").json()
-    assert bal["balance"] == pytest.approx(0.0)
-    assert bal["transactions_sum"] == pytest.approx(0.0)
+def test_balance_zero_amount_transaction_rejected(client):
+    """Une transaction de montant nul doit être rejetée (400)."""
+    int_id, ext_id = _setup_entities_for_income_expense(client)
+    resp = client.post("/api/transactions/", json={
+        "date": "2025-06-01", "label": "Nul",
+        "amount": 0,
+        "from_entity_id": int_id, "to_entity_id": ext_id,
+    })
+    assert resp.status_code == 400

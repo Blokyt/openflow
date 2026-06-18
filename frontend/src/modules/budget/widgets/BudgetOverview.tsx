@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFiscalYear } from "../../../core/FiscalYearContext";
 import { api } from "../../../api";
-import { eur, budgetColor } from "../../../utils/format";
+import { formatEuros, budgetColor } from "../../../utils/format";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
@@ -49,12 +49,12 @@ export default function BudgetOverview() {
         </Link>
       </div>
       <p className="text-sm text-white mb-2">
-        {eur.format(realized)} consommés / {eur.format(allocated)} alloués
+        {formatEuros(realized)} consommés / {formatEuros(allocated)} alloués
       </p>
       <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden mb-3">
         <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }} />
       </div>
-      <p className="text-xs text-[#666] mb-3">Reste {eur.format(allocated - realized)}</p>
+      <p className="text-xs text-[#666] mb-3">Reste {formatEuros(allocated - realized)}</p>
       {overspending.length > 0 && (
         <div className="mt-2 pt-3 border-t border-[#1a1a1a]">
           <p className="text-xs text-[#666] uppercase tracking-wider mb-1.5">Top dépassements</p>

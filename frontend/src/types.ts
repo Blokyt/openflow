@@ -12,6 +12,7 @@ export interface Transaction {
   id: number;
   date: string;
   label: string;
+  /** Montant en centimes entiers (toujours positif). Le sens est déterminé par from_entity_type / to_entity_type. */
   amount: number;
   description?: string;
   category_id?: number;
@@ -19,6 +20,10 @@ export interface Transaction {
   contact_id?: number;
   from_entity_id: number;
   to_entity_id: number;
+  /** Type de l'entité source, renvoyé par l'API dans les listes : "internal" | "external" */
+  from_entity_type?: string;
+  /** Type de l'entité destination, renvoyé par l'API dans les listes : "internal" | "external" */
+  to_entity_type?: string;
   category?: Category;
   reimb_contact_id?: number;
   reimb_person_name?: string;
@@ -60,11 +65,15 @@ export interface AppConfig {
 }
 
 export interface DashboardSummary {
+  /** Solde en centimes entiers */
   balance: number;
+  /** Total des recettes en centimes entiers */
   total_income: number;
+  /** Total des dépenses en centimes entiers */
   total_expenses: number;
   transaction_count: number;
   reference_date?: string;
+  /** Montant de référence en centimes entiers */
   reference_amount?: number;
 }
 
@@ -97,7 +106,9 @@ export interface Entity {
 
 export interface EntityBalance {
   entity_id: number;
+  /** Solde en centimes entiers */
   balance: number;
+  /** Montant de référence en centimes entiers */
   reference_amount: number;
   reference_date: string | null;
   transactions_sum: number;
@@ -105,7 +116,9 @@ export interface EntityBalance {
 
 export interface ConsolidatedBalance {
   entity_id: number;
+  /** Solde propre en centimes entiers */
   own_balance: number;
+  /** Solde consolidé (propre + enfants) en centimes entiers */
   consolidated_balance: number;
   children: EntityBalance[];
 }
