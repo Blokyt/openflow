@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ArrowLeftRight, Tags, PiggyBank, Repeat,
   TrendingUp, GitCompare, Receipt, Settings, FileText, RotateCcw,
   Building2, Users, Paperclip, MessageSquare, Download, Wallet,
-  ShieldCheck, Bell, HandCoins, FileSpreadsheet,
+  ShieldCheck, Bell, HandCoins, FileSpreadsheet, FileBarChart,
   ChevronDown, GitBranch, Check, Archive, FileUp, Activity, CalendarDays,
 } from "lucide-react";
 import { useEntity } from "./EntityContext";
@@ -35,6 +35,7 @@ const ICON_MAP: Record<string, any> = {
   "bell": Bell,
   "hand-coins": HandCoins,
   "file-spreadsheet": FileSpreadsheet,
+  "file-bar-chart": FileBarChart,
   "git-branch": GitBranch,
   "archive": Archive,
   "file-up": FileUp,
@@ -52,6 +53,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   budget: "/budget",
   tiers: "/tiers",
   reimbursements: "/reimbursements",
+  reports: "/reports",
   backup: "/backup",
   system: "/system",
 };

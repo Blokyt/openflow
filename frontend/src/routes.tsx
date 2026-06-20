@@ -6,6 +6,7 @@ import BackupManager from "./modules/backup/BackupManager";
 import SystemPage from "./modules/system/SystemPage";
 import TiersList from "./modules/tiers/TiersList";
 import ReimbursementManager from "./modules/reimbursements/ReimbursementManager";
+import Reports from "./modules/reports/index";
 
 export type ModuleRoute = { path: string; element: React.ReactNode };
 
@@ -16,6 +17,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   budget: { path: "/budget", element: <BudgetManager /> },
   tiers: { path: "/contacts", element: <TiersList /> },
   reimbursements: { path: "/reimbursements", element: <ReimbursementManager /> },
+  reports: { path: "/reports", element: <Reports /> },
   backup: { path: "/backup", element: <BackupManager /> },
   system: { path: "/system", element: <SystemPage /> },
 };

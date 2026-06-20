@@ -3,10 +3,10 @@
   "name": "Rapports",
   "description": "Compte de résultat et bilan simplifié pour l'assemblée générale",
   "help": "Génère le compte de résultat (produits/charges par catégorie) et le bilan de trésorerie pour l'assemblée générale. Accepte une période libre (start_date/end_date) ou un exercice fiscal (fiscal_year_id).",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "origin": "builtin",
   "category": "standard",
-  "dependencies": ["transactions", "categories", "entities"],
+  "dependencies": ["transactions", "categories", "entities", "budget"],
   "menu": {
     "label": "Rapports",
     "icon": "file-bar-chart",

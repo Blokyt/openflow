@@ -7,6 +7,28 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   return response.json();
 }
+
+function reportQuery(params: { fiscal_year_id?: number; start_date?: string; end_date?: string }): string {
+  const q = new URLSearchParams();
+  if (params.fiscal_year_id != null) q.set("fiscal_year_id", String(params.fiscal_year_id));
+  if (params.start_date) q.set("start_date", params.start_date);
+  if (params.end_date) q.set("end_date", params.end_date);
+  return q.toString();
+}
+
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  return header?.split("filename=")[1]?.replace(/"/g, "") || fallback;
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   getModules: () => request<any[]>("/modules"),
   getAllModules: () => request<any[]>("/modules/all"),
@@ -125,13 +147,7 @@ export const api = {
     const response = await fetch(`${BASE_URL}/backup/export`);
     if (!response.ok) throw new Error("Erreur lors de l'export");
     const blob = await response.blob();
-    const filename = response.headers.get("Content-Disposition")?.split("filename=")[1] || "openflow-backup.zip";
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerBlobDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), "openflow-backup.zip"));
   },
   importBackup: async (file: File) => {
     const formData = new FormData();
@@ -143,4 +159,36 @@ export const api = {
     }
     return response.json();
   },
+  // Rapports comptables (compte de résultat, bilan, plan comptable)
+  getCompteResultat: (params: { fiscal_year_id?: number; start_date?: string; end_date?: string }) =>
+    request<any>(`/reports/compte-resultat?${reportQuery(params)}`),
+  getBilan: (params: { fiscal_year_id?: number }) =>
+    request<any>(`/reports/bilan?${reportQuery(params)}`),
+  getReportAccounts: () => request<{ accounts: any[] }>("/reports/accounts"),
+  getReportMapping: () => request<{ mapping: any[]; unmapped: any[] }>("/reports/mapping"),
+  setReportMapping: (category_id: number, account_id: number | null) =>
+    request<any>("/reports/mapping", { method: "PUT", body: JSON.stringify({ category_id, account_id }) }),
+  downloadReportPdf: async (
+    kind: "compte-resultat" | "bilan",
+    params: { fiscal_year_id?: number; start_date?: string; end_date?: string },
+  ) => {
+    const response = await fetch(`${BASE_URL}/reports/${kind}/pdf?${reportQuery(params)}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || response.statusText);
+    }
+    const blob = await response.blob();
+    triggerBlobDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), `${kind}.pdf`));
+  },
+  // Régularisations d'engagement (créances / dettes de clôture)
+  getAccruals: (fiscalYearId: number) =>
+    request<any[]>(`/reports/accruals?fiscal_year_id=${fiscalYearId}`),
+  createAccrual: (body: {
+    fiscal_year_id: number; kind: string; amount: number; label: string;
+    category_id?: number | null; entity_id?: number | null; description?: string;
+  }) => request<any>("/reports/accruals", { method: "POST", body: JSON.stringify(body) }),
+  updateAccrual: (id: number, body: any) =>
+    request<any>(`/reports/accruals/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteAccrual: (id: number) =>
+    request<any>(`/reports/accruals/${id}`, { method: "DELETE" }),
 };
