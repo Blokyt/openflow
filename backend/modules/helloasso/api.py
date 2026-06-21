@@ -157,3 +157,51 @@ def upsert_link(payload: LinkPayload):
         return row_to_dict(row)
     finally:
         conn.close()
+
+
+def _recorded_cents(conn, category_id, club_entity_id, start, end) -> int:
+    """Net pour le club sur la categorie, dans la periode (entrants - sortants)."""
+    row = conn.execute(
+        """SELECT COALESCE(SUM(CASE
+                WHEN to_entity_id = ? THEN amount
+                WHEN from_entity_id = ? THEN -amount
+                ELSE 0 END), 0)
+           FROM transactions
+           WHERE date BETWEEN ? AND ?
+             AND category_id IS ?
+             AND (from_entity_id = ? OR to_entity_id = ?)""",
+        (club_entity_id, club_entity_id, start, end, category_id, club_entity_id, club_entity_id),
+    ).fetchone()
+    return row[0] if not hasattr(row, "keys") else row[0]
+
+
+@router.get("/campaigns")
+def list_campaigns(fiscal_year_id: int):
+    conn = get_conn()
+    try:
+        start, end = _fiscal_year_bounds(conn, fiscal_year_id)
+        campaigns = conn.execute(
+            "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? ORDER BY title",
+            (fiscal_year_id,),
+        ).fetchall()
+        links = {}
+        for r in conn.execute("SELECT * FROM helloasso_links").fetchall():
+            d = row_to_dict(r)
+            links[(d["form_type"], d["form_slug"])] = d
+        out = []
+        for c in campaigns:
+            data = row_to_dict(c)
+            link = links.get((data["form_type"], data["form_slug"]))
+            if link is None:
+                data["link"] = None
+                data["recorded_cents"] = None
+                data["gap_cents"] = None
+            else:
+                recorded = _recorded_cents(conn, link["category_id"], link["to_entity_id"], start, end)
+                data["link"] = link
+                data["recorded_cents"] = recorded
+                data["gap_cents"] = data["collected_cents"] - recorded
+            out.append(data)
+        return out
+    finally:
+        conn.close()
