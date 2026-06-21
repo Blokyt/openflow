@@ -56,6 +56,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   reports: "/reports",
   backup: "/backup",
   system: "/system",
+  helloasso: "/helloasso",
 };
 
 // Core modules: always shown, in fixed order

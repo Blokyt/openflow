@@ -191,4 +191,18 @@ export const api = {
     request<any>(`/reports/accruals/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteAccrual: (id: number) =>
     request<any>(`/reports/accruals/${id}`, { method: "DELETE" }),
+  // HelloAsso
+  getHelloAssoConfig: () =>
+    request<{ configured: boolean; organization_slug: string; has_secret: boolean }>("/helloasso/config"),
+  putHelloAssoConfig: (cfg: { client_id: string; client_secret: string; organization_slug: string }) =>
+    request<{ configured: boolean }>("/helloasso/config", { method: "PUT", body: JSON.stringify(cfg) }),
+  syncHelloAsso: (fiscalYearId: number) =>
+    request<any[]>(`/helloasso/sync?fiscal_year_id=${fiscalYearId}`, { method: "POST" }),
+  getHelloAssoCampaigns: (fiscalYearId: number) =>
+    request<any[]>(`/helloasso/campaigns?fiscal_year_id=${fiscalYearId}`),
+  getHelloAssoLinks: () => request<any[]>("/helloasso/links"),
+  putHelloAssoLink: (link: { form_type: string; form_slug: string; category_id: number | null; from_entity_id: number; to_entity_id: number }) =>
+    request<any>("/helloasso/links", { method: "PUT", body: JSON.stringify(link) }),
+  adjustHelloAsso: (body: { form_type: string; form_slug: string; fiscal_year_id: number }) =>
+    request<any>("/helloasso/adjust", { method: "POST", body: JSON.stringify(body) }),
 };

@@ -7,6 +7,7 @@ import SystemPage from "./modules/system/SystemPage";
 import TiersList from "./modules/tiers/TiersList";
 import ReimbursementManager from "./modules/reimbursements/ReimbursementManager";
 import Reports from "./modules/reports/index";
+import HelloAssoPage from "./modules/helloasso/HelloAssoPage";
 
 export type ModuleRoute = { path: string; element: React.ReactNode };
 
@@ -20,6 +21,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   reports: { path: "/reports", element: <Reports /> },
   backup: { path: "/backup", element: <BackupManager /> },
   system: { path: "/system", element: <SystemPage /> },
+  helloasso: { path: "/helloasso", element: <HelloAssoPage /> },
 };
 
 export const MODULE_IDS_WITH_ROUTE = new Set(Object.keys(MODULE_ROUTES));
