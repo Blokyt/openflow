@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.core.database import get_conn, row_to_dict
+from backend.modules.helloasso.client import HelloAssoClient, HelloAssoError
 
 router = APIRouter()
 
@@ -56,5 +57,60 @@ def put_config(payload: ConfigPayload):
         )
         conn.commit()
         return {"configured": bool(payload.client_id and payload.client_secret and payload.organization_slug)}
+    finally:
+        conn.close()
+
+
+def _fiscal_year_bounds(conn, fiscal_year_id: int):
+    row = conn.execute(
+        "SELECT start_date, end_date FROM fiscal_years WHERE id = ?", (fiscal_year_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Exercice introuvable")
+    start = row["start_date"] if hasattr(row, "keys") else row[0]
+    end = row["end_date"] if hasattr(row, "keys") else row[1]
+    return start, (end or "9999-12-31")
+
+
+def _build_client(conn) -> HelloAssoClient:
+    row = _load_config_row(conn)
+    if row is None:
+        raise HTTPException(status_code=400, detail="Clé API HelloAsso non configurée")
+    data = row_to_dict(row)
+    if not (data["client_id"] and data["client_secret"] and data["organization_slug"]):
+        raise HTTPException(status_code=400, detail="Clé API HelloAsso incomplète")
+    return HelloAssoClient(data["client_id"], data["client_secret"], data["organization_slug"])
+
+
+@router.post("/sync")
+def sync(fiscal_year_id: int):
+    conn = get_conn()
+    try:
+        start, end = _fiscal_year_bounds(conn, fiscal_year_id)
+        client = _build_client(conn)
+        try:
+            totals = client.fetch_campaign_totals(start, end)
+        except HelloAssoError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        now = _now()
+        for t in totals:
+            conn.execute(
+                """INSERT INTO helloasso_campaigns
+                   (fiscal_year_id, form_type, form_slug, title, state, collected_cents, currency, last_synced_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(fiscal_year_id, form_type, form_slug) DO UPDATE SET
+                       title = excluded.title,
+                       state = excluded.state,
+                       collected_cents = excluded.collected_cents,
+                       currency = excluded.currency,
+                       last_synced_at = excluded.last_synced_at""",
+                (fiscal_year_id, t["form_type"], t["form_slug"], t["title"], t["state"],
+                 t["collected_cents"], t["currency"], now),
+            )
+        conn.commit()
+        cached = conn.execute(
+            "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? ORDER BY title", (fiscal_year_id,)
+        ).fetchall()
+        return [row_to_dict(r) for r in cached]
     finally:
         conn.close()
