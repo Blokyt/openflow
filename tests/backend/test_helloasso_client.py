@@ -84,6 +84,16 @@ def test_fetch_forms_paginates():
     assert forms[1]["formSlug"] == "gala"
 
 
+def test_get_token_refreshes_after_expiry():
+    http = FakeHttp(FakeResp(200, {"access_token": "tok", "expires_in": 1800}), [])
+    c = _client(http)
+    c._get_token()
+    c._token_expiry = 0  # force l'expiration
+    c._get_token()
+    post_calls = [call for call in http.calls if call[0] == "POST"]
+    assert len(post_calls) == 2  # un nouveau token a été redemandé
+
+
 def test_fetch_campaign_totals_aggregates(monkeypatch):
     c = _client(FakeHttp(FakeResp(200, {"access_token": "t", "expires_in": 1800}), []))
     monkeypatch.setattr(c, "fetch_forms", lambda: [

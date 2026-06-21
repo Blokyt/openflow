@@ -132,7 +132,7 @@ export default function HelloAssoPage() {
                 {c.link == null ? (
                   <button onClick={() => setEditing(c.form_slug)} className="text-blue-600">À rattacher</button>
                 ) : c.gap_cents != null && c.gap_cents !== 0 ? (
-                  <button onClick={() => adjust(c)} className="text-blue-600">Ajuster</button>
+                  <button onClick={() => adjust(c)} disabled={loading} className="text-blue-600 disabled:opacity-50">Ajuster</button>
                 ) : (
                   <span className="text-green-600">OK</span>
                 )}

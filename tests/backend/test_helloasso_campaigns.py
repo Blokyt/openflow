@@ -41,6 +41,25 @@ def test_campaign_gap_with_link(client_and_db):
     assert row["link"] is not None
 
 
+def test_campaign_excludes_out_of_range_transaction(client_and_db):
+    client, db_path = client_and_db
+    fy = 1
+    _seed(db_path, fy, collected=400000, recorded_tx=[382500])
+    # transaction HORS exercice (avant le start 2025-09-01) : ne doit PAS compter
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """INSERT INTO transactions (date, label, description, amount, category_id, from_entity_id, to_entity_id, created_at, updated_at)
+           VALUES ('2024-01-01', 'Hors exercice', '', 99999, 20, 7, 1, '2024-01-01T00:00:00', '2024-01-01T00:00:00')""",
+    )
+    conn.commit()
+    conn.close()
+    client.put("/api/helloasso/links", json={
+        "form_type": "Membership", "form_slug": "cotis",
+        "category_id": 20, "from_entity_id": 7, "to_entity_id": 1})
+    rows = client.get(f"/api/helloasso/campaigns?fiscal_year_id={fy}").json()
+    assert rows[0]["recorded_cents"] == 382500  # la transaction de 2024 est exclue
+
+
 def test_campaign_without_link_has_null_gap(client_and_db):
     client, db_path = client_and_db
     fy = 1
