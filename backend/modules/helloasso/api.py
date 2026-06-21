@@ -175,6 +175,60 @@ def _recorded_cents(conn, category_id, club_entity_id, start, end) -> int:
     return row[0] if not hasattr(row, "keys") else row[0]
 
 
+class AdjustPayload(BaseModel):
+    form_type: str
+    form_slug: str
+    fiscal_year_id: int
+
+
+@router.post("/adjust", status_code=201)
+def adjust(payload: AdjustPayload):
+    conn = get_conn()
+    try:
+        start, end = _fiscal_year_bounds(conn, payload.fiscal_year_id)
+        campaign = conn.execute(
+            "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? AND form_type = ? AND form_slug = ?",
+            (payload.fiscal_year_id, payload.form_type, payload.form_slug),
+        ).fetchone()
+        if campaign is None:
+            raise HTTPException(status_code=400, detail="Campagne absente du cache : lance d'abord une synchro")
+        link = conn.execute(
+            "SELECT * FROM helloasso_links WHERE form_type = ? AND form_slug = ?",
+            (payload.form_type, payload.form_slug),
+        ).fetchone()
+        if link is None:
+            raise HTTPException(status_code=400, detail="Campagne non rattachée à un poste de la compta")
+
+        camp = row_to_dict(campaign)
+        lk = row_to_dict(link)
+        recorded = _recorded_cents(conn, lk["category_id"], lk["to_entity_id"], start, end)
+        gap = camp["collected_cents"] - recorded
+        if gap == 0:
+            raise HTTPException(status_code=400, detail="Aucun écart à ajuster")
+
+        amount = abs(gap)
+        if gap > 0:  # collecté > enregistré : recette qui entre dans le club
+            from_id, to_id = lk["from_entity_id"], lk["to_entity_id"]
+        else:        # enregistré > collecté : régularisation, sortie du club
+            from_id, to_id = lk["to_entity_id"], lk["from_entity_id"]
+
+        today = datetime.now(timezone.utc).date().isoformat()
+        now = _now()
+        label = f"Ajustement HelloAsso, {camp['title']}"
+        cur = conn.execute(
+            """INSERT INTO transactions
+               (date, label, description, amount, category_id, contact_id, created_by, from_entity_id, to_entity_id, created_at, updated_at)
+               VALUES (?, ?, '', ?, ?, NULL, 'helloasso', ?, ?, ?, ?)""",
+            (today, label, amount, lk["category_id"], from_id, to_id, now, now),
+        )
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM transactions WHERE id = ?", (new_id,)).fetchone()
+        conn.commit()
+        return row_to_dict(row)
+    finally:
+        conn.close()
+
+
 @router.get("/campaigns")
 def list_campaigns(fiscal_year_id: int):
     conn = get_conn()
