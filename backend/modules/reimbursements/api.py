@@ -77,6 +77,25 @@ def _get_divers_entity(conn):
     return row["id"] if row else None
 
 
+def _date_in_closed_period(conn, date: str) -> bool:
+    """Retourne True si `date` tombe dans un exercice clôturé (end_date IS NOT NULL).
+
+    Retourne False si la table fiscal_years n'existe pas (module budget absent).
+    Réplique volontairement le verrou de transactions/api.py : les modules sont
+    indépendants, on ne factorise pas ce contrôle via le core.
+    """
+    try:
+        row = conn.execute(
+            """SELECT 1 FROM fiscal_years
+               WHERE end_date IS NOT NULL
+                 AND ? BETWEEN start_date AND end_date""",
+            (date,),
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
 def _create_disbursement_transaction(conn, reimb: dict, now: str) -> int:
     """Crée atomiquement la transaction de décaissement.
 
@@ -112,6 +131,13 @@ def _create_disbursement_transaction(conn, reimb: dict, now: str) -> int:
     amount = reimb["amount"]
     contact_id = reimb.get("contact_id")
     date = reimb.get("reimbursed_date") or now[:10]  # YYYY-MM-DD
+
+    # Verrou de clôture : ne pas injecter une écriture dans un exercice clos.
+    if _date_in_closed_period(conn, date):
+        raise HTTPException(
+            409,
+            "Exercice clôturé : rouvrez-le pour enregistrer ce remboursement.",
+        )
 
     cur = conn.execute(
         """INSERT INTO transactions

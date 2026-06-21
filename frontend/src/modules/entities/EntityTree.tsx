@@ -5,6 +5,7 @@ import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
 import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
 import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
+import ConfirmDialog from "../../core/ConfirmDialog";
 
 /** Retourne la date locale du jour au format YYYY-MM-DD. */
 function localToday(): string {
@@ -18,11 +19,13 @@ function EntityNode({
   entity,
   depth,
   onDelete,
+  onEdit,
   onSelect,
 }: {
   entity: Entity;
   depth: number;
   onDelete: (id: number) => void;
+  onEdit: (entity: Entity) => void;
   onSelect: (id: number) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -62,7 +65,14 @@ function EntityNode({
         )}
 
         <button
-          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity ml-1"
+          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity ml-1"
+          onClick={(e) => { e.stopPropagation(); onEdit(entity); }}
+          title="Modifier"
+        >
+          <Pencil size={13} />
+        </button>
+        <button
+          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
           onClick={(e) => { e.stopPropagation(); onDelete(entity.id); }}
           title="Supprimer"
         >
@@ -78,6 +88,7 @@ function EntityNode({
               entity={child}
               depth={depth + 1}
               onDelete={onDelete}
+              onEdit={onEdit}
               onSelect={onSelect}
             />
           ))}
@@ -87,23 +98,26 @@ function EntityNode({
   );
 }
 
-// ─── Create entity modal ──────────────────────────────────────────────────────
+// ─── Entity create / edit modal ───────────────────────────────────────────────
 
-function CreateEntityModal({
+function EntityModal({
   type,
+  entity,
   internalEntities,
   onClose,
-  onCreate,
+  onSaved,
 }: {
   type: "internal" | "external";
+  entity?: Entity | null;
   internalEntities: Entity[];
   onClose: () => void;
-  onCreate: () => void;
+  onSaved: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [parentId, setParentId] = useState<number | "">("");
-  const [color, setColor] = useState("#F2C48D");
+  const isEdit = !!entity;
+  const [name, setName] = useState(entity?.name ?? "");
+  const [description, setDescription] = useState(entity?.description ?? "");
+  const [parentId, setParentId] = useState<number | "">(entity?.parent_id ?? "");
+  const [color, setColor] = useState(entity?.color ?? "#F2C48D");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,31 +127,40 @@ function CreateEntityModal({
     setSaving(true);
     setError(null);
     try {
-      await api.createEntity({
-        name: name.trim(),
-        description: description.trim(),
-        type,
-        parent_id: parentId !== "" ? parentId : null,
-        color,
-        is_default: 0,
-        is_divers: 0,
-        position: 0,
-      });
-      onCreate();
+      if (isEdit) {
+        const payload: any = { name: name.trim(), description: description.trim(), color };
+        if (type === "internal") payload.parent_id = parentId !== "" ? parentId : null;
+        await api.updateEntityNode(entity!.id, payload);
+      } else {
+        await api.createEntity({
+          name: name.trim(),
+          description: description.trim(),
+          type,
+          parent_id: parentId !== "" ? parentId : null,
+          color,
+          is_default: 0,
+          is_divers: 0,
+          position: 0,
+        });
+      }
+      onSaved();
       onClose();
     } catch (err: any) {
-      setError(err.message || "Erreur lors de la création");
+      setError(err.message || "Erreur lors de l'enregistrement");
     } finally {
       setSaving(false);
     }
   }
+
+  // En édition d'une entité interne, elle ne peut pas être son propre parent.
+  const parentChoices = internalEntities.filter((e) => !isEdit || e.id !== entity!.id);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-[#111] border border-[#222] rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-base font-semibold text-white">
-            Nouvelle entité {type === "internal" ? "interne" : "externe"}
+            {isEdit ? "Modifier" : "Nouvelle"} entité {type === "internal" ? "interne" : "externe"}
           </h2>
           <button onClick={onClose} className="text-[#666] hover:text-white">
             <X size={18} />
@@ -169,7 +192,7 @@ function CreateEntityModal({
             />
           </div>
 
-          {type === "internal" && internalEntities.length > 0 && (
+          {type === "internal" && parentChoices.length > 0 && (
             <div>
               <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wider">Entité parente</label>
               <select
@@ -178,7 +201,7 @@ function CreateEntityModal({
                 className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D]/50"
               >
                 <option value="">Aucune (racine)</option>
-                {internalEntities.map((e) => (
+                {parentChoices.map((e) => (
                   <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
@@ -217,7 +240,7 @@ function CreateEntityModal({
               disabled={saving || !name.trim()}
               className="flex-1 px-4 py-2 rounded-lg bg-[#F2C48D] text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {saving ? "Création..." : "Créer"}
+              {isEdit ? (saving ? "..." : "Enregistrer") : (saving ? "Création..." : "Créer")}
             </button>
           </div>
         </form>
@@ -524,8 +547,12 @@ export default function EntityTree() {
   const { entities, reload } = useEntity();
   const [externalEntities, setExternalEntities] = useState<Entity[]>([]);
   const [showCreateModal, setShowCreateModal] = useState<"internal" | "external" | null>(null);
+  const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
   const [selectedEntityId, setSelectedEntityId] = useState<number | null>(null);
   const [selectedEntityName, setSelectedEntityName] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getEntities("external")
@@ -533,15 +560,26 @@ export default function EntityTree() {
       .catch(() => setExternalEntities([]));
   }, []);
 
-  async function handleDelete(id: number) {
-    if (!confirm("Supprimer cette entité ?")) return;
+  function requestDelete(id: number) {
+    setPageError(null);
+    setDeleteTarget(id);
+  }
+
+  async function confirmDelete() {
+    if (deleteTarget == null) return;
+    setDeleting(true);
+    setPageError(null);
     try {
-      await api.deleteEntity(id);
+      await api.deleteEntity(deleteTarget);
       await reload();
       api.getEntities("external").then(setExternalEntities).catch(() => {});
-      if (selectedEntityId === id) setSelectedEntityId(null);
+      if (selectedEntityId === deleteTarget) setSelectedEntityId(null);
+      setDeleteTarget(null);
     } catch (err: any) {
-      alert(err.message || "Erreur lors de la suppression");
+      setPageError(err.message || "Erreur lors de la suppression");
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -553,7 +591,7 @@ export default function EntityTree() {
     }
   }
 
-  async function handleCreated() {
+  async function handleSaved() {
     await reload();
     await api.getEntities("external").then(setExternalEntities).catch(() => {});
   }
@@ -580,6 +618,15 @@ export default function EntityTree() {
           <a href="/categories" className="text-[#F2C48D] hover:underline">Catégories</a>.
         </p>
       </div>
+
+      {pageError && (
+        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+          {pageError}
+          <button onClick={() => setPageError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: trees */}
@@ -614,7 +661,8 @@ export default function EntityTree() {
                     key={e.id}
                     entity={e}
                     depth={0}
-                    onDelete={handleDelete}
+                    onDelete={requestDelete}
+                    onEdit={setEditingEntity}
                     onSelect={handleSelectEntity}
                   />
                 ))
@@ -662,8 +710,15 @@ export default function EntityTree() {
                       <span className="text-xs text-[#555] truncate max-w-[120px]">{e.description}</span>
                     )}
                     <button
+                      className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity"
+                      onClick={(e2) => { e2.stopPropagation(); setEditingEntity(e); }}
+                      title="Modifier"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
                       className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
-                      onClick={(e2) => { e2.stopPropagation(); handleDelete(e.id); }}
+                      onClick={(e2) => { e2.stopPropagation(); requestDelete(e.id); }}
                       title="Supprimer"
                     >
                       <Trash2 size={13} />
@@ -694,15 +749,27 @@ export default function EntityTree() {
         </div>
       </div>
 
-      {/* Create modal */}
-      {showCreateModal && (
-        <CreateEntityModal
-          type={showCreateModal}
+      {/* Create / edit modal */}
+      {(showCreateModal || editingEntity) && (
+        <EntityModal
+          type={editingEntity ? (editingEntity.type as "internal" | "external") : showCreateModal!}
+          entity={editingEntity}
           internalEntities={flatInternal}
-          onClose={() => setShowCreateModal(null)}
-          onCreate={handleCreated}
+          onClose={() => { setShowCreateModal(null); setEditingEntity(null); }}
+          onSaved={handleSaved}
         />
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Supprimer cette entité ?"
+        message="Cette action est irréversible. Les transactions liées ne sont pas supprimées."
+        confirmLabel="Supprimer"
+        danger
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

@@ -259,6 +259,19 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
     }
   }
 
+  const internalEntities = entities.filter((e) => e.type === "internal");
+  const externalEntities = entities.filter((e) => e.type === "external");
+  const fromEnt = entities.find((e) => String(e.id) === fromEntityId);
+  const toEnt = entities.find((e) => String(e.id) === toEntityId);
+  let flowSense: { label: string; color: string } | null = null;
+  if (fromEnt && toEnt) {
+    if (fromEnt.type === "external" && toEnt.type === "internal")
+      flowSense = { label: "Recette (argent entrant)", color: "#00C853" };
+    else if (fromEnt.type === "internal" && toEnt.type === "external")
+      flowSense = { label: "Dépense (argent sortant)", color: "#FF5252" };
+    else flowSense = { label: "Virement interne", color: "#B0B0B0" };
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
@@ -307,28 +320,48 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelClass}>Source</label>
+          <label className={labelClass}>Source (d'où part l'argent)</label>
           <select value={fromEntityId} onChange={(e) => setFromEntityId(e.target.value)} required className={inputClass}>
             <option value="">— Choisir —</option>
-            {entities.map((ent) => (
-              <option key={ent.id} value={ent.id}>
-                {ent.name} {ent.type === "external" ? "(externe)" : ""}
-              </option>
-            ))}
+            <optgroup label="Mes comptes (internes)">
+              {internalEntities.map((ent) => (
+                <option key={ent.id} value={ent.id}>{ent.name}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Tiers / Externes">
+              {externalEntities.map((ent) => (
+                <option key={ent.id} value={ent.id}>{ent.name}</option>
+              ))}
+            </optgroup>
           </select>
         </div>
         <div>
-          <label className={labelClass}>Destination</label>
+          <label className={labelClass}>Destination (où va l'argent)</label>
           <select value={toEntityId} onChange={(e) => setToEntityId(e.target.value)} required className={inputClass}>
             <option value="">— Choisir —</option>
-            {entities.map((ent) => (
-              <option key={ent.id} value={ent.id}>
-                {ent.name} {ent.type === "external" ? "(externe)" : ""}
-              </option>
-            ))}
+            <optgroup label="Mes comptes (internes)">
+              {internalEntities.map((ent) => (
+                <option key={ent.id} value={ent.id}>{ent.name}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Tiers / Externes">
+              {externalEntities.map((ent) => (
+                <option key={ent.id} value={ent.id}>{ent.name}</option>
+              ))}
+            </optgroup>
           </select>
         </div>
       </div>
+
+      {flowSense ? (
+        <p className="-mt-1 text-xs text-[#666]">
+          Sens détecté : <span className="font-semibold" style={{ color: flowSense.color }}>{flowSense.label}</span>
+        </p>
+      ) : (
+        <p className="-mt-1 text-xs text-[#555]">
+          Une dépense va d'un compte interne vers un tiers externe ; une recette fait l'inverse.
+        </p>
+      )}
 
       <div>
         <label className={labelClass}>Catégorie</label>

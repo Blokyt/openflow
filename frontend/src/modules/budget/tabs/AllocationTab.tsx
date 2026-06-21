@@ -3,7 +3,7 @@ import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
 import { Entity, Category } from "../../../types";
 import { formatEuros, eurosToCents, centsToEuros } from "../../../utils/format";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 
 interface Props {
   year: FiscalYear | null;
@@ -19,6 +19,8 @@ export default function AllocationTab({ year, onChange }: Props) {
   const [newCategory, setNewCategory] = useState("");
   const [newAmount, setNewAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState("");
 
   useEffect(() => {
     Promise.all([api.getEntities(), api.getCategories()])
@@ -62,6 +64,25 @@ export default function AllocationTab({ year, onChange }: Props) {
   async function remove(id: number) {
     try {
       await api.deleteAllocation(id);
+      await reloadAllocations();
+      onChange();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  function startEdit(a: any) {
+    setError(null);
+    setEditingId(a.id);
+    // a.amount est en centimes -> euros pour la saisie
+    setEditAmount(String(centsToEuros(a.amount)));
+  }
+
+  async function saveEdit() {
+    if (editingId == null) return;
+    try {
+      await api.updateAllocation(editingId, { amount: eurosToCents(editAmount) });
+      setEditingId(null);
       await reloadAllocations();
       onChange();
     } catch (err: any) {
@@ -161,15 +182,52 @@ export default function AllocationTab({ year, onChange }: Props) {
                     <td className="px-4 py-3 text-[#B0B0B0]">
                       {cat ? cat.name : <span className="text-[#666] italic">Globale</span>}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-white">{formatEuros(a.amount)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-white">
+                      {editingId === a.id ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEdit();
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                          className="w-28 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[#F2C48D]"
+                        />
+                      ) : (
+                        formatEuros(a.amount)
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => remove(a.id)}
-                        className="p-1.5 text-[#666] hover:text-[#FF5252]"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={14} strokeWidth={1.5} />
-                      </button>
+                      {editingId === a.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <button onClick={saveEdit} className="text-xs font-semibold text-[#F2C48D] hover:underline">
+                            OK
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="text-xs text-[#666] hover:text-white">
+                            Annuler
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => startEdit(a)}
+                            className="p-1.5 text-[#666] hover:text-white"
+                            title="Modifier le montant"
+                          >
+                            <Pencil size={14} strokeWidth={1.5} />
+                          </button>
+                          <button
+                            onClick={() => remove(a.id)}
+                            className="p-1.5 text-[#666] hover:text-[#FF5252]"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={14} strokeWidth={1.5} />
+                          </button>
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

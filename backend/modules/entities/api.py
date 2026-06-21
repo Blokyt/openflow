@@ -36,7 +36,7 @@ class EntityUpdate(BaseModel):
 
 class BalanceRefUpdate(BaseModel):
     reference_date: str
-    reference_amount: float
+    reference_amount: int  # centimes entiers (cohérent avec le stockage et les calculs de solde)
 
 
 # --- CRUD ---

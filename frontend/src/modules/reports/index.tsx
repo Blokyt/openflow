@@ -112,24 +112,33 @@ function Loading() {
 
 function PdfButton({ onClick }: { onClick: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   return (
-    <button
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await onClick();
-        } catch (e: any) {
-          alert(e?.message || "Erreur lors de la génération du PDF");
-        } finally {
-          setBusy(false);
-        }
-      }}
-      disabled={busy}
-      className="flex items-center gap-2 rounded-xl border border-[#222] bg-[#111] px-3 py-2 text-sm text-white hover:border-[#F2C48D] transition-colors disabled:opacity-50"
-    >
-      <FileDown size={15} strokeWidth={1.5} />
-      {busy ? "Génération…" : "Télécharger le PDF"}
-    </button>
+    <div className="flex flex-col items-end gap-2">
+      {pdfError && (
+        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+          {pdfError}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          setBusy(true);
+          setPdfError(null);
+          try {
+            await onClick();
+          } catch (e: any) {
+            setPdfError(e?.message || "Erreur lors de la génération du PDF");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        disabled={busy}
+        className="flex items-center gap-2 rounded-xl border border-[#222] bg-[#111] px-3 py-2 text-sm text-white hover:border-[#F2C48D] transition-colors disabled:opacity-50"
+      >
+        <FileDown size={15} strokeWidth={1.5} />
+        {busy ? "Génération…" : "Télécharger le PDF"}
+      </button>
+    </div>
   );
 }
 
@@ -436,6 +445,7 @@ function ClotureTab({ year }: { year: any }) {
   const [categoryId, setCategoryId] = useState("");
   const [entityId, setEntityId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [clotureError, setClotureError] = useState<string | null>(null);
 
   function reload() {
     if (!year) return;
@@ -457,10 +467,11 @@ function ClotureTab({ year }: { year: any }) {
   async function add() {
     const cents = eurosToCents(amount);
     if (!label.trim() || cents <= 0) {
-      alert("Renseigne un libellé et un montant positif.");
+      setClotureError("Renseigne un libellé et un montant positif.");
       return;
     }
     setSaving(true);
+    setClotureError(null);
     try {
       await api.createAccrual({
         fiscal_year_id: year.id,
@@ -473,7 +484,7 @@ function ClotureTab({ year }: { year: any }) {
       setLabel(""); setAmount(""); setCategoryId(""); setEntityId("");
       reload();
     } catch (e: any) {
-      alert(e?.message || "Erreur lors de l'enregistrement");
+      setClotureError(e?.message || "Erreur lors de l'enregistrement");
     } finally {
       setSaving(false);
     }
@@ -495,6 +506,12 @@ function ClotureTab({ year }: { year: any }) {
         factures reçues mais pas encore payées) de l'exercice. Ils rattachent le produit ou la charge à cet exercice ;
         l'encaissement ou le paiement de l'exercice suivant est neutralisé automatiquement (extourne).
       </p>
+
+      {clotureError && (
+        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+          {clotureError}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-[#222] bg-[#111] p-4 grid gap-3 md:grid-cols-6 items-end">
         <Field label="Nature">

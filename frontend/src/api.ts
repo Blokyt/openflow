@@ -38,7 +38,7 @@ export const api = {
   toggleModule: (id: string, active: boolean) => request<any>(`/config/modules/${id}?active=${active}`, { method: "PUT" }),
   getTransactions: (params?: Record<string, string>) => {
     const query = params ? "?" + new URLSearchParams(params).toString() : "";
-    return request<any[]>(`/transactions/${query}`);
+    return request<{ total: number; items: any[] }>(`/transactions/${query}`);
   },
   createTransaction: (tx: any) => request<any>("/transactions/", { method: "POST", body: JSON.stringify(tx) }),
   updateTransaction: (id: number, tx: any) => request<any>(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(tx) }),

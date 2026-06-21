@@ -103,10 +103,10 @@ def test_filter_transactions_by_entity_id(client):
 
     resp = client.get(f"/api/transactions/?entity_id={root['id']}")
     assert resp.status_code == 200
-    ids = [t["id"] for t in resp.json()]
+    ids = [t["id"] for t in resp.json()["items"]]
     assert tx1["id"] in ids
     # Transactions without root entity should not be returned
-    for tx in resp.json():
+    for tx in resp.json()["items"]:
         assert tx["from_entity_id"] == root["id"] or tx["to_entity_id"] == root["id"]
 
 
@@ -122,7 +122,7 @@ def test_filter_by_entity_id_matches_from_or_to(client):
 
     resp = client.get(f"/api/transactions/?entity_id={root['id']}")
     assert resp.status_code == 200
-    ids = [t["id"] for t in resp.json()]
+    ids = [t["id"] for t in resp.json()["items"]]
     assert tx_as_to["id"] in ids
     assert tx_as_from["id"] in ids
 
@@ -144,7 +144,7 @@ def test_filter_by_entity_id_include_children(client):
 
     resp = client.get(f"/api/transactions/?entity_id={parent['id']}&include_children=true")
     assert resp.status_code == 200
-    ids = [t["id"] for t in resp.json()]
+    ids = [t["id"] for t in resp.json()["items"]]
     assert tx_parent["id"] in ids
     assert tx_child["id"] in ids
 
@@ -162,7 +162,7 @@ def test_filter_by_entity_id_no_children(client):
 
     resp = client.get(f"/api/transactions/?entity_id={parent['id']}&include_children=false")
     assert resp.status_code == 200
-    ids = [t["id"] for t in resp.json()]
+    ids = [t["id"] for t in resp.json()["items"]]
     assert tx_parent["id"] in ids
     assert tx_child["id"] not in ids
 

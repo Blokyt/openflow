@@ -6,15 +6,22 @@ import { useFiscalYear } from "../../core/FiscalYearContext";
 import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
 import { formatEuros, txTone } from "../../utils/format";
-import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw } from "lucide-react";
+import { transactionsToCsv, downloadCsv } from "../../utils/csv";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw, Download } from "lucide-react";
+
+const PAGE_SIZE = 100;
 
 export default function TransactionList() {
   const { selectedEntityId, selectedEntity } = useEntity();
   const { selectedYear } = useFiscalYear();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   // Track the last context that initialized the date filters (for the reset link)
@@ -40,6 +47,12 @@ export default function TransactionList() {
       .catch(() => {});
     api.getCategories().then(setCategories).catch(() => {});
   }, []);
+
+  // Recherche temporisée : évite une requête à chaque frappe.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // Synchronise les filtres de date avec l'exercice sélectionné.
   const today = new Date().toISOString().slice(0, 10);
@@ -70,11 +83,14 @@ export default function TransactionList() {
   }
 
   const hasAttachments = activeModuleIds.has("attachments");
+  const hasActiveFilters = Boolean(
+    search || dateFrom || dateTo || categoryFilter || reimbFilter || amountMin || amountMax
+  );
 
-  const fetchTransactions = useCallback(() => {
-    setLoading(true);
+  // Paramètres de requête communs (filtres + tri), hors pagination.
+  const buildParams = useCallback((): Record<string, string> => {
     const params: Record<string, string> = {};
-    if (search) params.search = search;
+    if (debouncedSearch) params.search = debouncedSearch;
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     if (categoryFilter) params.category_id = categoryFilter;
@@ -85,28 +101,57 @@ export default function TransactionList() {
       params.entity_id = String(selectedEntityId);
       params.include_children = "true";
     }
+    params.sort_by = sortBy;
+    params.sort_dir = sortDir;
+    return params;
+  }, [debouncedSearch, dateFrom, dateTo, categoryFilter, reimbFilter, amountMin, amountMax, selectedEntityId, sortBy, sortDir]);
+
+  const loadFirstPage = useCallback(() => {
+    setLoading(true);
     api
-      .getTransactions(Object.keys(params).length ? params : undefined)
-      .then(setTransactions)
+      .getTransactions({ ...buildParams(), limit: String(PAGE_SIZE), offset: "0" })
+      .then((r) => { setTransactions(r.items); setTotal(r.total); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [search, dateFrom, dateTo, categoryFilter, reimbFilter, amountMin, amountMax, selectedEntityId]);
+  }, [buildParams]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    loadFirstPage();
+  }, [loadFirstPage]);
+
+  function loadMore() {
+    setLoadingMore(true);
+    api
+      .getTransactions({ ...buildParams(), limit: String(PAGE_SIZE), offset: String(transactions.length) })
+      .then((r) => { setTransactions((prev) => [...prev, ...r.items]); setTotal(r.total); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingMore(false));
+  }
+
+  async function handleExportCsv() {
+    setExporting(true);
+    try {
+      // Sans limit : on exporte toutes les transactions filtrées, pas seulement la page chargée.
+      const r = await api.getTransactions(buildParams());
+      downloadCsv(transactionsToCsv(r.items), `transactions-${today}.csv`);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleCreate(tx: Omit<Transaction, "id">) {
     await api.createTransaction(tx);
     setShowForm(false);
-    fetchTransactions();
+    loadFirstPage();
   }
 
   async function handleUpdate(tx: Omit<Transaction, "id">) {
     if (!editingTx) return;
     await api.updateTransaction(editingTx.id, tx);
     setEditingTx(null);
-    fetchTransactions();
+    loadFirstPage();
   }
 
   async function handleDelete(id: number) {
@@ -121,7 +166,7 @@ export default function TransactionList() {
           setUndoTx((current) => (current && current.id === target.id ? null : current));
         }, 6000);
       }
-      fetchTransactions();
+      loadFirstPage();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -142,7 +187,7 @@ export default function TransactionList() {
         to_entity_id: undoTx.to_entity_id,
       });
       setUndoTx(null);
-      fetchTransactions();
+      loadFirstPage();
     } catch (e: any) {
       setError(e.message);
     }
@@ -156,12 +201,10 @@ export default function TransactionList() {
     }
   }
 
-  const sortedTransactions = [...transactions].sort((a: any, b: any) => {
-    const sign = sortDir === "asc" ? 1 : -1;
-    if (sortBy === "amount") return (a.amount - b.amount) * sign;
-    if (sortBy === "label") return String(a.label).localeCompare(String(b.label)) * sign;
-    return String(a.date).localeCompare(String(b.date)) * sign || (a.id - b.id) * sign;
-  });
+  function clearFilters() {
+    setSearch(""); setDateFrom(""); setDateTo("");
+    setCategoryFilter(""); setReimbFilter(""); setAmountMin(""); setAmountMax("");
+  }
 
   return (
     <div className="p-8">
@@ -177,6 +220,14 @@ export default function TransactionList() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting || total === 0}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-40 transition-colors"
+            title="Exporter les transactions filtrées au format CSV"
+          >
+            <Download size={15} /> {exporting ? "Export..." : "Exporter CSV"}
+          </button>
           <button
             onClick={() => { setShowForm(true); setEditingTx(null); }}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
@@ -288,15 +339,24 @@ export default function TransactionList() {
           placeholder="Max €"
           className="min-w-0 w-24 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#666]"
         />
-        {(search || dateFrom || dateTo || categoryFilter || reimbFilter || amountMin || amountMax) && (
+        {hasActiveFilters && (
           <button
-            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setCategoryFilter(""); setReimbFilter(""); setAmountMin(""); setAmountMax(""); }}
+            onClick={clearFilters}
             className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
           >
             <X size={14} /> Effacer
           </button>
         )}
       </div>
+
+      {/* Count */}
+      {!loading && total > 0 && (
+        <p className="mb-3 text-xs text-[#666]">
+          {transactions.length === total
+            ? `${total} transaction${total > 1 ? "s" : ""}`
+            : `${transactions.length} sur ${total} transactions`}
+        </p>
+      )}
 
       {/* Table */}
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
@@ -307,6 +367,11 @@ export default function TransactionList() {
         ) : transactions.length === 0 ? (
           <div className="text-center py-12 text-[#666] text-sm">
             Aucune transaction trouvée.
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="ml-2 text-[#F2C48D] hover:underline">
+                Effacer les filtres
+              </button>
+            )}
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -338,7 +403,7 @@ export default function TransactionList() {
               </tr>
             </thead>
             <tbody>
-              {sortedTransactions.map((tx: any, idx) => (
+              {transactions.map((tx: any, idx) => (
                 <tr
                   key={tx.id}
                   className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
@@ -466,6 +531,19 @@ export default function TransactionList() {
           </table>
         )}
       </div>
+
+      {/* Pagination "charger plus" */}
+      {!loading && transactions.length < total && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-5 py-2.5 text-sm font-medium text-[#B0B0B0] border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-50 transition-colors"
+          >
+            {loadingMore ? "Chargement..." : `Charger plus (${total - transactions.length} restantes)`}
+          </button>
+        </div>
+      )}
 
       {undoTx && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#111] border border-[#333] rounded-full px-5 py-3 shadow-xl">

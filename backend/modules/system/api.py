@@ -167,12 +167,15 @@ def status():
         "totals": {
             "user_data": total_user_data,
             "user_data_human": _format_bytes(total_user_data),
+            "temp": 0,
+            "temp_human": "0 B",
             "code": total_code,
             "code_human": _format_bytes(total_code),
         },
         "db": db_health,
         "pristine": pristine,
         "backups": backups,
+        "temp_imports": [],
     }
 
 

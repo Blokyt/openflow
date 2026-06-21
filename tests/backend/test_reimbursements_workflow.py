@@ -496,6 +496,71 @@ class TestCreateGuards:
 # 6. Libellé de la transaction de décaissement
 # ---------------------------------------------------------------------------
 
+class TestClosedPeriodLock:
+    """Le décaissement généré au passage à 'reimbursed' respecte le verrou de clôture."""
+
+    def _open_fy(self, client, name="2024-2025", start="2024-09-01"):
+        r = client.post("/api/budget/fiscal-years", json={"name": name, "start_date": start})
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    def test_reimbursed_in_closed_period_returns_409(self, client, db_path):
+        """reimbursed_date dans un exercice clôturé → 409, aucun décaissement créé."""
+        _make_divers_entity(db_path)
+        from_id = _make_internal_entity(db_path, "IntClosed")
+        to_id = _make_external_entity(db_path, "ExtClosed")
+        fy = self._open_fy(client)
+        # Avance créée pendant que l'exercice est encore ouvert.
+        tx = client.post("/api/transactions/", json={
+            "date": "2024-10-15", "label": "Avance", "amount": 4000,
+            "from_entity_id": from_id, "to_entity_id": to_id,
+        }).json()
+        r = client.post("/api/reimbursements/", json={
+            "person_name": "Closed", "amount": 4000, "transaction_id": tx["id"],
+        })
+        rid = r.json()["id"]
+        client.put(f"/api/reimbursements/{rid}", json={"status": "approved"})
+        # Clôture de l'exercice.
+        client.post(f"/api/budget/fiscal-years/{fy['id']}/close", json={"end_date": "2025-08-31"})
+
+        resp = client.put(f"/api/reimbursements/{rid}", json={
+            "status": "reimbursed", "reimbursed_date": "2024-11-01",
+        })
+        assert resp.status_code == 409, resp.text
+
+        # Aucun décaissement ne doit avoir été inséré.
+        conn = sqlite3.connect(str(db_path))
+        count = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE label LIKE 'Remboursement%'"
+        ).fetchone()[0]
+        conn.close()
+        assert count == 0
+
+    def test_reimbursed_outside_closed_period_passes(self, client, db_path):
+        """reimbursed_date hors de toute période clôturée → 200."""
+        _make_divers_entity(db_path)
+        from_id = _make_internal_entity(db_path, "IntOpen")
+        to_id = _make_external_entity(db_path, "ExtOpen")
+        fy = self._open_fy(client)
+        tx = client.post("/api/transactions/", json={
+            "date": "2024-10-15", "label": "Avance2", "amount": 4000,
+            "from_entity_id": from_id, "to_entity_id": to_id,
+        }).json()
+        r = client.post("/api/reimbursements/", json={
+            "person_name": "Open", "amount": 4000, "transaction_id": tx["id"],
+        })
+        rid = r.json()["id"]
+        client.put(f"/api/reimbursements/{rid}", json={"status": "approved"})
+        client.post(f"/api/budget/fiscal-years/{fy['id']}/close", json={"end_date": "2025-08-31"})
+
+        # 2025-12-01 est après la clôture → autorisé.
+        resp = client.put(f"/api/reimbursements/{rid}", json={
+            "status": "reimbursed", "reimbursed_date": "2025-12-01",
+        })
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["reimbursement_transaction_id"] is not None
+
+
 class TestDisbursementLabel:
     def test_disbursement_label_contains_remboursement(self, client, db_path):
         """Le label de la transaction de décaissement contient 'Remboursement'."""

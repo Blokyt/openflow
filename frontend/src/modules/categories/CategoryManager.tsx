@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../../api";
 import { Category } from "../../types";
-import { eur } from "../../utils/format";
+import { formatEuros } from "../../utils/format";
 import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Check } from "lucide-react";
 
 /* ---------- Category tree node ---------- */
@@ -41,13 +41,13 @@ function CategoryNode({
         {hasChildren ? (
           (cat.descendant_tx_count ?? 0) > 0 && (
             <span className="text-xs text-[#555] mr-1">
-              {cat.descendant_tx_count} · {eur.format(cat.descendant_tx_total ?? 0)}
+              {cat.descendant_tx_count} · {formatEuros(cat.descendant_tx_total ?? 0)}
             </span>
           )
         ) : (
           (cat.tx_count ?? 0) > 0 && (
             <span className="text-xs text-[#666] mr-1">
-              {cat.tx_count} · {eur.format(cat.tx_total ?? 0)}
+              {cat.tx_count} · {formatEuros(cat.tx_total ?? 0)}
             </span>
           )
         )}

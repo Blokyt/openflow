@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Paperclip, Download, Trash2, Upload, Eye, X } from "lucide-react";
+import ConfirmDialog from "../../core/ConfirmDialog";
 
 interface Attachment {
   id: number;
@@ -100,6 +101,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<Attachment | null>(null);
+  const [attachmentToDelete, setAttachmentToDelete] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function fetchItems() {
@@ -140,7 +142,6 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm("Supprimer cette pièce jointe ?")) return;
     try {
       const res = await fetch(`/api/attachments/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
@@ -153,6 +154,14 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
   return (
     <>
     {previewItem && <PreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />}
+    <ConfirmDialog
+      open={attachmentToDelete !== null}
+      title="Supprimer cette pièce jointe ?"
+      confirmLabel="Supprimer"
+      danger
+      onConfirm={() => { const id = attachmentToDelete!; setAttachmentToDelete(null); handleDelete(id); }}
+      onCancel={() => setAttachmentToDelete(null)}
+    />
     <div className="border-t border-[#1a1a1a] pt-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -203,7 +212,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
                   <Download size={14} strokeWidth={1.5} />
                 </a>
                 <button
-                  onClick={() => handleDelete(a.id)}
+                  onClick={() => setAttachmentToDelete(a.id)}
                   className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                   title="Supprimer"
                 >

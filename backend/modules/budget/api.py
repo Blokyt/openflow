@@ -56,14 +56,14 @@ class OpeningBalanceUpsert(BaseModel):
 class AllocationCreate(BaseModel):
     entity_id: int
     category_id: Optional[int] = None
-    amount: float
+    amount: int  # centimes entiers (cohérent avec le stockage budget_allocations)
     notes: str = ""
 
 
 class AllocationUpdate(BaseModel):
     entity_id: Optional[int] = None
     category_id: Optional[int] = None
-    amount: Optional[float] = None
+    amount: Optional[int] = None  # centimes entiers
     notes: Optional[str] = None
 
 
@@ -503,7 +503,8 @@ def get_budget_view(fiscal_year_id: int):
 
             allocated_global = sum(a["amount"] for a in allocs if a["category_id"] is None)
             allocated_detailed = sum(a["amount"] for a in allocs if a["category_id"] is not None)
-            allocated_effective = allocated_global if allocated_global > 0 else allocated_detailed
+            has_global = any(a["category_id"] is None for a in allocs)
+            allocated_effective = allocated_global if has_global else allocated_detailed
 
             cats_out = []
             for a in allocs:

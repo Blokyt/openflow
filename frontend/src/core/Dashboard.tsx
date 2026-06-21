@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { useEntity } from "./EntityContext";
 import { useFiscalYear } from "./FiscalYearContext";
 import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
+import OnboardingChecklist from "./OnboardingChecklist";
 import BudgetOverview from "../modules/budget/widgets/BudgetOverview";
 import { formatEuros, txTone } from "../utils/format";
 import {
@@ -265,6 +266,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 space-y-6">
+      {summary.transaction_count === 0 && <OnboardingChecklist />}
       <ModuleDiscoveryHint />
       <div>
         <p className="text-sm font-medium text-[#666] uppercase tracking-wider mb-2">Solde actuel</p>

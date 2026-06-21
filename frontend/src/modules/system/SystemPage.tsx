@@ -3,6 +3,7 @@ import {
   Activity, HardDrive, Database, FileUp, Archive, AlertTriangle,
   Check, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
 } from "lucide-react";
+import ConfirmDialog from "../../core/ConfirmDialog";
 
 interface SystemStatus {
   version: string;
@@ -60,6 +61,8 @@ export default function SystemPage() {
   const [msg, setMsg] = useState("");
   const [editingBackups, setEditingBackups] = useState(false);
   const [maxBackupsInput, setMaxBackupsInput] = useState<number>(5);
+  const [confirmRepairOpen, setConfirmRepairOpen] = useState(false);
+  const [backupToDelete, setBackupToDelete] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -92,7 +95,6 @@ export default function SystemPage() {
   }
 
   async function doRepair() {
-    if (!confirm("Réparer l'application ? Restaure le code à son état initial, lance les migrations, nettoie les temps. Tes données (DB + config) sont préservées.")) return;
     setAction("repair"); setMsg("");
     try {
       const r = await apiJson("/system/repair", {
@@ -119,7 +121,6 @@ export default function SystemPage() {
   }
 
   async function deleteBackup(name: string) {
-    if (!confirm(`Supprimer le backup ${name} ?`)) return;
     try {
       await apiJson(`/system/backups/${name}`, { method: "DELETE" });
       await load();
@@ -148,6 +149,23 @@ export default function SystemPage() {
   if (!status) return null;
 
   return (
+    <>
+    <ConfirmDialog
+      open={confirmRepairOpen}
+      title="Réparer l'application ?"
+      message="Restaure le code à son état initial, lance les migrations, nettoie les temps. Tes données (DB + config) sont préservées."
+      confirmLabel="Réparer"
+      onConfirm={() => { setConfirmRepairOpen(false); doRepair(); }}
+      onCancel={() => setConfirmRepairOpen(false)}
+    />
+    <ConfirmDialog
+      open={backupToDelete !== null}
+      title={`Supprimer le backup ${backupToDelete} ?`}
+      confirmLabel="Supprimer"
+      danger
+      onConfirm={() => { const name = backupToDelete!; setBackupToDelete(null); deleteBackup(name); }}
+      onCancel={() => setBackupToDelete(null)}
+    />
     <div className="p-8 max-w-4xl">
       <div className="flex items-center gap-3 mb-6">
         <Activity className="text-[#F2C48D]" size={26} />
@@ -266,7 +284,7 @@ export default function SystemPage() {
                 )}
                 {!pristine.healthy && (
                   <button
-                    onClick={doRepair}
+                    onClick={() => setConfirmRepairOpen(true)}
                     disabled={action !== ""}
                     className="px-4 py-1.5 bg-[#F2C48D] text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-xs flex items-center gap-1.5"
                   >
@@ -339,7 +357,7 @@ export default function SystemPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-[#999]">{b.size_human}</span>
                   <button
-                    onClick={() => deleteBackup(b.name)}
+                    onClick={() => setBackupToDelete(b.name)}
                     className="text-[#555] hover:text-red-400 p-1 transition-colors"
                   >
                     <Trash2 size={12} />
@@ -391,7 +409,7 @@ export default function SystemPage() {
             </p>
           </button>
           <button
-            onClick={doRepair}
+            onClick={() => setConfirmRepairOpen(true)}
             disabled={action !== "" || !status.pristine.available}
             className="flex flex-col items-start gap-1 p-4 bg-[#0a0a0a] hover:bg-[#151515] border border-[#222] hover:border-[#333] rounded-xl text-left disabled:opacity-50 transition-colors"
           >
@@ -405,5 +423,6 @@ export default function SystemPage() {
         </div>
       </section>
     </div>
+    </>
   );
 }

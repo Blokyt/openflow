@@ -91,8 +91,8 @@ export default function ReimbursementManager() {
   const [txOptions, setTxOptions] = useState<TxOption[]>([]);
 
   useEffect(() => {
-    api.getTransactions().then((txs: any[]) =>
-      setTxOptions(txs.map((t: any) => ({ id: t.id, label: t.label, date: t.date, amount: t.amount })))
+    api.getTransactions().then((r) =>
+      setTxOptions(r.items.map((t: any) => ({ id: t.id, label: t.label, date: t.date, amount: t.amount })))
     ).catch(() => {});
   }, []);
 

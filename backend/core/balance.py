@@ -267,6 +267,7 @@ def compute_consolidated_balance(
 
     return {
         "entity_id": entity_id,
+        "balance": consolidated,
         "own_balance": own["balance"],
         "consolidated_balance": consolidated,
         "children": children,

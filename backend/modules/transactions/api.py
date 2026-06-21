@@ -62,6 +62,10 @@ class TransactionUpdate(BaseModel):
     payer_contact_id: Optional[int] = None
 
 
+# Colonnes de tri autorisées (whitelist : jamais d'ORDER BY construit depuis l'entrée brute).
+_SORT_COLUMNS = {"date": "t.date", "amount": "t.amount", "label": "t.label", "id": "t.id"}
+
+
 @router.get("/")
 def list_transactions(
     date_from: Optional[str] = None,
@@ -73,15 +77,20 @@ def list_transactions(
     reimb_status: Optional[str] = None,
     amount_min: Optional[int] = None,
     amount_max: Optional[int] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    sort_by: str = "date",
+    sort_dir: str = "desc",
 ):
     conn = get_conn()
     try:
-        query = """SELECT t.*,
+        select_cols = """SELECT t.*,
                    c.name AS category_name, c.color AS category_color,
                    ef.name AS from_entity_name, ef.color AS from_entity_color, ef.type AS from_entity_type,
                    et.name AS to_entity_name, et.color AS to_entity_color, et.type AS to_entity_type,
                    co.name AS contact_name,
-                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count, rb.reimb_contact_id
+                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count, rb.reimb_contact_id"""
+        from_where = """
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             LEFT JOIN entities ef ON t.from_entity_id = ef.id
@@ -100,16 +109,16 @@ def list_transactions(
             WHERE 1=1"""
         params = []
         if date_from:
-            query += " AND t.date >= ?"
+            from_where += " AND t.date >= ?"
             params.append(date_from)
         if date_to:
-            query += " AND t.date <= ?"
+            from_where += " AND t.date <= ?"
             params.append(date_to)
         if category_id is not None:
-            query += " AND t.category_id = ?"
+            from_where += " AND t.category_id = ?"
             params.append(category_id)
         if search:
-            query += """ AND (t.label LIKE ? OR t.description LIKE ?
+            from_where += """ AND (t.label LIKE ? OR t.description LIKE ?
                          OR ef.name LIKE ? OR et.name LIKE ?
                          OR c.name LIKE ? OR co.name LIKE ? OR t.date LIKE ?)"""
             s = f"%{search}%"
@@ -128,31 +137,48 @@ def list_transactions(
                 ).fetchall()
                 entity_ids = [r[0] for r in rows]
                 placeholders = ",".join("?" * len(entity_ids))
-                query += f" AND (t.from_entity_id IN ({placeholders}) OR t.to_entity_id IN ({placeholders}))"
+                from_where += f" AND (t.from_entity_id IN ({placeholders}) OR t.to_entity_id IN ({placeholders}))"
                 params.extend(entity_ids)
                 params.extend(entity_ids)
             else:
-                query += " AND (t.from_entity_id = ? OR t.to_entity_id = ?)"
+                from_where += " AND (t.from_entity_id = ? OR t.to_entity_id = ?)"
                 params.extend([entity_id, entity_id])
         if reimb_status == "pending":
-            query += " AND rb.reimb_status = 'pending'"
+            from_where += " AND rb.reimb_status = 'pending'"
         elif reimb_status == "reimbursed":
-            query += " AND rb.reimb_status = 'reimbursed'"
+            from_where += " AND rb.reimb_status = 'reimbursed'"
         elif reimb_status == "none":
-            query += " AND rb.reimb_status IS NULL"
+            from_where += " AND rb.reimb_status IS NULL"
         elif reimb_status is not None:
             raise HTTPException(status_code=400, detail=f"invalid reimb_status: {reimb_status}")
         if amount_min is not None and amount_max is not None and amount_min > amount_max:
             raise HTTPException(status_code=400, detail="amount_min must be <= amount_max")
         if amount_min is not None:
-            query += " AND ABS(t.amount) >= ?"
+            from_where += " AND ABS(t.amount) >= ?"
             params.append(amount_min)
         if amount_max is not None:
-            query += " AND ABS(t.amount) <= ?"
+            from_where += " AND ABS(t.amount) <= ?"
             params.append(amount_max)
-        query += " ORDER BY t.date DESC, t.id DESC"
-        cur = conn.execute(query, params)
-        return [row_to_dict(r) for r in cur.fetchall()]
+
+        # Total (mêmes filtres, avant pagination).
+        total = conn.execute("SELECT COUNT(*)" + from_where, params).fetchone()[0]
+
+        # Tri serveur whitelisté + tie-breaker stable sur l'id.
+        if sort_by not in _SORT_COLUMNS:
+            raise HTTPException(status_code=400, detail=f"invalid sort_by: {sort_by}")
+        if sort_dir not in ("asc", "desc"):
+            raise HTTPException(status_code=400, detail=f"invalid sort_dir: {sort_dir}")
+        direction = "ASC" if sort_dir == "asc" else "DESC"
+        order_sql = f" ORDER BY {_SORT_COLUMNS[sort_by]} {direction}, t.id {direction}"
+
+        list_sql = select_cols + from_where + order_sql
+        list_params = list(params)
+        if limit is not None:
+            list_sql += " LIMIT ? OFFSET ?"
+            list_params.extend([limit, offset])
+
+        items = [row_to_dict(r) for r in conn.execute(list_sql, list_params).fetchall()]
+        return {"total": total, "items": items}
     finally:
         conn.close()
 
@@ -333,6 +359,13 @@ def delete_transaction(tx_id: int):
                 status_code=409,
                 detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
             )
+        # Nettoyage des remboursements qui référencent cette écriture comme avance,
+        # pour éviter les orphelins (FK OFF, pas de cascade). Les écritures de
+        # décaissement déjà générées (reimbursement_transaction_id) ne sont pas touchées.
+        try:
+            conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
+        except sqlite3.OperationalError:
+            pass  # module reimbursements absent : table inexistante
         conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         conn.commit()
         return {"deleted": tx_id}

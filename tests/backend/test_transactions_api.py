@@ -85,7 +85,7 @@ def test_list_transactions_reimb_status_filter(client_and_db):
     # Filter: pending → only tx_pending
     r = client.get("/api/transactions/?reimb_status=pending")
     assert r.status_code == 200
-    ids = [t["id"] for t in r.json()]
+    ids = [t["id"] for t in r.json()["items"]]
     assert tx_pending["id"] in ids
     assert tx_reimbursed["id"] not in ids
     assert tx_none["id"] not in ids
@@ -93,7 +93,7 @@ def test_list_transactions_reimb_status_filter(client_and_db):
     # Filter: reimbursed → only tx_reimbursed
     r = client.get("/api/transactions/?reimb_status=reimbursed")
     assert r.status_code == 200
-    ids = [t["id"] for t in r.json()]
+    ids = [t["id"] for t in r.json()["items"]]
     assert tx_reimbursed["id"] in ids
     assert tx_pending["id"] not in ids
     assert tx_none["id"] not in ids
@@ -101,7 +101,7 @@ def test_list_transactions_reimb_status_filter(client_and_db):
     # Filter: none → only tx_none
     r = client.get("/api/transactions/?reimb_status=none")
     assert r.status_code == 200
-    ids = [t["id"] for t in r.json()]
+    ids = [t["id"] for t in r.json()["items"]]
     assert tx_none["id"] in ids
     assert tx_pending["id"] not in ids
     assert tx_reimbursed["id"] not in ids
@@ -135,7 +135,7 @@ def test_list_transactions_amount_filter(client_and_db):
     # amount_min=10000 → only tx_large (20000 >= 10000)
     r = client.get("/api/transactions/?amount_min=10000")
     assert r.status_code == 200
-    ids = [t["id"] for t in r.json()]
+    ids = [t["id"] for t in r.json()["items"]]
     assert tx_large["id"] in ids
     assert tx_medium["id"] not in ids
     assert tx_small["id"] not in ids
@@ -143,7 +143,7 @@ def test_list_transactions_amount_filter(client_and_db):
     # amount_max=5000 → only tx_small (3000 <= 5000)
     r = client.get("/api/transactions/?amount_max=5000")
     assert r.status_code == 200
-    ids = [t["id"] for t in r.json()]
+    ids = [t["id"] for t in r.json()["items"]]
     assert tx_small["id"] in ids
     assert tx_medium["id"] not in ids
     assert tx_large["id"] not in ids
@@ -151,7 +151,7 @@ def test_list_transactions_amount_filter(client_and_db):
     # amount_min=5000 & amount_max=10000 → only tx_medium (7500 in [5000, 10000])
     r = client.get("/api/transactions/?amount_min=5000&amount_max=10000")
     assert r.status_code == 200
-    ids = [t["id"] for t in r.json()]
+    ids = [t["id"] for t in r.json()["items"]]
     assert tx_medium["id"] in ids
     assert tx_small["id"] not in ids
     assert tx_large["id"] not in ids
@@ -217,7 +217,7 @@ def test_create_transaction_with_payer_returns_contact_id_in_list(client_and_db,
     assert r.status_code == 201
     tx_id = r.json()["id"]
 
-    txs = client.get("/api/transactions/").json()
+    txs = client.get("/api/transactions/").json()["items"]
     tx = next(t for t in txs if t["id"] == tx_id)
     assert tx["reimb_contact_id"] == contact_id
 
@@ -347,7 +347,7 @@ def test_create_transaction_with_description(client, entity_pair):
     assert r.status_code == 201
     tx_id = r.json()["id"]
 
-    txs = client.get("/api/transactions/").json()
+    txs = client.get("/api/transactions/").json()["items"]
     tx = next(t for t in txs if t["id"] == tx_id)
     assert tx.get("description") == "Détail important de la dépense"
 
@@ -364,7 +364,7 @@ def test_description_searchable(client, entity_pair):
     assert r.status_code == 201
     tx_id = r.json()["id"]
 
-    results = client.get("/api/transactions/?search=MotClefUnique9876").json()
+    results = client.get("/api/transactions/?search=MotClefUnique9876").json()["items"]
     assert any(t["id"] == tx_id for t in results)
 
 
@@ -379,7 +379,7 @@ def test_description_empty_by_default(client, entity_pair):
     assert r.status_code == 201
     tx_id = r.json()["id"]
 
-    txs = client.get("/api/transactions/").json()
+    txs = client.get("/api/transactions/").json()["items"]
     tx = next(t for t in txs if t["id"] == tx_id)
     assert not tx.get("description")
 
@@ -397,7 +397,7 @@ def test_update_transaction_description(client, entity_pair):
     r = client.put(f"/api/transactions/{tx['id']}", json={"description": "Nouvelle description"})
     assert r.status_code == 200
 
-    txs = client.get("/api/transactions/").json()
+    txs = client.get("/api/transactions/").json()["items"]
     updated = next(t for t in txs if t["id"] == tx["id"])
     assert updated.get("description") == "Nouvelle description"
 
@@ -420,7 +420,7 @@ def test_create_transaction_with_contact_id(client, entity_pair):
     assert r.status_code == 201
     tx_id = r.json()["id"]
 
-    txs = client.get("/api/transactions/").json()
+    txs = client.get("/api/transactions/").json()["items"]
     tx = next(t for t in txs if t["id"] == tx_id)
     assert tx.get("contact_id") == contact["id"]
 
@@ -467,3 +467,92 @@ def test_tiers_large_limit_returns_all_contacts(client):
     data = r.json()
     assert data["total"] >= 5
     assert len(data["items"]) == data["total"]
+
+
+# ---------------------------------------------------------------------------
+# Suppression : nettoyage des remboursements liés (pas d'orphelins)
+# ---------------------------------------------------------------------------
+
+def test_delete_transaction_removes_linked_reimbursements(client_and_db, contact_and_entities):
+    """Supprimer une transaction supprime les remboursements qui la référencent."""
+    client, db_path = client_and_db
+    contact_id, src_id, dst_id = contact_and_entities
+
+    tx = client.post("/api/transactions/", json={
+        "date": "2026-01-15", "label": "Avance à supprimer", "amount": 5000,
+        "from_entity_id": src_id, "to_entity_id": dst_id,
+        "payer_contact_id": contact_id,
+    }).json()
+
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    before = conn.execute(
+        "SELECT COUNT(*) FROM reimbursements WHERE transaction_id = ?", (tx["id"],)
+    ).fetchone()[0]
+    conn.close()
+    assert before == 1
+
+    assert client.delete(f"/api/transactions/{tx['id']}").status_code == 200
+
+    conn = sqlite3.connect(db_path)
+    after = conn.execute(
+        "SELECT COUNT(*) FROM reimbursements WHERE transaction_id = ?", (tx["id"],)
+    ).fetchone()[0]
+    conn.close()
+    assert after == 0, "Le remboursement lié aurait dû être supprimé (pas d'orphelin)."
+
+
+# ---------------------------------------------------------------------------
+# Pagination + tri serveur
+# ---------------------------------------------------------------------------
+
+def test_list_returns_total_and_items(client, entity_pair):
+    """Le format de réponse est {total, items}."""
+    src, dst = entity_pair
+    for i in range(3):
+        client.post("/api/transactions/", json={
+            "date": f"2026-02-{10 + i:02d}", "label": f"T{i}", "amount": 1000 + i,
+            "from_entity_id": src, "to_entity_id": dst,
+        })
+    data = client.get("/api/transactions/").json()
+    assert isinstance(data, dict)
+    assert data["total"] == 3
+    assert len(data["items"]) == 3
+
+
+def test_pagination_limit_offset(client, entity_pair):
+    """limit/offset paginent sans changer le total."""
+    src, dst = entity_pair
+    for i in range(5):
+        client.post("/api/transactions/", json={
+            "date": f"2026-03-{10 + i:02d}", "label": f"P{i}", "amount": 1000,
+            "from_entity_id": src, "to_entity_id": dst,
+        })
+    page1 = client.get("/api/transactions/?limit=2&offset=0").json()
+    page2 = client.get("/api/transactions/?limit=2&offset=2").json()
+    assert page1["total"] == 5
+    assert len(page1["items"]) == 2
+    assert len(page2["items"]) == 2
+    # Pas de chevauchement entre les deux pages.
+    ids1 = {t["id"] for t in page1["items"]}
+    ids2 = {t["id"] for t in page2["items"]}
+    assert ids1.isdisjoint(ids2)
+
+
+def test_sort_by_amount_ascending(client, entity_pair):
+    """sort_by=amount&sort_dir=asc trie par montant croissant côté serveur."""
+    src, dst = entity_pair
+    for amt in (3000, 1000, 2000):
+        client.post("/api/transactions/", json={
+            "date": "2026-04-01", "label": f"A{amt}", "amount": amt,
+            "from_entity_id": src, "to_entity_id": dst,
+        })
+    items = client.get("/api/transactions/?sort_by=amount&sort_dir=asc").json()["items"]
+    amounts = [t["amount"] for t in items]
+    assert amounts == sorted(amounts)
+
+
+def test_invalid_sort_by_returns_400(client):
+    """Un sort_by hors whitelist est rejeté (anti-injection)."""
+    r = client.get("/api/transactions/?sort_by=amount;DROP")
+    assert r.status_code == 400
