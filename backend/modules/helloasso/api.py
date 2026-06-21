@@ -114,3 +114,46 @@ def sync(fiscal_year_id: int):
         return [row_to_dict(r) for r in cached]
     finally:
         conn.close()
+
+
+class LinkPayload(BaseModel):
+    form_type: str
+    form_slug: str
+    category_id: int | None = None
+    from_entity_id: int
+    to_entity_id: int
+
+
+@router.get("/links")
+def list_links():
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM helloasso_links ORDER BY id").fetchall()
+        return [row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.put("/links")
+def upsert_link(payload: LinkPayload):
+    conn = get_conn()
+    try:
+        conn.execute(
+            """INSERT INTO helloasso_links
+               (form_type, form_slug, category_id, from_entity_id, to_entity_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(form_type, form_slug) DO UPDATE SET
+                   category_id = excluded.category_id,
+                   from_entity_id = excluded.from_entity_id,
+                   to_entity_id = excluded.to_entity_id""",
+            (payload.form_type, payload.form_slug, payload.category_id,
+             payload.from_entity_id, payload.to_entity_id, _now()),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM helloasso_links WHERE form_type = ? AND form_slug = ?",
+            (payload.form_type, payload.form_slug),
+        ).fetchone()
+        return row_to_dict(row)
+    finally:
+        conn.close()
