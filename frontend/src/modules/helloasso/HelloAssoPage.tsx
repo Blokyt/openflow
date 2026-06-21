@@ -99,7 +99,7 @@ export default function HelloAssoPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold">HelloAsso</h1>
         <button onClick={refresh} disabled={loading} className="px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-50">
-          {loading ? "Synchronisation..." : "Rafraichir"}
+          {loading ? "Synchronisation..." : "Rafraîchir"}
         </button>
       </div>
       {error && <div className="mb-3 text-red-600">{error}</div>}
@@ -109,9 +109,9 @@ export default function HelloAssoPage() {
             <th className="py-2">Campagne</th>
             <th>Type</th>
             <th>Statut</th>
-            <th className="text-right">Collecte</th>
-            <th className="text-right">Enregistre</th>
-            <th className="text-right">Ecart</th>
+            <th className="text-right">Collecté</th>
+            <th className="text-right">Enregistré</th>
+            <th className="text-right">Écart</th>
             <th></th>
           </tr>
         </thead>
@@ -126,7 +126,7 @@ export default function HelloAssoPage() {
               <td className="text-right">{euros(c.gap_cents)}</td>
               <td className="text-right">
                 {c.link == null ? (
-                  <button onClick={() => setEditing(c.form_slug)} className="text-blue-600">A rattacher</button>
+                  <button onClick={() => setEditing(c.form_slug)} className="text-blue-600">À rattacher</button>
                 ) : c.gap_cents !== 0 ? (
                   <button onClick={() => adjust(c)} className="text-blue-600">Ajuster</button>
                 ) : (
@@ -150,7 +150,7 @@ export default function HelloAssoPage() {
         </tbody>
       </table>
       {campaigns.length === 0 && !loading && (
-        <p className="text-gray-500 mt-4">Aucune campagne en cache. Clique sur "Rafraichir" pour synchroniser.</p>
+        <p className="text-gray-500 mt-4">Aucune campagne en cache. Clique sur "Rafraîchir" pour synchroniser.</p>
       )}
     </div>
   );
@@ -173,7 +173,7 @@ function ConfigForm({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="max-w-md space-y-3">
-      <p className="text-gray-600">Configure ta cle API HelloAsso (espace admin de ton organisation, section API).</p>
+      <p className="text-gray-600">Configure ta clé API HelloAsso (espace admin de ton organisation, section API).</p>
       {error && <div className="text-red-600">{error}</div>}
       <input className="w-full border rounded px-2 py-1" placeholder="Identifiant (client_id)" value={clientId} onChange={(e) => setClientId(e.target.value)} />
       <input className="w-full border rounded px-2 py-1" placeholder="Secret (client_secret)" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
@@ -217,7 +217,7 @@ function LinkForm({
     <div className="mt-2 p-3 border rounded bg-gray-50 text-left space-y-2">
       <div className="font-medium">Rattacher "{campaign.title}"</div>
       <select className="w-full border rounded px-2 py-1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-        <option value="">(Categorie)</option>
+        <option value="">(Catégorie)</option>
         {categories.map((c) => (
           <option key={c.id} value={c.id}>{c.name}</option>
         ))}
