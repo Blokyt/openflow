@@ -16,7 +16,7 @@ migrations = {
             state TEXT NOT NULL DEFAULT '',
             collected_cents INTEGER NOT NULL DEFAULT 0,
             currency TEXT NOT NULL DEFAULT 'EUR',
-            last_synced_at TEXT NOT NULL,
+            last_synced_at TEXT NOT NULL DEFAULT '',
             UNIQUE (fiscal_year_id, form_type, form_slug)
         )""",
         """CREATE TABLE helloasso_links (
