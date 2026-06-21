@@ -7,3 +7,4 @@ python-multipart==0.0.12
 bcrypt==4.2.1
 fpdf2>=2.7.0
 slowapi==0.1.9
+httpx
