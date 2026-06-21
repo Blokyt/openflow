@@ -73,6 +73,8 @@ export default function HelloAssoPage() {
 
   const adjust = async (c: Campaign) => {
     if (!selectedYear) return;
+    setLoading(true);
+    setError(null);
     try {
       await api.adjustHelloAsso({
         form_type: c.form_type,
@@ -82,6 +84,8 @@ export default function HelloAssoPage() {
       await load();
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -127,7 +131,7 @@ export default function HelloAssoPage() {
               <td className="text-right">
                 {c.link == null ? (
                   <button onClick={() => setEditing(c.form_slug)} className="text-blue-600">À rattacher</button>
-                ) : c.gap_cents !== 0 ? (
+                ) : c.gap_cents != null && c.gap_cents !== 0 ? (
                   <button onClick={() => adjust(c)} className="text-blue-600">Ajuster</button>
                 ) : (
                   <span className="text-green-600">OK</span>
@@ -201,21 +205,27 @@ function LinkForm({
   const [categoryId, setCategoryId] = useState<string>("");
   const [toEntity, setToEntity] = useState<string>(internals[0] ? String(internals[0].id) : "");
   const [fromEntity, setFromEntity] = useState<string>(externals[0] ? String(externals[0].id) : "");
+  const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
-    await api.putHelloAssoLink({
-      form_type: campaign.form_type,
-      form_slug: campaign.form_slug,
-      category_id: categoryId ? Number(categoryId) : null,
-      from_entity_id: Number(fromEntity),
-      to_entity_id: Number(toEntity),
-    });
-    onSaved();
+    try {
+      await api.putHelloAssoLink({
+        form_type: campaign.form_type,
+        form_slug: campaign.form_slug,
+        category_id: categoryId ? Number(categoryId) : null,
+        from_entity_id: Number(fromEntity),
+        to_entity_id: Number(toEntity),
+      });
+      onSaved();
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   return (
     <div className="mt-2 p-3 border rounded bg-gray-50 text-left space-y-2">
       <div className="font-medium">Rattacher "{campaign.title}"</div>
+      {error && <div className="text-red-600">{error}</div>}
       <select className="w-full border rounded px-2 py-1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
         <option value="">(Catégorie)</option>
         {categories.map((c) => (
