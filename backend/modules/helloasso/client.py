@@ -43,7 +43,10 @@ class HelloAssoClient:
         if resp.status_code != 200:
             raise HelloAssoError(f"Authentification HelloAsso échouée ({resp.status_code})")
         data = resp.json()
-        self._token = data["access_token"]
+        token = data.get("access_token")
+        if not token:
+            raise HelloAssoError("Réponse d'authentification HelloAsso invalide")
+        self._token = token
         self._token_expiry = time.monotonic() + int(data.get("expires_in", 1800))
         return self._token
 

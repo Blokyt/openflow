@@ -172,7 +172,7 @@ def _recorded_cents(conn, category_id, club_entity_id, start, end) -> int:
              AND (from_entity_id = ? OR to_entity_id = ?)""",
         (club_entity_id, club_entity_id, start, end, category_id, club_entity_id, club_entity_id),
     ).fetchone()
-    return row[0] if not hasattr(row, "keys") else row[0]
+    return row[0]
 
 
 class AdjustPayload(BaseModel):

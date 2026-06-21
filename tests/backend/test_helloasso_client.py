@@ -64,6 +64,13 @@ def test_get_token_error_raises():
         c._get_token()
 
 
+def test_get_token_malformed_body_raises():
+    http = FakeHttp(FakeResp(200, {"expires_in": 1800}), [])
+    c = _client(http)
+    with pytest.raises(HelloAssoError):
+        c._get_token()
+
+
 def test_fetch_forms_paginates():
     token = FakeResp(200, {"access_token": "tok", "expires_in": 1800})
     page1 = FakeResp(200, {"data": [{"formType": "Membership", "formSlug": "cotis", "title": "Cotis", "state": "Public"}],
