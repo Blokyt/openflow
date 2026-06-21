@@ -17,6 +17,7 @@ modules:
   categories: true
   dashboard: true
   entities: true
+  helloasso: true
   reimbursements: false
   reports: false
   system: true

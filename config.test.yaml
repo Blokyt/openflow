@@ -23,3 +23,4 @@ modules:
   backup: true
   system: true
   reports: true
+  helloasso: true
