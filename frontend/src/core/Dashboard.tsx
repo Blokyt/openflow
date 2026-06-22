@@ -128,7 +128,7 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
           />
           <YAxis
             ticks={ticks}
-            tickFormatter={(v: number) => v.toLocaleString("fr-FR")}
+            tickFormatter={(v: number) => (v / 100).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}
             tick={{ fill: "#666", fontSize: 10 }}
             axisLine={false}
             tickLine={false}
