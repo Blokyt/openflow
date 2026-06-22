@@ -318,25 +318,48 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
                 values,
             )
 
-        # Handle payer / reimbursement upsert
+        # Handle payer / reimbursement upsert.
+        # On NE réinitialise le suivi de remboursement QUE si le payeur change
+        # réellement. Une simple édition de la transaction (date, montant, libellé)
+        # renvoie le même payeur : dans ce cas on PRÉSERVE le remboursement et son
+        # statut (sinon un remboursement déjà traité repasserait "en attente").
         if payer_contact_id_provided:
-            # Always delete existing rembo for this tx first
-            conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
-            if payer_contact_id_value is not None:
-                contact_row = conn.execute(
-                    "SELECT name FROM contacts WHERE id = ?", (payer_contact_id_value,)
-                ).fetchone()
-                person_name = contact_row[0] if contact_row else ""
-                # Use current amount (may have been updated above)
+            existing_reimb = conn.execute(
+                "SELECT id, contact_id, status FROM reimbursements WHERE transaction_id = ?",
+                (tx_id,),
+            ).fetchone()
+            existing_payer = existing_reimb["contact_id"] if existing_reimb else None
+            payer_changed = payer_contact_id_value != existing_payer
+
+            if payer_changed:
+                # Le payeur change : l'ancien suivi devient obsolète, on le remplace.
+                conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
+                if payer_contact_id_value is not None:
+                    contact_row = conn.execute(
+                        "SELECT name FROM contacts WHERE id = ?", (payer_contact_id_value,)
+                    ).fetchone()
+                    person_name = contact_row[0] if contact_row else ""
+                    current_amount_row = conn.execute(
+                        "SELECT amount FROM transactions WHERE id = ?", (tx_id,)
+                    ).fetchone()
+                    amount = abs(current_amount_row[0]) if current_amount_row else 0
+                    conn.execute(
+                        """INSERT INTO reimbursements
+                           (transaction_id, contact_id, person_name, amount, status, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+                        (tx_id, payer_contact_id_value, person_name, amount, now, now),
+                    )
+            elif existing_reimb is not None and existing_reimb["status"] == "pending" and "amount" in updates:
+                # Payeur inchangé : statut préservé. On resynchronise seulement le
+                # montant du suivi si l'avance est encore "en attente" et que le
+                # montant de la transaction vient de changer.
                 current_amount_row = conn.execute(
                     "SELECT amount FROM transactions WHERE id = ?", (tx_id,)
                 ).fetchone()
-                amount = abs(current_amount_row[0]) if current_amount_row else 0.0
+                new_amount = abs(current_amount_row[0]) if current_amount_row else 0
                 conn.execute(
-                    """INSERT INTO reimbursements
-                       (transaction_id, contact_id, person_name, amount, status, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
-                    (tx_id, payer_contact_id_value, person_name, amount, now, now),
+                    "UPDATE reimbursements SET amount = ?, updated_at = ? WHERE id = ?",
+                    (new_amount, now, existing_reimb["id"]),
                 )
 
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()

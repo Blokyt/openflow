@@ -1,4 +1,10 @@
-"""Reimbursements API module — Lot D : workflow comptable."""
+"""Reimbursements API module — suivi simple des avances et remboursements.
+
+Mode simple : statuts d'usage 'pending' / 'reimbursed' (l'enum conserve aussi
+'approved' / 'rejected' pour compatibilité des données), transitions libres
+entre statuts, et AUCUNE écriture comptable générée automatiquement. Le module
+est un outil de suivi : le trésorier saisit ses sorties d'argent lui-même.
+"""
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
@@ -12,7 +18,7 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
-# Enum de statut
+# Enum de statut (valeurs valides ; aucun workflow imposé en mode simple)
 # ---------------------------------------------------------------------------
 
 class ReimbursementStatus(str, Enum):
@@ -20,24 +26,6 @@ class ReimbursementStatus(str, Enum):
     approved = "approved"
     reimbursed = "reimbursed"
     rejected = "rejected"
-
-
-# Transitions autorisées : depuis -> ensemble des cibles valides
-_ALLOWED_TRANSITIONS: dict[ReimbursementStatus, set[ReimbursementStatus]] = {
-    ReimbursementStatus.pending: {
-        ReimbursementStatus.approved,
-        ReimbursementStatus.rejected,
-    },
-    ReimbursementStatus.approved: {
-        ReimbursementStatus.reimbursed,
-        ReimbursementStatus.rejected,
-        ReimbursementStatus.pending,
-    },
-    ReimbursementStatus.rejected: {
-        ReimbursementStatus.pending,
-    },
-    ReimbursementStatus.reimbursed: set(),  # terminal
-}
 
 
 # ---------------------------------------------------------------------------
@@ -65,88 +53,6 @@ class ReimbursementUpdate(BaseModel):
     reimbursed_date: Optional[str] = None
     reimbursement_transaction_id: Optional[int] = None
     notes: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _get_divers_entity(conn):
-    """Retourne l'id de l'entité externe 'divers', ou None."""
-    row = conn.execute("SELECT id FROM entities WHERE is_divers = 1 LIMIT 1").fetchone()
-    return row["id"] if row else None
-
-
-def _date_in_closed_period(conn, date: str) -> bool:
-    """Retourne True si `date` tombe dans un exercice clôturé (end_date IS NOT NULL).
-
-    Retourne False si la table fiscal_years n'existe pas (module budget absent).
-    Réplique volontairement le verrou de transactions/api.py : les modules sont
-    indépendants, on ne factorise pas ce contrôle via le core.
-    """
-    try:
-        row = conn.execute(
-            """SELECT 1 FROM fiscal_years
-               WHERE end_date IS NOT NULL
-                 AND ? BETWEEN start_date AND end_date""",
-            (date,),
-        ).fetchone()
-        return row is not None
-    except Exception:
-        return False
-
-
-def _create_disbursement_transaction(conn, reimb: dict, now: str) -> int:
-    """Crée atomiquement la transaction de décaissement.
-
-    Utilise la même connexion (même commit) que la mise à jour du remboursement.
-    Renvoie l'id de la transaction créée, ou lève HTTPException(400).
-    """
-    tx_id = reimb.get("transaction_id")
-    if not tx_id:
-        raise HTTPException(
-            400,
-            "Impossible de générer l'écriture : aucune transaction liée au remboursement.",
-        )
-
-    # Récupérer from_entity_id de la transaction liée
-    parent_tx = conn.execute(
-        "SELECT from_entity_id FROM transactions WHERE id = ?", (tx_id,)
-    ).fetchone()
-    if not parent_tx:
-        raise HTTPException(400, "Transaction liée introuvable.")
-
-    from_entity_id = parent_tx["from_entity_id"]
-
-    # Récupérer l'entité divers
-    divers_id = _get_divers_entity(conn)
-    if not divers_id:
-        raise HTTPException(
-            400,
-            "Impossible de générer l'écriture : aucune entité 'divers' n'existe en base.",
-        )
-
-    person_name = reimb.get("person_name") or ""
-    label = f"Remboursement {person_name}".strip()
-    amount = reimb["amount"]
-    contact_id = reimb.get("contact_id")
-    date = reimb.get("reimbursed_date") or now[:10]  # YYYY-MM-DD
-
-    # Verrou de clôture : ne pas injecter une écriture dans un exercice clos.
-    if _date_in_closed_period(conn, date):
-        raise HTTPException(
-            409,
-            "Exercice clôturé : rouvrez-le pour enregistrer ce remboursement.",
-        )
-
-    cur = conn.execute(
-        """INSERT INTO transactions
-               (date, label, description, amount, category_id, contact_id,
-                created_by, created_at, updated_at, from_entity_id, to_entity_id)
-           VALUES (?, ?, '', ?, NULL, ?, '', ?, ?, ?, ?)""",
-        (date, label, amount, contact_id, now, now, from_entity_id, divers_id),
-    )
-    return cur.lastrowid
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +89,7 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
     if reimbursement.reimbursement_transaction_id is not None:
         raise HTTPException(
             400,
-            "reimbursement_transaction_id ne peut pas être fourni à la création "
-            "(il est posé automatiquement lors du passage à 'reimbursed').",
+            "reimbursement_transaction_id ne peut pas être fourni à la création.",
         )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -299,9 +204,7 @@ def get_reimbursement(reimbursement_id: int):
 
 
 @router.put("/{reimbursement_id}")
-def update_reimbursement(
-    reimbursement_id: int, reimbursement: ReimbursementUpdate
-):
+def update_reimbursement(reimbursement_id: int, reimbursement: ReimbursementUpdate):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
@@ -315,61 +218,23 @@ def update_reimbursement(
             )
 
         old_data = row_to_dict(existing)
-
         updates = reimbursement.model_dump(exclude_unset=True)
         if not updates:
             return old_data
 
-        # --- Machine à états ---
+        # Mode simple : on valide uniquement que le statut est une valeur connue.
+        # Aucun workflow imposé (toute transition est permise) et aucune écriture
+        # comptable n'est générée automatiquement.
         if "status" in updates:
-            new_status_raw = updates["status"]
-            # Convertir en enum (déjà validé par Pydantic, mais si la valeur est str brute)
             try:
-                new_status = ReimbursementStatus(new_status_raw)
+                new_status = ReimbursementStatus(updates["status"])
             except ValueError:
                 raise HTTPException(
                     400,
-                    f"Statut '{new_status_raw}' invalide. "
+                    f"Statut '{updates['status']}' invalide. "
                     f"Valeurs autorisées : {[s.value for s in ReimbursementStatus]}",
                 )
-
-            current_status_raw = old_data.get("status", "pending")
-            try:
-                current_status = ReimbursementStatus(current_status_raw)
-            except ValueError:
-                # Statut legacy en base non reconnu : autoriser la transition vers pending
-                current_status = ReimbursementStatus.pending
-
-            allowed = _ALLOWED_TRANSITIONS.get(current_status, set())
-            if new_status not in allowed:
-                raise HTTPException(
-                    400,
-                    f"Transition '{current_status.value}' -> '{new_status.value}' interdite. "
-                    f"Transitions autorisées depuis '{current_status.value}' : "
-                    f"{[s.value for s in allowed] or '[]'}.",
-                )
-
-            # --- Passage à reimbursed : création atomique de la transaction de décaissement ---
-            if new_status == ReimbursementStatus.reimbursed:
-                # Idempotence : refuser si déjà payé
-                if old_data.get("reimbursement_transaction_id") is not None:
-                    raise HTTPException(
-                        400,
-                        "Ce remboursement a déjà été décaissé "
-                        f"(transaction #{old_data['reimbursement_transaction_id']}). "
-                        "Ne pas créer une seconde écriture de décaissement.",
-                    )
-
-                # Préparer le dict du remboursement avec les mises à jour en cours
-                merged = {**old_data, **{k: v for k, v in updates.items() if k != "status"}}
-                reimb_tx_id = _create_disbursement_transaction(conn, merged, now)
-                updates["reimbursement_transaction_id"] = reimb_tx_id
-
-            # Stocker la valeur string de l'enum
             updates["status"] = new_status.value
-
-        # Exclure reimbursement_transaction_id des updates si non géré par la machine à états
-        # (ne pas laisser l'appelant poser cette valeur directement via update)
 
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         set_clauses += ", updated_at = ?"
@@ -403,12 +268,13 @@ def delete_reimbursement(reimbursement_id: int):
             )
         old_data = row_to_dict(existing)
 
-        # Interdire la suppression d'un remboursement réglé
+        # Interdire la suppression d'un remboursement réglé : repasser d'abord en
+        # attente (transition libre en mode simple) pour confirmer l'intention.
         if old_data.get("status") == ReimbursementStatus.reimbursed.value:
             raise HTTPException(
                 409,
                 "Ce remboursement est déjà réglé (reimbursed). "
-                "Pour corriger une erreur, créez une opération corrective plutôt que de le supprimer.",
+                "Repassez-le en attente avant de le supprimer.",
             )
 
         conn.execute("DELETE FROM reimbursements WHERE id = ?", (reimbursement_id,))
