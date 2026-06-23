@@ -200,9 +200,8 @@ export const api = {
     request<any[]>(`/helloasso/sync?fiscal_year_id=${fiscalYearId}`, { method: "POST" }),
   getHelloAssoCampaigns: (fiscalYearId: number) =>
     request<any[]>(`/helloasso/campaigns?fiscal_year_id=${fiscalYearId}`),
-  getHelloAssoLinks: () => request<any[]>("/helloasso/links"),
-  putHelloAssoLink: (link: { form_type: string; form_slug: string; category_id: number | null; from_entity_id: number; to_entity_id: number }) =>
-    request<any>("/helloasso/links", { method: "PUT", body: JSON.stringify(link) }),
-  adjustHelloAsso: (body: { form_type: string; form_slug: string; fiscal_year_id: number }) =>
-    request<any>("/helloasso/adjust", { method: "POST", body: JSON.stringify(body) }),
+  acknowledgeHelloAsso: (body: { form_type: string; form_slug: string; fiscal_year_id: number }) =>
+    request<any>("/helloasso/acknowledge", { method: "POST", body: JSON.stringify(body) }),
+  unacknowledgeHelloAsso: (body: { form_type: string; form_slug: string; fiscal_year_id: number }) =>
+    request<any>("/helloasso/unacknowledge", { method: "POST", body: JSON.stringify(body) }),
 };

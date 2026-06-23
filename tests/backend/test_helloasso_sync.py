@@ -15,6 +15,18 @@ def _make_fiscal_year(db_path, start="2025-09-01", end=None):
     return fy_id
 
 
+def _config(client):
+    client.put("/api/helloasso/config", json={
+        "client_id": "id", "client_secret": "sec", "organization_slug": "bda-ens"})
+
+
+def _totals(collected):
+    return lambda self, s, e: [
+        {"form_type": "Membership", "form_slug": "cotis", "title": "Cotisations",
+         "state": "Public", "collected_cents": collected, "currency": "EUR"},
+    ]
+
+
 def test_sync_requires_config(client_and_db):
     client, db_path = client_and_db
     fy = _make_fiscal_year(db_path)
@@ -25,22 +37,16 @@ def test_sync_requires_config(client_and_db):
 def test_sync_populates_cache(client_and_db, monkeypatch):
     client, db_path = client_and_db
     fy = _make_fiscal_year(db_path)
-    client.put("/api/helloasso/config", json={
-        "client_id": "id", "client_secret": "sec", "organization_slug": "bda-ens"})
-
-    monkeypatch.setattr(
-        ha_api.HelloAssoClient, "fetch_campaign_totals",
-        lambda self, s, e: [
-            {"form_type": "Membership", "form_slug": "cotis", "title": "Cotisations",
-             "state": "Public", "collected_cents": 400000, "currency": "EUR"},
-        ],
-    )
+    _config(client)
+    monkeypatch.setattr(ha_api.HelloAssoClient, "fetch_campaign_totals", _totals(400000))
 
     r = client.post(f"/api/helloasso/sync?fiscal_year_id={fy}")
     assert r.status_code == 200
     rows = r.json()
     assert len(rows) == 1
     assert rows[0]["collected_cents"] == 400000
+    assert rows[0]["acknowledged_cents"] == 0
+    assert rows[0]["pending_cents"] == 400000
 
     # Re-sync : pas de doublon (upsert sur fiscal_year_id + form).
     client.post(f"/api/helloasso/sync?fiscal_year_id={fy}")
@@ -48,3 +54,24 @@ def test_sync_populates_cache(client_and_db, monkeypatch):
     n = conn.execute("SELECT COUNT(*) FROM helloasso_campaigns").fetchone()[0]
     conn.close()
     assert n == 1
+
+
+def test_sync_preserves_acknowledged(client_and_db, monkeypatch):
+    """Pointer puis re-synchroniser avec un collecté plus élevé : le pointage est
+    conservé et la campagne réapparaît avec uniquement le nouveau montant."""
+    client, db_path = client_and_db
+    fy = _make_fiscal_year(db_path)
+    _config(client)
+
+    monkeypatch.setattr(ha_api.HelloAssoClient, "fetch_campaign_totals", _totals(400000))
+    client.post(f"/api/helloasso/sync?fiscal_year_id={fy}")
+    client.post("/api/helloasso/acknowledge", json={
+        "form_type": "Membership", "form_slug": "cotis", "fiscal_year_id": fy})
+
+    # Nouvel encaissement : le collecté monte à 4500,00 €
+    monkeypatch.setattr(ha_api.HelloAssoClient, "fetch_campaign_totals", _totals(450000))
+    r = client.post(f"/api/helloasso/sync?fiscal_year_id={fy}")
+    row = r.json()[0]
+    assert row["collected_cents"] == 450000
+    assert row["acknowledged_cents"] == 400000  # préservé par le re-sync
+    assert row["pending_cents"] == 50000

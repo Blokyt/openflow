@@ -30,4 +30,10 @@ migrations = {
             UNIQUE (form_type, form_slug)
         )""",
     ],
+    "1.1.0": [
+        # Modèle « acquittement » : on pointe le montant pris en compte par campagne.
+        # Plus de rattachement catégorie/club ni de calcul d'écart depuis la compta.
+        "ALTER TABLE helloasso_campaigns ADD COLUMN acknowledged_cents INTEGER NOT NULL DEFAULT 0",
+        "DROP TABLE IF EXISTS helloasso_links",
+    ],
 }
