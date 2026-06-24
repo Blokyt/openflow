@@ -45,7 +45,7 @@ def test_sync_populates_cache(client_and_db, monkeypatch):
     rows = r.json()
     assert len(rows) == 1
     assert rows[0]["collected_cents"] == 400000
-    assert rows[0]["acknowledged_cents"] == 0
+    assert rows[0]["linked_cents"] == 0
     assert rows[0]["pending_cents"] == 400000
 
     # Re-sync : pas de doublon (upsert sur fiscal_year_id + form).
@@ -56,22 +56,30 @@ def test_sync_populates_cache(client_and_db, monkeypatch):
     assert n == 1
 
 
-def test_sync_preserves_acknowledged(client_and_db, monkeypatch):
-    """Pointer puis re-synchroniser avec un collecté plus élevé : le pointage est
-    conservé et la campagne réapparaît avec uniquement le nouveau montant."""
+def test_sync_preserves_links(client_and_db, monkeypatch):
+    """Associer une transaction puis re-synchroniser avec un collecté plus élevé :
+    le lien est conservé (l'id de campagne est stable) et la campagne réapparaît
+    avec uniquement le nouveau montant restant."""
     client, db_path = client_and_db
     fy = _make_fiscal_year(db_path)
     _config(client)
 
     monkeypatch.setattr(ha_api.HelloAssoClient, "fetch_campaign_totals", _totals(400000))
-    client.post(f"/api/helloasso/sync?fiscal_year_id={fy}")
-    client.post("/api/helloasso/acknowledge", json={
-        "form_type": "Membership", "form_slug": "cotis", "fiscal_year_id": fy})
+    cid = client.post(f"/api/helloasso/sync?fiscal_year_id={fy}").json()[0]["id"]
+
+    # Une recette enregistrée en compta, associée à la campagne.
+    interne = client.post("/api/entities/", json={"name": "Asso", "type": "internal"}).json()["id"]
+    externe = client.post("/api/entities/", json={"name": "Adhérents", "type": "external"}).json()["id"]
+    tx = client.post("/api/transactions/", json={
+        "date": "2025-10-15", "label": "cotis", "amount": 400000,
+        "from_entity_id": externe, "to_entity_id": interne,
+    }).json()["id"]
+    client.post(f"/api/helloasso/campaigns/{cid}/links", json={"transaction_id": tx})
 
     # Nouvel encaissement : le collecté monte à 4500,00 €
     monkeypatch.setattr(ha_api.HelloAssoClient, "fetch_campaign_totals", _totals(450000))
     r = client.post(f"/api/helloasso/sync?fiscal_year_id={fy}")
     row = r.json()[0]
     assert row["collected_cents"] == 450000
-    assert row["acknowledged_cents"] == 400000  # préservé par le re-sync
+    assert row["linked_cents"] == 400000  # lien préservé par le re-sync
     assert row["pending_cents"] == 50000

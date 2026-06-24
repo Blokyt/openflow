@@ -1,9 +1,9 @@
 {
   "id": "helloasso",
   "name": "HelloAsso",
-  "description": "Suivi des campagnes et billetteries HelloAsso, écart avec la compta et ajustement",
-  "help": "Connecte ta clé API HelloAsso pour suivre, par campagne et par exercice, le montant collecté en ligne face au montant enregistré dans ta compta. Rattache chaque campagne à une catégorie et un club, puis crée une transaction d'ajustement de l'écart en un clic.",
-  "version": "1.0.0",
+  "description": "Suivi des campagnes et billetteries HelloAsso, associées aux transactions de la compta",
+  "help": "Connecte ta clé API HelloAsso pour suivre, par campagne et par exercice, le montant collecté en ligne. Associe à chaque campagne les transactions réelles de ta compta : tant que le collecté n'est pas entièrement couvert, le reste à prendre en compte s'affiche ; une fois à zéro, la campagne disparaît de la liste à traiter.",
+  "version": "1.2.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "categories", "entities"],
@@ -16,5 +16,5 @@
   "db_models": ["models.py"],
   "dashboard_widgets": [],
   "settings_schema": {},
-  "example": "Je rapproche la campagne de cotisations : 4 000 € collectés sur HelloAsso, 3 825 € enregistrés, j'ajuste l'écart de 175 € en un clic."
+  "example": "Je rapproche la campagne de cotisations : 4 000 € collectés sur HelloAsso. J'associe la transaction de 3 700 € enregistrée en compta : il reste 300 € à prendre en compte."
 }

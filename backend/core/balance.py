@@ -99,6 +99,11 @@ def _subtree_ids(conn: sqlite3.Connection, entity_id: int) -> list:
     ]
 
 
+def get_subtree_ids(conn: sqlite3.Connection, entity_id: int) -> list:
+    """Wrapper public de `_subtree_ids` à l'usage des modules (reports, etc.)."""
+    return _subtree_ids(conn, entity_id)
+
+
 def _compute_aggregate_consolidated(
     conn: sqlite3.Connection,
     entity_id: int,

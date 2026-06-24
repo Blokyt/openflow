@@ -36,4 +36,19 @@ migrations = {
         "ALTER TABLE helloasso_campaigns ADD COLUMN acknowledged_cents INTEGER NOT NULL DEFAULT 0",
         "DROP TABLE IF EXISTS helloasso_links",
     ],
+    "1.2.0": [
+        # Modèle « liaison transactions » : on associe les transactions réelles de la
+        # compta à une campagne. linked_cents = somme des transactions liées,
+        # pending_cents = collecté - lié. acknowledged_cents devient inerte (le
+        # pointage forfaitaire est remplacé par les associations). Une transaction
+        # ne peut être liée qu'à une seule campagne (exclusivité applicative).
+        """CREATE TABLE helloasso_campaign_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL,
+            transaction_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (campaign_id, transaction_id)
+        )""",
+        "CREATE INDEX idx_hact_tx ON helloasso_campaign_transactions(transaction_id)",
+    ],
 }

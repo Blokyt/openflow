@@ -13,10 +13,44 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _with_pending(d: dict) -> dict:
-    """Ajoute pending_cents = collecté - pointé (montant restant à prendre en compte)."""
-    d["pending_cents"] = (d.get("collected_cents") or 0) - (d.get("acknowledged_cents") or 0)
+# ---------------------------------------------------------------------------
+# Calcul du lié / restant
+# ---------------------------------------------------------------------------
+
+def _linked_cents_map(conn, campaign_ids) -> dict:
+    """Retourne {campaign_id: linked_cents}.
+
+    linked_cents = somme des montants des transactions liées à la campagne. Le
+    JOIN avec transactions ignore les liens orphelins (transaction supprimée),
+    ce qui évite tout couplage avec le module transactions (pas de cascade).
+    """
+    ids = [c for c in campaign_ids]
+    if not ids:
+        return {}
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"""SELECT l.campaign_id AS cid, COALESCE(SUM(t.amount), 0) AS linked
+            FROM helloasso_campaign_transactions l
+            JOIN transactions t ON t.id = l.transaction_id
+            WHERE l.campaign_id IN ({ph})
+            GROUP BY l.campaign_id""",
+        ids,
+    ).fetchall()
+    return {r["cid"]: r["linked"] for r in rows}
+
+
+def _enrich(d: dict, linked: int) -> dict:
+    """Ajoute linked_cents et pending_cents (collecté - lié) à une campagne."""
+    d["linked_cents"] = linked
+    d["pending_cents"] = (d.get("collected_cents") or 0) - linked
     return d
+
+
+def _enrich_all(conn, rows) -> list:
+    """Enrichit une liste de lignes campagnes avec linked_cents/pending_cents."""
+    campaigns = [row_to_dict(r) for r in rows]
+    linked = _linked_cents_map(conn, [c["id"] for c in campaigns])
+    return [_enrich(c, linked.get(c["id"], 0)) for c in campaigns]
 
 
 # ---------------------------------------------------------------------------
@@ -108,9 +142,8 @@ def sync(fiscal_year_id: int):
             raise HTTPException(status_code=502, detail=str(e))
         now = _now()
         for t in totals:
-            # ON CONFLICT ne touche PAS acknowledged_cents : le pointage est préservé
-            # d'une synchro à l'autre. C'est ce qui fait réapparaître une campagne
-            # « à traiter » quand le collecté augmente au-delà du montant déjà pointé.
+            # ON CONFLICT préserve l'id de la campagne : les associations de
+            # transactions (qui référencent campaign_id) survivent au re-sync.
             conn.execute(
                 """INSERT INTO helloasso_campaigns
                    (fiscal_year_id, form_type, form_slug, title, state, collected_cents, currency, last_synced_at)
@@ -128,13 +161,13 @@ def sync(fiscal_year_id: int):
         cached = conn.execute(
             "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? ORDER BY title", (fiscal_year_id,)
         ).fetchall()
-        return [_with_pending(row_to_dict(r)) for r in cached]
+        return _enrich_all(conn, cached)
     finally:
         conn.close()
 
 
 # ---------------------------------------------------------------------------
-# Lecture + pointage manuel (acquittement)
+# Lecture des campagnes
 # ---------------------------------------------------------------------------
 
 @router.get("/campaigns")
@@ -145,58 +178,151 @@ def list_campaigns(fiscal_year_id: int):
             "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? ORDER BY title",
             (fiscal_year_id,),
         ).fetchall()
-        return [_with_pending(row_to_dict(c)) for c in campaigns]
+        return _enrich_all(conn, campaigns)
     finally:
         conn.close()
 
 
-class AcknowledgePayload(BaseModel):
-    form_type: str
-    form_slug: str
-    fiscal_year_id: int
+# ---------------------------------------------------------------------------
+# Association de transactions à une campagne
+# ---------------------------------------------------------------------------
 
-
-def _get_campaign(conn, p: AcknowledgePayload) -> dict:
-    row = conn.execute(
-        "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? AND form_type = ? AND form_slug = ?",
-        (p.fiscal_year_id, p.form_type, p.form_slug),
-    ).fetchone()
+def _get_campaign_by_id(conn, campaign_id: int) -> dict:
+    row = conn.execute("SELECT * FROM helloasso_campaigns WHERE id = ?", (campaign_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Campagne introuvable : lance d'abord une synchronisation")
     return row_to_dict(row)
 
 
-@router.post("/acknowledge")
-def acknowledge(payload: AcknowledgePayload):
-    """Marque la campagne comme prise en compte : on pointe le montant collecté
-    actuel. La campagne ne réapparaîtra comme « à traiter » que si HelloAsso
-    encaisse davantage par la suite."""
+def _links_payload(conn, campaign_id: int, camp: dict) -> dict:
+    """Construit la réponse {campagne, transactions liées, lié, restant}."""
+    rows = conn.execute(
+        """SELECT l.id AS link_id, t.id AS transaction_id, t.date, t.label, t.amount,
+                  t.from_entity_id, t.to_entity_id,
+                  fe.name AS from_entity_name, te.name AS to_entity_name
+           FROM helloasso_campaign_transactions l
+           JOIN transactions t ON t.id = l.transaction_id
+           LEFT JOIN entities fe ON fe.id = t.from_entity_id
+           LEFT JOIN entities te ON te.id = t.to_entity_id
+           WHERE l.campaign_id = ?
+           ORDER BY t.date, t.id""",
+        (campaign_id,),
+    ).fetchall()
+    links = [row_to_dict(r) for r in rows]
+    linked = sum(l["amount"] for l in links)
+    return {
+        "campaign_id": campaign_id,
+        "collected_cents": camp["collected_cents"],
+        "linked_cents": linked,
+        "pending_cents": camp["collected_cents"] - linked,
+        "links": links,
+    }
+
+
+class LinkPayload(BaseModel):
+    transaction_id: int
+
+
+@router.get("/campaigns/{campaign_id}/links")
+def list_campaign_links(campaign_id: int):
+    """Transactions associées à une campagne + montant lié et restant."""
     conn = get_conn()
     try:
-        camp = _get_campaign(conn, payload)
-        conn.execute(
-            "UPDATE helloasso_campaigns SET acknowledged_cents = ? WHERE id = ?",
-            (camp["collected_cents"], camp["id"]),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM helloasso_campaigns WHERE id = ?", (camp["id"],)).fetchone()
-        return _with_pending(row_to_dict(row))
+        camp = _get_campaign_by_id(conn, campaign_id)
+        return _links_payload(conn, campaign_id, camp)
     finally:
         conn.close()
 
 
-@router.post("/unacknowledge")
-def unacknowledge(payload: AcknowledgePayload):
-    """Annule le pointage : la campagne réapparaît avec tout son collecté à traiter."""
+@router.post("/campaigns/{campaign_id}/links", status_code=201)
+def add_campaign_link(campaign_id: int, payload: LinkPayload):
+    """Associe une transaction à la campagne. Une transaction ne peut être liée
+    qu'à une seule campagne (exclusivité, pour éviter le double comptage)."""
     conn = get_conn()
     try:
-        camp = _get_campaign(conn, payload)
+        camp = _get_campaign_by_id(conn, campaign_id)
+        tx = conn.execute(
+            "SELECT id FROM transactions WHERE id = ?", (payload.transaction_id,)
+        ).fetchone()
+        if tx is None:
+            raise HTTPException(status_code=404, detail="Transaction introuvable")
+        existing = conn.execute(
+            "SELECT campaign_id FROM helloasso_campaign_transactions WHERE transaction_id = ?",
+            (payload.transaction_id,),
+        ).fetchone()
+        if existing is not None:
+            if existing["campaign_id"] == campaign_id:
+                raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à cette campagne")
+            raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à une autre campagne")
         conn.execute(
-            "UPDATE helloasso_campaigns SET acknowledged_cents = 0 WHERE id = ?",
-            (camp["id"],),
+            "INSERT INTO helloasso_campaign_transactions (campaign_id, transaction_id, created_at) VALUES (?, ?, ?)",
+            (campaign_id, payload.transaction_id, _now()),
         )
         conn.commit()
-        row = conn.execute("SELECT * FROM helloasso_campaigns WHERE id = ?", (camp["id"],)).fetchone()
-        return _with_pending(row_to_dict(row))
+        return _links_payload(conn, campaign_id, camp)
+    finally:
+        conn.close()
+
+
+@router.delete("/campaigns/{campaign_id}/links/{transaction_id}")
+def remove_campaign_link(campaign_id: int, transaction_id: int):
+    """Dissocie une transaction de la campagne."""
+    conn = get_conn()
+    try:
+        camp = _get_campaign_by_id(conn, campaign_id)
+        cur = conn.execute(
+            "DELETE FROM helloasso_campaign_transactions WHERE campaign_id = ? AND transaction_id = ?",
+            (campaign_id, transaction_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Association introuvable")
+        conn.commit()
+        return _links_payload(conn, campaign_id, camp)
+    finally:
+        conn.close()
+
+
+@router.get("/campaigns/{campaign_id}/suggestions")
+def campaign_suggestions(campaign_id: int, limit: int = 20):
+    """Propose les recettes du mandat (encaissements : entité externe -> interne)
+    non encore liées à une campagne, triées « la plus proche inférieurement » du
+    montant restant à couvrir."""
+    conn = get_conn()
+    try:
+        camp = _get_campaign_by_id(conn, campaign_id)
+        start, end = _fiscal_year_bounds(conn, camp["fiscal_year_id"])
+        linked = _linked_cents_map(conn, [campaign_id]).get(campaign_id, 0)
+        reste = camp["collected_cents"] - linked
+
+        internal_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM entities WHERE type = 'internal'"
+        ).fetchall()]
+        suggestions = []
+        if internal_ids:
+            ph = ",".join("?" * len(internal_ids))
+            rows = conn.execute(
+                f"""SELECT t.id AS transaction_id, t.date, t.label, t.amount,
+                           t.from_entity_id, t.to_entity_id,
+                           fe.name AS from_entity_name, te.name AS to_entity_name
+                    FROM transactions t
+                    LEFT JOIN entities fe ON fe.id = t.from_entity_id
+                    LEFT JOIN entities te ON te.id = t.to_entity_id
+                    WHERE t.date BETWEEN ? AND ?
+                      AND t.to_entity_id IN ({ph})
+                      AND t.from_entity_id NOT IN ({ph})
+                      AND t.id NOT IN (SELECT transaction_id FROM helloasso_campaign_transactions)
+                    ORDER BY (t.amount > ?) ASC, ABS(t.amount - ?) ASC, t.date DESC
+                    LIMIT ?""",
+                [start, end] + internal_ids + internal_ids + [reste, reste, limit],
+            ).fetchall()
+            suggestions = [row_to_dict(r) for r in rows]
+
+        return {
+            "campaign_id": campaign_id,
+            "collected_cents": camp["collected_cents"],
+            "linked_cents": linked,
+            "pending_cents": reste,
+            "suggestions": suggestions,
+        }
     finally:
         conn.close()

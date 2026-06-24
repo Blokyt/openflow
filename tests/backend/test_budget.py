@@ -403,3 +403,142 @@ def test_entity_delete_cascades_budget(client):
     assert r.status_code == 200
 
     assert len(client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()) == 0
+
+
+# ─── Refonte dépense/recette (1.7.0) ─────────────────────────────────────────
+
+def _find_entity(data, entity_id):
+    for e in data["entities"]:
+        if e["entity_id"] == entity_id:
+            return e
+    raise KeyError(entity_id)
+
+
+def test_allocation_direction_default_expense(client):
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                    json={"entity_id": e["id"], "amount": 10000})
+    assert r.status_code == 201
+    assert r.json()["direction"] == "expense"
+
+
+def test_allocation_income_accepted(client):
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                    json={"entity_id": e["id"], "amount": 5000, "direction": "income"})
+    assert r.status_code == 201
+    assert r.json()["direction"] == "income"
+
+
+def test_allocation_expense_and_income_coexist(client):
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    r1 = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                     json={"entity_id": e["id"], "amount": 10000, "direction": "expense"})
+    r2 = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                     json={"entity_id": e["id"], "amount": 3000, "direction": "income"})
+    assert r1.status_code == 201 and r2.status_code == 201
+
+
+def test_allocation_duplicate_same_direction_conflict(client):
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": e["id"], "amount": 10000, "direction": "expense"})
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                    json={"entity_id": e["id"], "amount": 5000, "direction": "expense"})
+    assert r.status_code in (400, 409)
+
+
+def test_view_split_expense_income(client):
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    client.post("/api/transactions/", json={"date": "2025-10-15", "label": "dep", "amount": 12000,
+                                             "from_entity_id": e["id"], "to_entity_id": ext["id"]})
+    client.post("/api/transactions/", json={"date": "2025-11-05", "label": "rec", "amount": 5000,
+                                             "from_entity_id": ext["id"], "to_entity_id": e["id"]})
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club = _find_entity(data, e["id"])
+    assert club["realized_expense"] == 12000
+    assert club["realized_income"] == 5000
+    assert club["realized_net"] == -7000
+
+
+def test_view_internal_transfer_is_income_for_club(client):
+    """Une dotation BDA -> club est une recette du club dans la vue budget."""
+    fy = _make_fy(client)
+    bda = client.post("/api/entities/", json={"name": "BDA", "type": "internal"}).json()
+    club = client.post("/api/entities/", json={"name": "Gastro", "type": "internal", "parent_id": bda["id"]}).json()
+    client.post("/api/transactions/", json={"date": "2025-10-01", "label": "dotation", "amount": 20000,
+                                             "from_entity_id": bda["id"], "to_entity_id": club["id"]})
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    gastro = _find_entity(data, club["id"])
+    assert gastro["realized_income"] == 20000
+    assert gastro["realized_expense"] == 0
+
+
+def test_view_hierarchy_groups_children(client):
+    fy = _make_fy(client)
+    parent = client.post("/api/entities/", json={"name": "Pôles", "type": "internal"}).json()
+    child = client.post("/api/entities/", json={"name": "Pôle Musique", "type": "internal", "parent_id": parent["id"]}).json()
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    root = next((g for g in data["groups"] if g["entity_id"] == parent["id"]), None)
+    assert root is not None
+    assert child["id"] in [c["entity_id"] for c in root["children"]]
+    # l'enfant n'apparaît pas comme racine
+    assert all(g["entity_id"] != child["id"] for g in data["groups"])
+
+
+def test_view_group_aggregates_children(client):
+    fy = _make_fy(client)
+    parent = client.post("/api/entities/", json={"name": "Pôles", "type": "internal"}).json()
+    child = client.post("/api/entities/", json={"name": "Comédie", "type": "internal", "parent_id": parent["id"]}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    client.post("/api/transactions/", json={"date": "2025-10-01", "label": "achat", "amount": 10000,
+                                             "from_entity_id": child["id"], "to_entity_id": ext["id"]})
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    root = next(g for g in data["groups"] if g["entity_id"] == parent["id"])
+    assert root["realized_expense"] == 10000   # le parent agrège la dépense de l'enfant
+
+
+def test_view_category_split(client):
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    cat = client.post("/api/categories/", json={"name": "Concerts"}).json()
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": e["id"], "category_id": cat["id"], "amount": 50000, "direction": "expense"})
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": e["id"], "category_id": cat["id"], "amount": 20000, "direction": "income"})
+    client.post("/api/transactions/", json={"date": "2025-10-15", "label": "salle", "amount": 15000,
+                                             "from_entity_id": e["id"], "to_entity_id": ext["id"], "category_id": cat["id"]})
+    client.post("/api/transactions/", json={"date": "2025-11-10", "label": "billets", "amount": 8000,
+                                             "from_entity_id": ext["id"], "to_entity_id": e["id"], "category_id": cat["id"]})
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club = _find_entity(data, e["id"])
+    concerts = next(c for c in club["categories"] if c["category_id"] == cat["id"])
+    assert concerts["allocated_expense"] == 50000
+    assert concerts["allocated_income"] == 20000
+    assert concerts["realized_expense"] == 15000
+    assert concerts["realized_income"] == 8000
+    assert club["allocated_expense"] == 50000
+    assert club["allocated_income"] == 20000
+
+
+def test_view_n1_split(client):
+    fy_prev = _make_fy(client, "2024-2025", "2024-09-01")
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    client.post("/api/transactions/", json={"date": "2024-10-15", "label": "dep", "amount": 10000,
+                                             "from_entity_id": e["id"], "to_entity_id": ext["id"]})
+    client.post("/api/transactions/", json={"date": "2024-11-01", "label": "rec", "amount": 4000,
+                                             "from_entity_id": ext["id"], "to_entity_id": e["id"]})
+    _close_fy(client, fy_prev["id"], "2025-08-31")
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club = _find_entity(data, e["id"])
+    assert club["realized_expense_n1"] == 10000
+    assert club["realized_income_n1"] == 4000

@@ -1,6 +1,6 @@
 """Budget & Exercices API module for OpenFlow."""
 from datetime import datetime, timezone, date as _date, timedelta as _timedelta
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -56,6 +56,7 @@ class OpeningBalanceUpsert(BaseModel):
 class AllocationCreate(BaseModel):
     entity_id: int
     category_id: Optional[int] = None
+    direction: Literal["expense", "income"] = "expense"
     amount: int  # centimes entiers (cohérent avec le stockage budget_allocations)
     notes: str = ""
 
@@ -321,22 +322,22 @@ def create_allocation(fy_id: int, body: AllocationCreate):
                 raise HTTPException(400, f"Catégorie {body.category_id} introuvable")
         if body.category_id is None:
             dup = conn.execute(
-                "SELECT id FROM budget_allocations WHERE fiscal_year_id=? AND entity_id=? AND category_id IS NULL",
-                (fy_id, body.entity_id),
+                "SELECT id FROM budget_allocations WHERE fiscal_year_id=? AND entity_id=? AND category_id IS NULL AND direction=?",
+                (fy_id, body.entity_id, body.direction),
             ).fetchone()
         else:
             dup = conn.execute(
-                "SELECT id FROM budget_allocations WHERE fiscal_year_id=? AND entity_id=? AND category_id=?",
-                (fy_id, body.entity_id, body.category_id),
+                "SELECT id FROM budget_allocations WHERE fiscal_year_id=? AND entity_id=? AND category_id=? AND direction=?",
+                (fy_id, body.entity_id, body.category_id, body.direction),
             ).fetchone()
         if dup:
-            raise HTTPException(409, "Une allocation existe déjà pour ce triplet")
+            raise HTTPException(409, "Une allocation existe déjà pour ce triplet (entité, catégorie, sens)")
         now = _now()
         cur = conn.execute(
             """INSERT INTO budget_allocations
-               (fiscal_year_id, entity_id, category_id, amount, notes, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (fy_id, body.entity_id, body.category_id, body.amount, body.notes, now, now),
+               (fiscal_year_id, entity_id, category_id, direction, amount, notes, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (fy_id, body.entity_id, body.category_id, body.direction, body.amount, body.notes, now, now),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (new_id,)).fetchone()
@@ -442,8 +443,62 @@ def _realized_from_lookup(lookup: dict, entity_id: int, category_id) -> float:
     return total
 
 
+def _build_realized_split(conn, entity_ids: list, start: str, end: str) -> dict:
+    """{(entity_id, category_id): {"income": int, "expense": int}} en deux requêtes.
+
+    Convention budget (vue trésorerie par entité) :
+      income  = SUM(amount) des flux entrants (to_entity_id = entité)
+      expense = SUM(amount) des flux sortants (from_entity_id = entité)
+    Les virements internes comptent (une dotation reçue est une recette du club).
+    """
+    if not entity_ids:
+        return {}
+    ph = ",".join("?" * len(entity_ids))
+    rows_in = conn.execute(
+        f"""SELECT to_entity_id AS entity_id, category_id, SUM(amount) AS s
+            FROM transactions
+            WHERE date BETWEEN ? AND ? AND to_entity_id IN ({ph})
+            GROUP BY to_entity_id, category_id""",
+        [start, end] + list(entity_ids),
+    ).fetchall()
+    rows_out = conn.execute(
+        f"""SELECT from_entity_id AS entity_id, category_id, SUM(amount) AS s
+            FROM transactions
+            WHERE date BETWEEN ? AND ? AND from_entity_id IN ({ph})
+            GROUP BY from_entity_id, category_id""",
+        [start, end] + list(entity_ids),
+    ).fetchall()
+    lookup: dict = {}
+    for r in rows_in:
+        key = (r["entity_id"], r["category_id"])
+        lookup.setdefault(key, {"income": 0, "expense": 0})["income"] += r["s"]
+    for r in rows_out:
+        key = (r["entity_id"], r["category_id"])
+        lookup.setdefault(key, {"income": 0, "expense": 0})["expense"] += r["s"]
+    return lookup
+
+
+def _split_from_lookup(lookup: dict, entity_id: int, category_id) -> dict:
+    """{"income", "expense"} pour une (entité, catégorie). category_id None = total entité."""
+    if category_id is not None:
+        e = lookup.get((entity_id, category_id), {"income": 0, "expense": 0})
+        return {"income": e["income"], "expense": e["expense"]}
+    total = {"income": 0, "expense": 0}
+    for (eid, _cat), e in lookup.items():
+        if eid == entity_id:
+            total["income"] += e["income"]
+            total["expense"] += e["expense"]
+    return total
+
+
 @router.get("/view")
 def get_budget_view(fiscal_year_id: int):
+    """Vue budgétaire hiérarchique Groupe > Club > Catégorie avec dépenses et
+    recettes séparées (prévu et réalisé), N-1 et taux de couverture.
+
+    Renvoie `groups` (arbre, totaux agrégés propre + descendants) ET `entities`
+    (liste plate, champs historiques) + `totals` pour le widget dashboard.
+    """
     conn = get_conn()
     try:
         fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
@@ -452,105 +507,176 @@ def get_budget_view(fiscal_year_id: int):
 
         end_date = _fy_end(fy)
         as_of = (_date.fromisoformat(fy["start_date"]) - _timedelta(days=1)).isoformat()
-        # Utilise le lien explicite s'il est renseigné, sinon heuristique.
         explicit_prev_id = fy["previous_fiscal_year_id"] if "previous_fiscal_year_id" in fy.keys() else None
         prev_id = explicit_prev_id or _find_previous_fiscal_year(conn, fy["start_date"])
         prev = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (prev_id,)).fetchone() if prev_id else None
 
-        entity_ids = {r["id"] for r in conn.execute(
-            "SELECT id FROM entities WHERE type = 'internal'"
-        ).fetchall()}
-        entity_ids.update(
-            r["entity_id"] for r in conn.execute(
-                "SELECT DISTINCT entity_id FROM budget_allocations WHERE fiscal_year_id = ?",
-                (fiscal_year_id,),
-            ).fetchall()
-        )
+        # Entités internes + toute entité portant une allocation sur cet exercice.
+        ent_by_id: dict = {}
+        for r in conn.execute("SELECT id, name, parent_id, color FROM entities WHERE type = 'internal'").fetchall():
+            ent_by_id[r["id"]] = {"id": r["id"], "name": r["name"], "parent_id": r["parent_id"], "color": r["color"]}
+        for r in conn.execute(
+            "SELECT DISTINCT entity_id FROM budget_allocations WHERE fiscal_year_id = ?", (fiscal_year_id,)
+        ).fetchall():
+            if r["entity_id"] not in ent_by_id:
+                e = conn.execute("SELECT id, name, parent_id, color FROM entities WHERE id = ?", (r["entity_id"],)).fetchone()
+                if e is not None:
+                    ent_by_id[e["id"]] = {"id": e["id"], "name": e["name"], "parent_id": e["parent_id"], "color": e["color"]}
 
-        entity_ids_list = sorted(entity_ids)
+        entity_ids_list = sorted(ent_by_id.keys())
+        lookup_n = _build_realized_split(conn, entity_ids_list, fy["start_date"], end_date)
+        lookup_n1: dict = _build_realized_split(conn, entity_ids_list, prev["start_date"], _fy_end(prev)) if prev else {}
 
-        # Deux requêtes agrégées pour N et N-1 : remplace O(entités × catégories) appels _sum_realized.
-        lookup_n = _build_realized_lookup(conn, entity_ids_list, fy["start_date"], end_date)
-        lookup_n1: dict = {}
-        if prev:
-            lookup_n1 = _build_realized_lookup(conn, entity_ids_list, prev["start_date"], _fy_end(prev))
+        # Allocations groupées par entité.
+        allocs_by_entity: dict = {}
+        for a in conn.execute(
+            """SELECT a.id, a.entity_id, a.category_id, a.direction, a.amount, c.name AS category_name
+               FROM budget_allocations a
+               LEFT JOIN categories c ON a.category_id = c.id
+               WHERE a.fiscal_year_id = ?""",
+            (fiscal_year_id,),
+        ).fetchall():
+            allocs_by_entity.setdefault(a["entity_id"], []).append(dict(a))
 
-        result_entities = []
-        total_allocated = total_realized = 0.0
+        # Index parent -> enfants ; racines = entités sans parent connu dans le périmètre.
+        children_of: dict = {}
+        roots: list = []
+        for eid, ent in ent_by_id.items():
+            pid = ent["parent_id"]
+            if pid is not None and pid in ent_by_id:
+                children_of.setdefault(pid, []).append(eid)
+            else:
+                roots.append(eid)
 
-        for eid in entity_ids_list:
-            ent = conn.execute("SELECT id, name FROM entities WHERE id = ?", (eid,)).fetchone()
-            if ent is None:
-                continue
-
-            # Priorité au solde d'ouverture saisi manuellement.
-            ob_row = conn.execute(
+        def opening_for(eid):
+            ob = conn.execute(
                 "SELECT amount FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? AND entity_id = ?",
                 (fiscal_year_id, eid),
             ).fetchone()
-            if ob_row is not None:
-                opening = ob_row["amount"]
-            else:
-                opening = round(compute_entity_balance(conn, eid, as_of_date=as_of)["balance"], 2)
+            if ob is not None:
+                return ob["amount"]
+            return round(compute_entity_balance(conn, eid, as_of_date=as_of)["balance"], 2)
 
-            allocs = conn.execute(
-                """SELECT a.*, c.name AS category_name
-                   FROM budget_allocations a
-                   LEFT JOIN categories c ON a.category_id = c.id
-                   WHERE a.fiscal_year_id = ? AND a.entity_id = ?""",
-                (fiscal_year_id, eid),
-            ).fetchall()
+        def effective_alloc(allocs, direction):
+            glob = sum(a["amount"] for a in allocs if a["direction"] == direction and a["category_id"] is None)
+            det = sum(a["amount"] for a in allocs if a["direction"] == direction and a["category_id"] is not None)
+            has_glob = any(a["direction"] == direction and a["category_id"] is None for a in allocs)
+            return glob if has_glob else det
 
-            allocated_global = sum(a["amount"] for a in allocs if a["category_id"] is None)
-            allocated_detailed = sum(a["amount"] for a in allocs if a["category_id"] is not None)
-            has_global = any(a["category_id"] is None for a in allocs)
-            allocated_effective = allocated_global if has_global else allocated_detailed
-
-            cats_out = []
-            for a in allocs:
-                if a["category_id"] is None:
-                    continue
-                realized = _realized_from_lookup(lookup_n, eid, a["category_id"])
-                realized_n1 = _realized_from_lookup(lookup_n1, eid, a["category_id"]) if prev else 0.0
-                pct = abs(realized) / a["amount"] * 100.0 if a["amount"] != 0 else 0.0
-                cats_out.append({
-                    "category_id": a["category_id"],
-                    "category_name": a["category_name"] or "— Catégorie supprimée —",
-                    "allocation_id": a["id"],
-                    "allocated": a["amount"],
-                    "realized": realized,
-                    "realized_n_minus_1": realized_n1,
+        def build_categories(eid, allocs):
+            cat_ids = {a["category_id"] for a in allocs if a["category_id"] is not None}
+            cat_ids |= {cat for (e, cat) in lookup_n if e == eid and cat is not None}
+            out = []
+            for cid in cat_ids:
+                name = next((a["category_name"] for a in allocs if a["category_id"] == cid and a["category_name"]), None)
+                if name is None:
+                    row = conn.execute("SELECT name FROM categories WHERE id = ?", (cid,)).fetchone()
+                    name = row["name"] if row else "— Catégorie supprimée —"
+                exp = next((a for a in allocs if a["category_id"] == cid and a["direction"] == "expense"), None)
+                inc = next((a for a in allocs if a["category_id"] == cid and a["direction"] == "income"), None)
+                sn = _split_from_lookup(lookup_n, eid, cid)
+                sn1 = _split_from_lookup(lookup_n1, eid, cid) if prev else {"income": 0, "expense": 0}
+                a_exp = exp["amount"] if exp else 0
+                a_inc = inc["amount"] if inc else 0
+                net = sn["income"] - sn["expense"]
+                net1 = sn1["income"] - sn1["expense"]
+                base = a_exp if a_exp else a_inc
+                pct = abs(net) / base * 100.0 if base else 0.0
+                cov = sn["income"] / sn["expense"] * 100.0 if sn["expense"] else 0.0
+                out.append({
+                    "category_id": cid,
+                    "category_name": name,
+                    "allocation_id": exp["id"] if exp else (inc["id"] if inc else None),
+                    "allocation_id_expense": exp["id"] if exp else None,
+                    "allocation_id_income": inc["id"] if inc else None,
+                    "allocated": a_exp,            # legacy (dépense)
+                    "allocated_expense": a_exp,
+                    "allocated_income": a_inc,
+                    "realized": net,               # legacy (net)
+                    "realized_expense": sn["expense"],
+                    "realized_income": sn["income"],
+                    "realized_n_minus_1": net1,    # legacy (net)
+                    "realized_expense_n1": sn1["expense"],
+                    "realized_income_n1": sn1["income"],
                     "percent_consumed": round(pct, 1),
+                    "coverage_pct": round(cov, 1),
                 })
+            out.sort(key=lambda c: c["category_name"])
+            return out
 
-            realized_total = _realized_from_lookup(lookup_n, eid, None)
-            realized_n1_total = _realized_from_lookup(lookup_n1, eid, None) if prev else 0.0
+        def build_node(eid):
+            ent = ent_by_id[eid]
+            allocs = allocs_by_entity.get(eid, [])
+            own_alloc_exp = effective_alloc(allocs, "expense")
+            own_alloc_inc = effective_alloc(allocs, "income")
+            own_n = _split_from_lookup(lookup_n, eid, None)
+            own_n1 = _split_from_lookup(lookup_n1, eid, None) if prev else {"income": 0, "expense": 0}
+            cats = build_categories(eid, allocs)
+            children = [build_node(c) for c in sorted(children_of.get(eid, []))]
 
-            result_entities.append({
+            alloc_exp = own_alloc_exp + sum(ch["allocated_expense"] for ch in children)
+            alloc_inc = own_alloc_inc + sum(ch["allocated_income"] for ch in children)
+            real_exp = own_n["expense"] + sum(ch["realized_expense"] for ch in children)
+            real_inc = own_n["income"] + sum(ch["realized_income"] for ch in children)
+            real_exp1 = own_n1["expense"] + sum(ch["realized_expense_n1"] for ch in children)
+            real_inc1 = own_n1["income"] + sum(ch["realized_income_n1"] for ch in children)
+            net = real_inc - real_exp
+            net1 = real_inc1 - real_exp1
+            cov = real_inc / real_exp * 100.0 if real_exp else 0.0
+            variation = round((net - net1) / abs(net1) * 100.0, 1) if net1 != 0 else None
+
+            return {
                 "entity_id": eid,
                 "entity_name": ent["name"],
-                "opening_balance": opening,
-                "allocated_total": allocated_effective,
-                "realized_total": realized_total,
-                "realized_n_minus_1": realized_n1_total,
-                "variation_pct": (
-                    round((realized_total - realized_n1_total) / abs(realized_n1_total) * 100.0, 1)
-                    if realized_n1_total != 0 else None
-                ),
-                "categories": cats_out,
-            })
-            total_allocated += allocated_effective
-            total_realized += realized_total
+                "parent_id": ent["parent_id"],
+                "color": ent["color"],
+                "opening_balance": opening_for(eid),
+                "allocated_expense": alloc_exp,
+                "allocated_income": alloc_inc,
+                "realized_expense": real_exp,
+                "realized_income": real_inc,
+                "realized_net": net,
+                "realized_expense_n1": real_exp1,
+                "realized_income_n1": real_inc1,
+                "coverage_pct": round(cov, 1),
+                "categories": cats,
+                "children": children,
+                # Champs historiques (widget dashboard + rétro-compatibilité).
+                "allocated_total": alloc_exp,
+                "realized_total": net,
+                "realized_n_minus_1": net1,
+                "variation_pct": variation,
+            }
+
+        groups = [build_node(r) for r in sorted(roots)]
+
+        flat: list = []
+
+        def flatten(node):
+            flat.append({k: v for k, v in node.items() if k != "children"})
+            for ch in node["children"]:
+                flatten(ch)
+        for g in groups:
+            flatten(g)
+
+        totals = {
+            "allocated_expense": sum(g["allocated_expense"] for g in groups),
+            "allocated_income": sum(g["allocated_income"] for g in groups),
+            "realized_expense": sum(g["realized_expense"] for g in groups),
+            "realized_income": sum(g["realized_income"] for g in groups),
+        }
+        totals["realized_net"] = totals["realized_income"] - totals["realized_expense"]
+        # Champs historiques : allocated = budget dépenses, realized = net.
+        totals["allocated"] = totals["allocated_expense"]
+        totals["realized"] = totals["realized_net"]
+        totals["remaining"] = totals["allocated"] + totals["realized"]
 
         return {
             "fiscal_year": row_to_dict(fy),
             "previous_fiscal_year_id": prev["id"] if prev else None,
-            "entities": result_entities,
-            "totals": {
-                "allocated": total_allocated,
-                "realized": total_realized,
-                "remaining": total_allocated + total_realized,
-            },
+            "groups": groups,
+            "entities": flat,
+            "totals": totals,
         }
     finally:
         conn.close()

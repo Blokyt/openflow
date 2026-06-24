@@ -121,4 +121,30 @@ migrations = {
         "ALTER TABLE fiscal_years ADD COLUMN president_name TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE fiscal_years ADD COLUMN tresorier_name TEXT NOT NULL DEFAULT ''",
     ],
+    "1.7.0": [
+        # Refonte budget dépense/recette : chaque allocation porte une `direction`.
+        # La contrainte d'unicité inclut désormais la direction, ce qui permet une
+        # ligne dépense ET une ligne recette pour le même (exercice, entité, catégorie).
+        # Les allocations existantes (montant unique) deviennent des dépenses : c'est
+        # l'heuristique la plus sûre ; le trésorier ressaisit les recettes prévues.
+        """CREATE TABLE budget_allocations_v3 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fiscal_year_id INTEGER NOT NULL,
+            entity_id INTEGER NOT NULL,
+            category_id INTEGER,
+            direction TEXT NOT NULL DEFAULT 'expense' CHECK(direction IN ('expense','income')),
+            amount INTEGER NOT NULL,
+            notes TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE (fiscal_year_id, entity_id, category_id, direction)
+        )""",
+        """INSERT INTO budget_allocations_v3
+               (id, fiscal_year_id, entity_id, category_id, direction, amount, notes, created_at, updated_at)
+           SELECT id, fiscal_year_id, entity_id, category_id, 'expense', amount, notes, created_at, updated_at
+           FROM budget_allocations""",
+        "DROP TABLE budget_allocations",
+        "ALTER TABLE budget_allocations_v3 RENAME TO budget_allocations",
+        "CREATE INDEX IF NOT EXISTS idx_alloc_direction ON budget_allocations(fiscal_year_id, entity_id, direction)",
+    ],
 }

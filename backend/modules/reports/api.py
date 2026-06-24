@@ -32,6 +32,7 @@ from backend.core.balance import (
     compute_consolidated_balance,
     compute_entity_balance,
     compute_entity_balance_for_period,
+    get_subtree_ids,
 )
 from backend.core.database import get_conn
 
@@ -67,6 +68,25 @@ def _resolve_period(conn, fiscal_year_id: Optional[int],
 def _get_internal_ids(conn) -> list:
     rows = conn.execute("SELECT id FROM entities WHERE type = 'internal'").fetchall()
     return [r["id"] for r in rows]
+
+
+def _entity_perimeter(conn, entity_id: Optional[int]) -> list:
+    """Périmètre P (liste d'IDs internes) pour les calculs de flux.
+
+    - entity_id None  : P = tous les internes (compte de résultat / bilan global).
+    - entity_id fourni : P = {entity_id} ∪ descendants internes. Un flux entrant
+      dans P depuis hors-P (ex: dotation BDA -> club) devient alors un produit du
+      club ; les flux intra-P s'annulent.
+    404 si l'entité n'existe pas, 400 si elle est externe.
+    """
+    if entity_id is None:
+        return _get_internal_ids(conn)
+    row = conn.execute("SELECT id, type FROM entities WHERE id = ?", (entity_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, f"Entité {entity_id} introuvable")
+    if row["type"] != "internal":
+        raise HTTPException(400, "entity_id doit référencer une entité interne")
+    return get_subtree_ids(conn, entity_id)
 
 
 # ───────────────────────── Plan comptable & mapping ───────────────────────
@@ -222,6 +242,94 @@ def put_mapping(body: MappingIn):
         conn.close()
 
 
+# Heuristique nom de catégorie -> code de compte PCG (aide au pré-remplissage).
+# L'ordre compte : la première liste de mots-clés trouvée dans le nom gagne.
+# On inclut les variantes avec et sans accent pour matcher les deux graphies.
+KEYWORD_ACCOUNT_MAP = [
+    (["cotis"], "756"),
+    (["don", "mécénat", "mecenat"], "754"),
+    (["subvention", "subv"], "74"),
+    (["vente", "buvette", "billet", "ticket", "prestation", "activité", "activite"], "70"),
+    (["location", "loyer", "salle", "assurance", "entretien"], "61"),
+    (["communication", "transport", "frais bancaire", "banque", "impression", "affranchiss", "site", "frais de port"], "62"),
+    (["salaire", "personnel", "rémunération", "remuneration"], "64"),
+    (["impôt", "impot", "taxe"], "63"),
+    (["achat", "fourniture", "matériel", "materiel", "nourriture", "boisson", "alimentation", "goodies"], "60"),
+    (["intérêt", "interet", "agios"], "66"),
+]
+
+
+def _suggest_code(name: str):
+    low = (name or "").lower()
+    for keywords, code in KEYWORD_ACCOUNT_MAP:
+        if any(kw in low for kw in keywords):
+            return code
+    return None
+
+
+@router.get("/mapping/suggestions")
+def get_mapping_suggestions():
+    """Propose un compte PCG par heuristique de nom, pour les catégories encore
+    non mappées. L'utilisateur valide (et peut appliquer en masse)."""
+    conn = get_conn()
+    try:
+        mapped_ids = set(_mapping_dict(conn).keys())
+        accounts_by_code = {a["code"]: a for a in _account_list(conn)}
+        cats = conn.execute("SELECT id, name FROM categories ORDER BY name").fetchall()
+        suggestions = []
+        for cat in cats:
+            if cat["id"] in mapped_ids:
+                continue
+            code = _suggest_code(cat["name"])
+            acc = accounts_by_code.get(code) if code else None
+            if acc is None:
+                continue
+            suggestions.append({
+                "category_id": cat["id"],
+                "category_name": cat["name"],
+                "suggested_account_id": acc["id"],
+                "suggested_account_code": acc["code"],
+                "suggested_account_label": acc["label"],
+            })
+        return {"suggestions": suggestions}
+    finally:
+        conn.close()
+
+
+class ApplyEntry(BaseModel):
+    category_id: int
+    account_id: int
+
+
+class ApplySuggestionsIn(BaseModel):
+    entries: list[ApplyEntry]
+
+
+@router.post("/mapping/apply-suggestions")
+def apply_mapping_suggestions(body: ApplySuggestionsIn):
+    """Applique une liste de mappings catégorie -> compte en une fois.
+    N'accepte que des comptes de produits ou de charges."""
+    conn = get_conn()
+    try:
+        applied = 0
+        for entry in body.entries:
+            acc = conn.execute(
+                "SELECT kind FROM report_accounts WHERE id = ?", (entry.account_id,)
+            ).fetchone()
+            if acc is None or acc["kind"] not in ("produit", "charge"):
+                continue
+            conn.execute(
+                """INSERT INTO category_account_map (category_id, account_id) VALUES (?, ?)
+                   ON CONFLICT(category_id) DO UPDATE SET account_id = excluded.account_id""",
+                (entry.category_id, entry.account_id),
+            )
+            applied += 1
+        conn.commit()
+        return {"applied": applied}
+    finally:
+        conn.close()
+
+
 # ───────────────────────── Compte de résultat ─────────────────────────────
 
 def _category_rows(conn, internal_ids, ph, start, end, in_col, out_col) -> list:
@@ -241,9 +349,14 @@ def _category_rows(conn, internal_ids, ph, start, end, in_col, out_col) -> list:
     ).fetchall()]
 
 
-def _cr_category_rows(conn, start: str, end: str):
-    """(produits, charges) par catégorie sur la période (méthode trésorerie)."""
-    internal_ids = _get_internal_ids(conn)
+def _cr_category_rows(conn, start: str, end: str, perimeter: Optional[list] = None):
+    """(produits, charges) par catégorie sur la période (méthode trésorerie).
+
+    perimeter = liste d'IDs internes définissant le périmètre du rapport. None =
+    tous les internes (rapport global). Pour un club, on passe son sous-arbre :
+    un flux entrant depuis hors-périmètre est un produit, un flux sortant une charge.
+    """
+    internal_ids = perimeter if perimeter is not None else _get_internal_ids(conn)
     if not internal_ids:
         return [], []
     ph = ",".join("?" * len(internal_ids))
@@ -274,9 +387,9 @@ def _build_compte_resultat(conn, produits: list, charges: list, periode: dict,
     return result
 
 
-def _aggregate_compte_resultat(conn, start: str, end: str) -> dict:
+def _aggregate_compte_resultat(conn, start: str, end: str, perimeter: Optional[list] = None) -> dict:
     """Compte de résultat trésorerie sur une période (par catégorie et par compte)."""
-    produits, charges = _cr_category_rows(conn, start, end)
+    produits, charges = _cr_category_rows(conn, start, end, perimeter)
     return _build_compte_resultat(conn, produits, charges, {"start": start, "end": end})
 
 
@@ -289,21 +402,27 @@ def _prev_fy_id(conn, fiscal_year_id: int) -> Optional[int]:
     return row[0] if row and row[0] is not None else None
 
 
-def _accruals_rows(conn, fiscal_year_id: Optional[int], kind: str) -> list:
-    """Régularisations groupées par catégorie : [{category_id, category_name, montant}]."""
+def _accruals_rows(conn, fiscal_year_id: Optional[int], kind: str,
+                   entity_filter: Optional[list] = None) -> list:
+    """Régularisations groupées par catégorie : [{category_id, category_name, montant}].
+
+    Avec entity_filter (périmètre club), ne retient que les régularisations de ces
+    entités, plus celles sans entité (saisies au niveau global)."""
     if fiscal_year_id is None:
         return []
-    rows = conn.execute(
-        """SELECT a.category_id,
-                  COALESCE(c.name, 'Sans catégorie') AS category_name,
-                  SUM(a.amount) AS montant
-           FROM report_accruals a
-           LEFT JOIN categories c ON c.id = a.category_id
-           WHERE a.fiscal_year_id = ? AND a.kind = ?
-           GROUP BY a.category_id, c.name""",
-        (fiscal_year_id, kind),
-    ).fetchall()
-    return [dict(r) for r in rows]
+    sql = """SELECT a.category_id,
+                    COALESCE(c.name, 'Sans catégorie') AS category_name,
+                    SUM(a.amount) AS montant
+             FROM report_accruals a
+             LEFT JOIN categories c ON c.id = a.category_id
+             WHERE a.fiscal_year_id = ? AND a.kind = ?"""
+    params = [fiscal_year_id, kind]
+    if entity_filter is not None:
+        ph = ",".join("?" * len(entity_filter))
+        sql += f" AND (a.entity_id IN ({ph}) OR a.entity_id IS NULL)"
+        params.extend(entity_filter)
+    sql += " GROUP BY a.category_id, c.name"
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
 def _merge_by_category(*groups) -> list:
@@ -322,13 +441,15 @@ def _merge_by_category(*groups) -> list:
     return [v for v in acc.values() if v["montant"] != 0]
 
 
-def _compte_resultat_for_fy(conn, fiscal_year_id: int) -> dict:
+def _compte_resultat_for_fy(conn, fiscal_year_id: int, perimeter: Optional[list] = None) -> dict:
     """Compte de résultat en engagement pour un exercice.
 
     Produits(E) = produits trésorerie(E) + créances(E) - créances(E-1)
     Charges(E)  = charges trésorerie(E)  + dettes(E)   - dettes(E-1)
     L'extourne des régularisations de E-1 évite le double comptage lorsque la
     créance/dette se dénoue (encaissement/paiement) en E.
+
+    perimeter restreint le calcul à un club (sous-arbre) ; None = asso entière.
     """
     fy = conn.execute(
         "SELECT start_date, end_date FROM fiscal_years WHERE id = ?", (fiscal_year_id,)
@@ -339,11 +460,11 @@ def _compte_resultat_for_fy(conn, fiscal_year_id: int) -> dict:
     end = fy["end_date"] or date.today().isoformat()
     prev = _prev_fy_id(conn, fiscal_year_id)
 
-    base_produits, base_charges = _cr_category_rows(conn, start, end)
-    creances_e = _accruals_rows(conn, fiscal_year_id, "creance")
-    dettes_e = _accruals_rows(conn, fiscal_year_id, "dette")
-    creances_n1 = _accruals_rows(conn, prev, "creance")
-    dettes_n1 = _accruals_rows(conn, prev, "dette")
+    base_produits, base_charges = _cr_category_rows(conn, start, end, perimeter)
+    creances_e = _accruals_rows(conn, fiscal_year_id, "creance", perimeter)
+    dettes_e = _accruals_rows(conn, fiscal_year_id, "dette", perimeter)
+    creances_n1 = _accruals_rows(conn, prev, "creance", perimeter)
+    dettes_n1 = _accruals_rows(conn, prev, "dette", perimeter)
 
     produits = _merge_by_category((base_produits, 1), (creances_e, 1), (creances_n1, -1))
     charges = _merge_by_category((base_charges, 1), (dettes_e, 1), (dettes_n1, -1))
@@ -362,13 +483,16 @@ def _compte_resultat_for_fy(conn, fiscal_year_id: int) -> dict:
     )
 
 
-def _resolve_cr_data(conn, fiscal_year_id, start_date, end_date) -> dict:
+def _resolve_cr_data(conn, fiscal_year_id, start_date, end_date,
+                     entity_id: Optional[int] = None) -> dict:
     """Données du compte de résultat : engagement si fiscal_year_id, sinon
-    trésorerie sur la période start/end. Source unique pour le JSON et le PDF."""
+    trésorerie sur la période start/end. Source unique pour le JSON et le PDF.
+    entity_id restreint au périmètre d'un club (None = asso entière)."""
+    perimeter = _entity_perimeter(conn, entity_id) if entity_id is not None else None
     if fiscal_year_id is not None:
-        return _compte_resultat_for_fy(conn, fiscal_year_id)
+        return _compte_resultat_for_fy(conn, fiscal_year_id, perimeter=perimeter)
     start, end = _resolve_period(conn, None, start_date, end_date)
-    return _aggregate_compte_resultat(conn, start, end)
+    return _aggregate_compte_resultat(conn, start, end, perimeter=perimeter)
 
 
 @router.get("/compte-resultat")
@@ -383,11 +507,11 @@ def get_compte_resultat(
     Avec fiscal_year_id : méthode d'engagement (créances/dettes + extournes).
     Avec start_date/end_date seulement : trésorerie pure sur la période.
     Dans les deux cas : produits/charges par catégorie ET par compte, totaux,
-    résultat.
+    résultat. Avec entity_id : périmètre restreint à ce club (sous-arbre).
     """
     conn = get_conn()
     try:
-        return _resolve_cr_data(conn, fiscal_year_id, start_date, end_date)
+        return _resolve_cr_data(conn, fiscal_year_id, start_date, end_date, entity_id)
     finally:
         conn.close()
 
@@ -435,13 +559,17 @@ def _bilan_instantane(conn) -> dict:
     }
 
 
-def _bilan_exercice(conn, fiscal_year_id: int) -> dict:
+def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) -> dict:
     """Bilan de fin d'exercice (méthode trésorerie, Phase 1).
 
     Actif  = disponibilités de clôture (ouverture + réalisé sur la période),
              ventilées par entité interne.
     Passif = report à nouveau (trésorerie consolidée d'ouverture) + résultat.
     Équilibre garanti : somme clôture = somme ouverture + (produits - charges).
+
+    Avec entity_id, on restreint au périmètre du club (sous-arbre). L'équilibre
+    tient toujours : clôture(P) = ouverture(P) + produits_club - charges_club,
+    car les flux intra-P s'annulent et les flux P<->hors-P sont comptés au CR.
     """
     fy = conn.execute(
         "SELECT id, start_date, end_date FROM fiscal_years WHERE id = ?",
@@ -452,9 +580,15 @@ def _bilan_exercice(conn, fiscal_year_id: int) -> dict:
     start = fy["start_date"]
     end = fy["end_date"] or date.today().isoformat()
 
-    internal = conn.execute(
-        "SELECT id, name FROM entities WHERE type = 'internal' ORDER BY name"
-    ).fetchall()
+    perimeter = _entity_perimeter(conn, entity_id)
+    if not perimeter:
+        internal = []
+    else:
+        ph = ",".join("?" * len(perimeter))
+        internal = conn.execute(
+            f"SELECT id, name FROM entities WHERE type = 'internal' AND id IN ({ph}) ORDER BY name",
+            perimeter,
+        ).fetchall()
 
     disponibilites = []
     total_disponibilites = 0
@@ -470,7 +604,7 @@ def _bilan_exercice(conn, fiscal_year_id: int) -> dict:
 
     # Couche engagement : un seul calcul du compte de résultat fournit le
     # résultat ET les totaux de créances/dettes (N et N-1).
-    cr = _compte_resultat_for_fy(conn, fiscal_year_id)
+    cr = _compte_resultat_for_fy(conn, fiscal_year_id, perimeter=perimeter)
     resultat = cr["resultat"]
     eng = cr["engagement"]
     creances, dettes = eng["creances"], eng["dettes"]
@@ -483,6 +617,7 @@ def _bilan_exercice(conn, fiscal_year_id: int) -> dict:
 
     return {
         "fiscal_year_id": fiscal_year_id,
+        "entity_id": entity_id,
         "arrete_le": end,
         "periode": {"start": start, "end": end},
         "actif": {
@@ -515,7 +650,7 @@ def get_bilan(fiscal_year_id: Optional[int] = None, entity_id: Optional[int] = N
     try:
         if fiscal_year_id is None:
             return _bilan_instantane(conn)
-        return _bilan_exercice(conn, fiscal_year_id)
+        return _bilan_exercice(conn, fiscal_year_id, entity_id=entity_id)
     finally:
         conn.close()
 
@@ -688,9 +823,13 @@ def get_compte_resultat_pdf(
     """Export PDF du compte de résultat (postes par compte, accents et €)."""
     conn = get_conn()
     try:
-        data = _resolve_cr_data(conn, fiscal_year_id, start_date, end_date)
+        data = _resolve_cr_data(conn, fiscal_year_id, start_date, end_date, entity_id)
         start = data["periode"]["start"]
         end = data["periode"]["end"]
+        entity_name = None
+        if entity_id:
+            row = conn.execute("SELECT name FROM entities WHERE id = ?", (entity_id,)).fetchone()
+            entity_name = row["name"] if row else None
     finally:
         conn.close()
 
@@ -703,6 +842,8 @@ def get_compte_resultat_pdf(
     pdf.set_font(font, "B", 16)
     pdf.cell(0, 12, "Compte de résultat", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font, "", 10)
+    if entity_name:
+        pdf.cell(0, 6, f"Club : {entity_name}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.cell(0, 6, f"Période : {start} au {end}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 
@@ -756,7 +897,11 @@ def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int]
         raise HTTPException(400, "Le bilan PDF nécessite un fiscal_year_id")
     conn = get_conn()
     try:
-        data = _bilan_exercice(conn, fiscal_year_id)
+        data = _bilan_exercice(conn, fiscal_year_id, entity_id=entity_id)
+        entity_name = None
+        if entity_id:
+            row = conn.execute("SELECT name FROM entities WHERE id = ?", (entity_id,)).fetchone()
+            entity_name = row["name"] if row else None
     finally:
         conn.close()
 
@@ -772,6 +917,8 @@ def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int]
     pdf.set_font(font, "B", 16)
     pdf.cell(0, 12, "Bilan", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font, "", 10)
+    if entity_name:
+        pdf.cell(0, 6, f"Club : {entity_name}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.cell(0, 6, f"Arrêté au {data['arrete_le']}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 

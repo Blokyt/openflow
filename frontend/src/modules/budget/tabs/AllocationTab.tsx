@@ -18,6 +18,7 @@ export default function AllocationTab({ year, onChange }: Props) {
   const [newEntity, setNewEntity] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newAmount, setNewAmount] = useState("");
+  const [newDirection, setNewDirection] = useState<"expense" | "income">("expense");
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAmount, setEditAmount] = useState("");
@@ -50,9 +51,10 @@ export default function AllocationTab({ year, onChange }: Props) {
       await api.createAllocation(year!.id, {
         entity_id: parseInt(newEntity, 10),
         category_id: newCategory ? parseInt(newCategory, 10) : null,
+        direction: newDirection,
         amount: eurosToCents(newAmount),
       });
-      setNewEntity(""); setNewCategory(""); setNewAmount("");
+      setNewEntity(""); setNewCategory(""); setNewAmount(""); setNewDirection("expense");
       setAdding(false);
       await reloadAllocations();
       onChange();
@@ -141,6 +143,17 @@ export default function AllocationTab({ year, onChange }: Props) {
             </select>
           </div>
           <div>
+            <label className="block text-xs text-[#666] mb-1">Sens</label>
+            <select
+              value={newDirection}
+              onChange={(e) => setNewDirection(e.target.value as "expense" | "income")}
+              className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+            >
+              <option value="expense">Dépense</option>
+              <option value="income">Recette</option>
+            </select>
+          </div>
+          <div>
             <label className="block text-xs text-[#666] mb-1">Montant</label>
             <input
               type="number"
@@ -168,6 +181,7 @@ export default function AllocationTab({ year, onChange }: Props) {
               <tr className="border-b border-[#1a1a1a]">
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#666] uppercase">Entité</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#666] uppercase">Catégorie</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[#666] uppercase">Sens</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-[#666] uppercase">Montant</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-[#666] uppercase">Actions</th>
               </tr>
@@ -181,6 +195,11 @@ export default function AllocationTab({ year, onChange }: Props) {
                     <td className="px-4 py-3 text-white">{(ent as any)?.name ?? `#${a.entity_id}`}</td>
                     <td className="px-4 py-3 text-[#B0B0B0]">
                       {cat ? cat.name : <span className="text-[#666] italic">Globale</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${a.direction === "income" ? "text-[#00C853] border-[#00C853]/30 bg-[#00C853]/10" : "text-[#FF8A5B] border-[#FF8A5B]/30 bg-[#FF8A5B]/10"}`}>
+                        {a.direction === "income" ? "Recette" : "Dépense"}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-white">
                       {editingId === a.id ? (

@@ -1,18 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, KeyRound, Check, CheckCircle2, AlertCircle, X, RotateCcw } from "lucide-react";
+import { RefreshCw, KeyRound, Link2, CheckCircle2, AlertCircle, X, Plus, Trash2, Search } from "lucide-react";
 import { api } from "../../api";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import { formatEuros } from "../../utils/format";
 import EmptyState from "../../core/EmptyState";
 
 type Campaign = {
+  id: number;
   form_type: string;
   form_slug: string;
   title: string;
   state: string;
   collected_cents: number;
-  acknowledged_cents: number;
+  linked_cents: number;
   pending_cents: number;
+};
+
+type TxRow = {
+  transaction_id: number;
+  date: string;
+  label: string;
+  amount: number;
+  from_entity_name: string | null;
+  to_entity_name: string | null;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -40,8 +50,8 @@ export default function HelloAssoPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busySlug, setBusySlug] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const [linking, setLinking] = useState<Campaign | null>(null);
 
   const load = useCallback(async () => {
     if (!selectedYear) return;
@@ -78,22 +88,6 @@ export default function HelloAssoPage() {
     }
   };
 
-  const setAck = async (c: Campaign, ack: boolean) => {
-    if (!selectedYear) return;
-    setBusySlug(c.form_slug);
-    setError(null);
-    try {
-      const body = { form_type: c.form_type, form_slug: c.form_slug, fiscal_year_id: selectedYear.id };
-      if (ack) await api.acknowledgeHelloAsso(body);
-      else await api.unacknowledgeHelloAsso(body);
-      await load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusySlug(null);
-    }
-  };
-
   if (loading && configured === null) {
     return (
       <div className="p-8">
@@ -126,7 +120,7 @@ export default function HelloAssoPage() {
         <div>
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>HelloAsso</h1>
           <p className="text-sm text-[#666] mt-1">
-            Pointe ce que tu as enregistré dans ta compta. Une campagne réapparaît si HelloAsso encaisse davantage.
+            Associe les transactions de ta compta à chaque campagne. Tant que le collecté n'est pas couvert, le reste s'affiche.
           </p>
         </div>
         <button
@@ -148,7 +142,7 @@ export default function HelloAssoPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Reste à pointer</div>
+          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Reste à associer</div>
           <div className={`text-2xl font-bold ${totalPending > 0 ? "text-[#FF8A5B]" : "text-[#00C853]"}`}>{formatEuros(totalPending)}</div>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
@@ -181,24 +175,25 @@ export default function HelloAssoPage() {
                       <th className="px-5 py-3 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Campagne</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Type</th>
                       <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Collecté</th>
-                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">À pointer</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Associé</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Reste</th>
                       <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {toTreat.map((c, idx) => (
-                      <tr key={`${c.form_type}/${c.form_slug}`} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
+                      <tr key={c.id} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
                         <td className="px-5 py-3.5 font-medium text-white">{c.title || c.form_slug}</td>
                         <td className="px-5 py-3.5"><TypeBadge t={c.form_type} /></td>
                         <td className="px-5 py-3.5 text-right text-[#B0B0B0] whitespace-nowrap">{formatEuros(c.collected_cents)}</td>
+                        <td className="px-5 py-3.5 text-right text-[#777] whitespace-nowrap">{formatEuros(c.linked_cents)}</td>
                         <td className="px-5 py-3.5 text-right font-semibold text-[#FF8A5B] whitespace-nowrap">{formatEuros(c.pending_cents)}</td>
                         <td className="px-5 py-3.5 text-right">
                           <button
-                            onClick={() => setAck(c, true)}
-                            disabled={busySlug === c.form_slug}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+                            onClick={() => setLinking(c)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] transition-colors"
                           >
-                            <Check size={13} /> Pris en compte
+                            <Link2 size={13} /> Associer
                           </button>
                         </td>
                       </tr>
@@ -211,7 +206,7 @@ export default function HelloAssoPage() {
             <div className="bg-[#111] border border-[#222] rounded-2xl p-8 text-center">
               <CheckCircle2 size={28} className="mx-auto text-[#00C853] mb-3" />
               <p className="text-white font-semibold">Tout est à jour</p>
-              <p className="text-sm text-[#666] mt-1">Aucune campagne en attente. Clique sur Rafraîchir pour vérifier les nouveaux encaissements.</p>
+              <p className="text-sm text-[#666] mt-1">Chaque campagne est entièrement couverte par des transactions. Clique sur Rafraîchir pour vérifier les nouveaux encaissements.</p>
             </div>
           )}
 
@@ -229,7 +224,7 @@ export default function HelloAssoPage() {
                     <table className="w-full text-sm">
                       <tbody>
                         {done.map((c, idx) => (
-                          <tr key={`${c.form_type}/${c.form_slug}`} className={`${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
+                          <tr key={c.id} className={`${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
                             <td className="px-5 py-3 font-medium text-[#B0B0B0]">{c.title || c.form_slug}</td>
                             <td className="px-5 py-3"><TypeBadge t={c.form_type} /></td>
                             <td className="px-5 py-3 text-right text-[#777] whitespace-nowrap">{formatEuros(c.collected_cents)}</td>
@@ -240,12 +235,11 @@ export default function HelloAssoPage() {
                             </td>
                             <td className="px-5 py-3 text-right">
                               <button
-                                onClick={() => setAck(c, false)}
-                                disabled={busySlug === c.form_slug}
-                                className="inline-flex items-center gap-1.5 text-xs text-[#666] hover:text-white disabled:opacity-50 transition-colors"
-                                title="Annuler le pointage (la campagne réapparaîtra à traiter)"
+                                onClick={() => setLinking(c)}
+                                className="inline-flex items-center gap-1.5 text-xs text-[#666] hover:text-white transition-colors"
+                                title="Voir et gérer les transactions associées"
                               >
-                                <RotateCcw size={12} /> Annuler
+                                <Link2 size={12} /> Gérer
                               </button>
                             </td>
                           </tr>
@@ -259,6 +253,187 @@ export default function HelloAssoPage() {
           )}
         </>
       )}
+
+      {linking && (
+        <LinkPanel
+          campaign={linking}
+          onClose={() => setLinking(null)}
+          onChanged={load}
+        />
+      )}
+    </div>
+  );
+}
+
+function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClose: () => void; onChanged: () => void }) {
+  const [links, setLinks] = useState<TxRow[]>([]);
+  const [suggestions, setSuggestions] = useState<TxRow[]>([]);
+  const [collected, setCollected] = useState(campaign.collected_cents);
+  const [linked, setLinked] = useState(campaign.linked_cents);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const pending = collected - linked;
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [l, s] = await Promise.all([
+        api.getHelloAssoLinks(campaign.id),
+        api.getHelloAssoSuggestions(campaign.id),
+      ]);
+      setLinks(l.links);
+      setLinked(l.linked_cents);
+      setCollected(l.collected_cents);
+      setSuggestions(s.suggestions);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [campaign.id]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const associate = async (tx: TxRow) => {
+    setBusy(tx.transaction_id);
+    setError(null);
+    try {
+      await api.addHelloAssoLink(campaign.id, tx.transaction_id);
+      await reload();
+      onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dissociate = async (tx: TxRow) => {
+    setBusy(tx.transaction_id);
+    setError(null);
+    try {
+      await api.removeHelloAssoLink(campaign.id, tx.transaction_id);
+      await reload();
+      onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const txMeta = (tx: TxRow) => {
+    const flow = [tx.from_entity_name, tx.to_entity_name].filter(Boolean).join(" → ");
+    return [tx.date, flow].filter(Boolean).join(" · ");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-[#111] border border-[#222] rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-[#111] border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">{campaign.title || campaign.form_slug}</h2>
+            <p className="text-xs text-[#666] mt-0.5">{typeLabel(campaign.form_type)} · associe les recettes correspondantes</p>
+          </div>
+          <button onClick={onClose} className="text-[#666] hover:text-white"><X size={18} /></button>
+        </div>
+
+        <div className="px-6 py-4 grid grid-cols-3 gap-3">
+          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
+            <div className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Collecté</div>
+            <div className="text-base font-bold text-[#F2C48D]">{formatEuros(collected)}</div>
+          </div>
+          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
+            <div className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Associé</div>
+            <div className="text-base font-bold text-white">{formatEuros(linked)}</div>
+          </div>
+          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
+            <div className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Reste</div>
+            <div className={`text-base font-bold ${pending > 0 ? "text-[#FF8A5B]" : "text-[#00C853]"}`}>{formatEuros(pending)}</div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mx-6 mb-3 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{error}</div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#F2C48D]" />
+          </div>
+        ) : (
+          <>
+            <div className="px-6 pb-2">
+              <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Transactions associées</div>
+              {links.length === 0 ? (
+                <p className="text-sm text-[#555] py-2">Aucune transaction associée pour l'instant.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {links.map((tx) => (
+                    <div key={tx.transaction_id} className="flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-sm text-white truncate">{tx.label}</div>
+                        <div className="text-xs text-[#666] truncate">{txMeta(tx)}</div>
+                      </div>
+                      <div className="flex items-center gap-3 whitespace-nowrap">
+                        <span className="text-sm font-semibold text-[#00C853]">{formatEuros(tx.amount)}</span>
+                        <button
+                          onClick={() => dissociate(tx)}
+                          disabled={busy === tx.transaction_id}
+                          className="text-[#666] hover:text-[#FF5252] disabled:opacity-40"
+                          title="Dissocier"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4">
+              <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Search size={12} /> Recettes du mandat suggérées
+              </div>
+              {suggestions.length === 0 ? (
+                <p className="text-sm text-[#555] py-2">
+                  {pending <= 0 ? "Campagne entièrement couverte." : "Aucune recette disponible à associer (toutes déjà liées ou hors période)."}
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {suggestions.map((tx) => (
+                    <div key={tx.transaction_id} className="flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 hover:border-[#2a2a2a]">
+                      <div className="min-w-0">
+                        <div className="text-sm text-white truncate">{tx.label}</div>
+                        <div className="text-xs text-[#666] truncate">{txMeta(tx)}</div>
+                      </div>
+                      <div className="flex items-center gap-3 whitespace-nowrap">
+                        <span className="text-sm font-semibold text-[#B0B0B0]">{formatEuros(tx.amount)}</span>
+                        <button
+                          onClick={() => associate(tx)}
+                          disabled={busy === tx.transaction_id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] disabled:opacity-40"
+                        >
+                          <Plus size={12} /> Associer
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

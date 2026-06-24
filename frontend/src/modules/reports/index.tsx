@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileDown, CheckCircle2, AlertTriangle, Info, Plus, Trash2 } from "lucide-react";
+import { FileDown, CheckCircle2, AlertTriangle, Info, Plus, Trash2, Sparkles } from "lucide-react";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import { api } from "../../api";
 import { formatEuros, eurosToCents } from "../../utils/format";
@@ -16,8 +16,8 @@ const TABS: { id: TabId; label: string }[] = [
 const COLOR_OK = "#00C853";
 const COLOR_KO = "#FF5252";
 
-/** Charge des données dépendant de l'exercice, avec annulation à la sortie. */
-function useYearData<T>(year: any, fetcher: (id: number) => Promise<T>): { data: T | null; loading: boolean } {
+/** Charge des données dépendant de l'exercice (et de deps additionnelles), avec annulation à la sortie. */
+function useYearData<T>(year: any, fetcher: (id: number) => Promise<T>, deps: any[] = []): { data: T | null; loading: boolean } {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -29,38 +29,64 @@ function useYearData<T>(year: any, fetcher: (id: number) => Promise<T>): { data:
       .catch(() => { if (!cancelled) setData(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [year?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year?.id, ...deps]);
   return { data, loading };
 }
 
 export default function Reports() {
   const { years, selectedYear, setSelectedYearId } = useFiscalYear();
   const [tab, setTab] = useState<TabId>("resultat");
+  const [entities, setEntities] = useState<any[]>([]);
+  const [entityId, setEntityId] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getEntities("internal").then(setEntities).catch(() => setEntities([]));
+  }, []);
+
+  const scopeName = entityId ? entities.find((e) => e.id === entityId)?.name : null;
+  const scoped = tab === "resultat" || tab === "bilan";
 
   return (
     <div className="p-8 space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
             Rapports comptables
           </h1>
           <p className="text-sm text-[#999] mt-1">
-            Compte de résultat et bilan de l'exercice, sur le périmètre consolidé de l'association.
+            {scoped && scopeName
+              ? `Périmètre « ${scopeName} » : le club et ses sous-entités (les dotations reçues comptent comme produits).`
+              : "Compte de résultat et bilan de l'exercice, sur le périmètre consolidé de l'association."}
           </p>
         </div>
-        {years.length > 0 && (
-          <select
-            value={selectedYear?.id ?? ""}
-            onChange={(e) => setSelectedYearId(parseInt(e.target.value, 10))}
-            className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white"
-          >
-            {years.map((y) => (
-              <option key={y.id} value={y.id}>
-                {y.name}{y.end_date === null ? " ●" : ""}
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          {scoped && entities.length > 0 && (
+            <select
+              value={entityId ?? ""}
+              onChange={(e) => setEntityId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white"
+            >
+              <option value="">Toute l'association</option>
+              {entities.map((e) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          )}
+          {years.length > 0 && (
+            <select
+              value={selectedYear?.id ?? ""}
+              onChange={(e) => setSelectedYearId(parseInt(e.target.value, 10))}
+              className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white"
+            >
+              {years.map((y) => (
+                <option key={y.id} value={y.id}>
+                  {y.name}{y.end_date === null ? " ●" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#999]">
@@ -88,8 +114,8 @@ export default function Reports() {
         ))}
       </div>
 
-      {tab === "resultat" && <CompteResultatTab year={selectedYear} />}
-      {tab === "bilan" && <BilanTab year={selectedYear} />}
+      {tab === "resultat" && <CompteResultatTab year={selectedYear} entityId={entityId} />}
+      {tab === "bilan" && <BilanTab year={selectedYear} entityId={entityId} />}
       {tab === "cloture" && <ClotureTab year={selectedYear} />}
       {tab === "plan" && <PlanComptableTab />}
     </div>
@@ -144,8 +170,12 @@ function PdfButton({ onClick }: { onClick: () => void }) {
 
 // ─── Compte de résultat ─────────────────────────────────────────────────────
 
-function CompteResultatTab({ year }: { year: any }) {
-  const { data, loading } = useYearData(year, (id) => api.getCompteResultat({ fiscal_year_id: id }));
+function CompteResultatTab({ year, entityId }: { year: any; entityId: number | null }) {
+  const { data, loading } = useYearData(
+    year,
+    (id) => api.getCompteResultat({ fiscal_year_id: id, entity_id: entityId ?? undefined }),
+    [entityId],
+  );
 
   if (!year) return <EmptyYear />;
   if (loading || !data) return <Loading />;
@@ -156,7 +186,7 @@ function CompteResultatTab({ year }: { year: any }) {
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <PdfButton onClick={() => api.downloadReportPdf("compte-resultat", { fiscal_year_id: year.id })} />
+        <PdfButton onClick={() => api.downloadReportPdf("compte-resultat", { fiscal_year_id: year.id, entity_id: entityId ?? undefined })} />
       </div>
 
       <ResultatSection
@@ -241,8 +271,12 @@ function ResultatSection({
 
 // ─── Bilan ──────────────────────────────────────────────────────────────────
 
-function BilanTab({ year }: { year: any }) {
-  const { data, loading } = useYearData(year, (id) => api.getBilan({ fiscal_year_id: id }));
+function BilanTab({ year, entityId }: { year: any; entityId: number | null }) {
+  const { data, loading } = useYearData(
+    year,
+    (id) => api.getBilan({ fiscal_year_id: id, entity_id: entityId ?? undefined }),
+    [entityId],
+  );
 
   if (!year) return <EmptyYear />;
   if (loading || !data || !data.actif) return <Loading />;
@@ -262,7 +296,7 @@ function BilanTab({ year }: { year: any }) {
           {equilibre ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
           {equilibre ? "Bilan équilibré (actif = passif)" : "Bilan déséquilibré"}
         </span>
-        <PdfButton onClick={() => api.downloadReportPdf("bilan", { fiscal_year_id: year.id })} />
+        <PdfButton onClick={() => api.downloadReportPdf("bilan", { fiscal_year_id: year.id, entity_id: entityId ?? undefined })} />
       </div>
       <p className="text-xs text-[#777]">Arrêté au {data.arrete_le}.</p>
 
@@ -323,8 +357,10 @@ function BilanRow({ label, montant, bold }: { label: string; montant: number; bo
 function PlanComptableTab() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [rows, setRows] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
+  const [applying, setApplying] = useState(false);
 
   function loadMapping() {
     return api.getReportMapping().then((m) => {
@@ -341,20 +377,39 @@ function PlanComptableTab() {
     });
   }
 
+  function loadSuggestions() {
+    return api.getReportMappingSuggestions().then((s) => setSuggestions(s.suggestions));
+  }
+
   useEffect(() => {
     setLoading(true);
     // Les comptes ne changent pas au gré du mapping : chargés une seule fois.
-    Promise.all([api.getReportAccounts().then((a) => setAccounts(a.accounts)), loadMapping()])
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.getReportAccounts().then((a) => setAccounts(a.accounts)),
+      loadMapping(),
+      loadSuggestions(),
+    ]).finally(() => setLoading(false));
   }, []);
 
   async function change(categoryId: number, accountId: number | null) {
     setSaving(categoryId);
     try {
       await api.setReportMapping(categoryId, accountId);
-      await loadMapping();  // recharge le mapping seul, pas les comptes
+      await Promise.all([loadMapping(), loadSuggestions()]);
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function applyAllSuggestions() {
+    setApplying(true);
+    try {
+      await api.applyReportMappingSuggestions(
+        suggestions.map((s) => ({ category_id: s.category_id, account_id: s.suggested_account_id })),
+      );
+      await Promise.all([loadMapping(), loadSuggestions()]);
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -370,6 +425,30 @@ function PlanComptableTab() {
         les totaux : le sens produit/charge vient du flux. Une catégorie non mappée tombe dans le
         compte « Autres » de son sens.
       </p>
+
+      {suggestions.length > 0 && (
+        <div className="rounded-2xl border border-[#F2C48D]/30 bg-[#F2C48D]/[0.06] p-4 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-2 min-w-0">
+            <Sparkles size={16} className="text-[#F2C48D] flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white">
+                {suggestions.length} catégorie{suggestions.length > 1 ? "s" : ""} {suggestions.length > 1 ? "peuvent" : "peut"} être classée{suggestions.length > 1 ? "s" : ""} automatiquement
+              </p>
+              <p className="text-xs text-[#999] mt-0.5 truncate">
+                {suggestions.slice(0, 4).map((s) => `${s.category_name} → ${s.suggested_account_code}`).join(", ")}
+                {suggestions.length > 4 ? "…" : ""}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={applyAllSuggestions}
+            disabled={applying}
+            className="flex items-center gap-1.5 rounded-xl bg-[#F2C48D] px-3 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
+          >
+            <Sparkles size={14} /> {applying ? "Application…" : `Appliquer (${suggestions.length})`}
+          </button>
+        </div>
+      )}
 
       {rows.length === 0 && (
         <div className="rounded-2xl border border-[#222] bg-[#111] p-10 text-center text-sm text-[#777]">
