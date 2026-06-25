@@ -637,8 +637,6 @@ def get_budget_view(fiscal_year_id: int):
             carrier_ids |= {cat for (e, cat) in lookup_n if e == eid and cat is not None}
             if prev:
                 carrier_ids |= {cat for (e, cat) in lookup_n1 if e == eid and cat is not None}
-            if not carrier_ids:
-                return []
 
             # Montants propres (sans descendants) par catégorie porteuse.
             own: dict = {}
@@ -733,6 +731,36 @@ def get_budget_view(fiscal_year_id: int):
 
             roots = [build_cat_node(cid) for cid in cat_roots]
             roots.sort(key=lambda c: c["category_name"])
+
+            # Ligne « Sans catégorie » : réel non catégorisé (N et N-1) de l'entité,
+            # pour que la somme des lignes réconcilie le total de l'entité (lecture seule).
+            unc_n = lookup_n.get((eid, None), {"income": 0, "expense": 0})
+            unc_n1 = lookup_n1.get((eid, None), {"income": 0, "expense": 0}) if prev else {"income": 0, "expense": 0}
+            if unc_n["income"] or unc_n["expense"] or unc_n1["income"] or unc_n1["expense"]:
+                net = unc_n["income"] - unc_n["expense"]
+                net1 = unc_n1["income"] - unc_n1["expense"]
+                cov = unc_n["income"] / unc_n["expense"] * 100.0 if unc_n["expense"] else 0.0
+                roots.append({
+                    "category_id": None,
+                    "category_name": "Sans catégorie",
+                    "parent_id": None,
+                    "is_leaf": True,
+                    "allocation_id": None,
+                    "allocation_id_expense": None,
+                    "allocation_id_income": None,
+                    "allocated": 0,
+                    "allocated_expense": 0,
+                    "allocated_income": 0,
+                    "realized": net,
+                    "realized_expense": unc_n["expense"],
+                    "realized_income": unc_n["income"],
+                    "realized_n_minus_1": net1,
+                    "realized_expense_n1": unc_n1["expense"],
+                    "realized_income_n1": unc_n1["income"],
+                    "percent_consumed": 0.0,
+                    "coverage_pct": round(cov, 1),
+                    "children": [],
+                })
             return roots
 
         def build_node(eid):

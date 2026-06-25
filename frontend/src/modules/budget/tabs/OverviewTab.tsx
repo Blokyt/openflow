@@ -105,13 +105,13 @@ export default function OverviewTab({ year }: Props) {
             <span className={hasKids ? "font-medium text-[#cfcfcf]" : ""}>{cat.category_name}</span>
           </div>
         </td>
-        {hasKids
-          ? <Num value={cat.allocated_expense} muted />
-          : <EditableBudget year={year!} node={node} cat={cat} direction="expense" onSaved={reload} />}
+        {(!hasKids && cat.category_id != null)
+          ? <EditableBudget year={year!} node={node} cat={cat} direction="expense" onSaved={reload} />
+          : <Num value={cat.allocated_expense} muted />}
         <Num value={cat.realized_expense} color={EXPENSE} />
-        {hasKids
-          ? <Num value={cat.allocated_income} muted />
-          : <EditableBudget year={year!} node={node} cat={cat} direction="income" onSaved={reload} />}
+        {(!hasKids && cat.category_id != null)
+          ? <EditableBudget year={year!} node={node} cat={cat} direction="income" onSaved={reload} />
+          : <Num value={cat.allocated_income} muted />}
         <Num value={cat.realized_income} color={INCOME} />
         <Num value={cat.realized_income - cat.realized_expense} signed />
         {showN1Cols && (

@@ -583,6 +583,33 @@ def test_view_category_tree_nested(client):
     assert club_node["realized_expense"] == 15000
 
 
+def test_view_uncategorized_shows_sans_categorie_row(client):
+    """Le réel non catégorisé (N et N-1) apparaît en ligne « Sans catégorie »,
+    de sorte que la somme des lignes réconcilie le total de l'entité."""
+    fy_prev = _make_fy(client, "2024-2025", "2024-09-01")
+    club = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    # Dépense N-1 sans catégorie.
+    client.post("/api/transactions/", json={"date": "2024-10-15", "label": "divers N-1", "amount": 8000,
+                                             "from_entity_id": club["id"], "to_entity_id": ext["id"]})
+    _close_fy(client, fy_prev["id"], "2025-08-31")
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+    # Dépense N sans catégorie.
+    client.post("/api/transactions/", json={"date": "2025-10-15", "label": "divers N", "amount": 3000,
+                                             "from_entity_id": club["id"], "to_entity_id": ext["id"]})
+
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club_node = next(g for g in data["groups"] if g["entity_id"] == club["id"])
+    sans = next(c for c in club_node["categories"] if c["category_id"] is None)
+    assert sans["category_name"] == "Sans catégorie"
+    assert sans["is_leaf"] is True
+    assert sans["realized_expense"] == 3000
+    assert sans["realized_expense_n1"] == 8000
+    # Réconciliation : la somme des lignes = total de l'entité (N et N-1).
+    assert sum(c["realized_expense"] for c in club_node["categories"]) == club_node["realized_expense"]
+    assert sum(c["realized_expense_n1"] for c in club_node["categories"]) == club_node["realized_expense_n1"]
+
+
 # ─── Pré-remplissage depuis le réel N-1 ──────────────────────────────────────
 
 def test_seed_from_realized_creates_allocations(client):
