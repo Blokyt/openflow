@@ -54,6 +54,7 @@ SOLDE_PASS = 40        # SOLDE COMPTE BANCAIRE (Date passation)
 SOLDE_TRES = 41        # SOLDE TRESORERIE (A date)
 SOLDE_DATE = 42        # SOLDE COMPTE BANCAIRE (A date)
 LABEL_NONE = "Non catégorisé"
+PLACEHOLDER = "à compléter"   # cellules non déductibles des données (à saisir à la main)
 HEADER_TPL_ROW = 7     # ligne modèle « ACHAT » (en-tête gras)
 DATA_TPL_ROW = 8       # ligne modèle de saisie (normale)
 
@@ -399,14 +400,14 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
             f"TOTAL DEPENSES REELLES {year_label} (cf tableau ci-dessus)".replace("  ", " ")
         )
         ws.cell(row=dep_total, column=2).value = f"={total_cl}{total_row}"
-        # Solde bancaire à la passation : valeur saisie si disponible, sinon vide.
-        if opening is not None:
-            ws.cell(row=solde_pass, column=2).value = opening
+        # Solde bancaire à la passation : valeur saisie si disponible, sinon placeholder.
+        ws.cell(row=solde_pass, column=2).value = opening if opening is not None else PLACEHOLDER
         # Solde trésorerie (à date) : estimation à partir des données de l'app.
         if current is not None:
             ws.cell(row=solde_tres, column=2).value = current
-        # Solde compte bancaire (à date) : laissé vide (l'app ne distingue pas encore
-        # compte courant / Livret A / caisse physique).
+        # Solde compte bancaire (à date) : non déductible (l'app ne distingue pas encore
+        # compte courant / Livret A / caisse physique) -> placeholder.
+        ws.cell(row=solde_date, column=2).value = PLACEHOLDER
 
 
 def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: str) -> bytes:

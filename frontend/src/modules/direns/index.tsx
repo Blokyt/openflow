@@ -132,9 +132,10 @@ export default function DirensPage() {
             <Table2 size={15} className="text-[#666] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <p>
               Le solde de trésorerie est estimé à partir de l'app ; les lignes « Solde compte bancaire »
-              restent vides car l'app ne distingue pas encore compte courant, Livret A et caisse physique
-              (à compléter à la main). Les transactions sans catégorie sont regroupées sur une ligne
-              « Non catégorisé ». Tu peux renommer librement clubs et catégories dans le fichier généré.
+              affichent « à compléter » car l'app ne distingue pas encore compte courant, Livret A et
+              caisse physique. Plus généralement, tout ce qui n'est pas déductible des données n'est pas
+              rempli (placeholder au plus). Les transactions sans catégorie sont regroupées sur une ligne
+              « Non catégorisé ».
             </p>
           </div>
         </div>

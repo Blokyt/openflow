@@ -230,6 +230,17 @@ def test_tresorerie_estimated_filled(client):
     assert isinstance(ws.cell(row=row, column=2).value, (int, float))
 
 
+def test_bank_balance_non_derivable_is_placeholder(client):
+    """La ligne compte bancaire (à date) n'est pas déductible -> placeholder, pas une valeur."""
+    club = _internal(client, "Club")
+    fy = _fy(client)
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "SOLDE COMPTE BANCAIRE (A date)")
+    assert row is not None
+    assert ws.cell(row=row, column=2).value == "à compléter"
+
+
 def test_many_categories_expand_rows(client):
     """Plus de 26 catégories : le bloc s'agrandit, toutes les lignes présentes."""
     ext = _external(client)
