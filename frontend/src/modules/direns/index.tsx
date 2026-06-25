@@ -58,10 +58,12 @@ export default function DirensPage() {
       <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#999]">
         <Info size={15} className="text-[#F2C48D] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
         <p>
-          Aucune configuration : les lignes du tableau sont directement tes catégories OpenFlow
-          (selon la catégorie de chaque transaction), et chaque club devient une colonne. Seuls les
-          deux premiers onglets sont remplis (bilan réalisé + budget prévisionnel) ; le 3e onglet
-          (demande de subventions) reste vierge. La mise en forme du modèle officiel est conservée.
+          Aucune configuration. Les lignes reprennent tes catégories OpenFlow en respectant la
+          hiérarchie (catégorie parente en gras, sous-catégories indentées en dessous), et chaque
+          club actif devient une colonne ; un club sans mouvement n'apparaît pas. Le titre et
+          l'année sont déduits du mandat choisi. Seuls les deux premiers onglets sont remplis
+          (bilan réalisé + budget prévisionnel) ; le 3e (demande de subventions) reste vierge.
+          La mise en forme du modèle officiel est conservée.
         </p>
       </div>
 
@@ -129,9 +131,10 @@ export default function DirensPage() {
           <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#888]">
             <Table2 size={15} className="text-[#666] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <p>
-              Les en-têtes de colonnes reprennent le nom des clubs et les lignes le nom des catégories ;
-              tu peux les renommer dans le fichier généré. Les transactions sans catégorie sont regroupées
-              sur une ligne « Non catégorisé ».
+              Le solde de trésorerie est estimé à partir de l'app ; les lignes « Solde compte bancaire »
+              restent vides car l'app ne distingue pas encore compte courant, Livret A et caisse physique
+              (à compléter à la main). Les transactions sans catégorie sont regroupées sur une ligne
+              « Non catégorisé ». Tu peux renommer librement clubs et catégories dans le fichier généré.
             </p>
           </div>
         </div>

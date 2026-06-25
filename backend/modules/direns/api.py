@@ -2,29 +2,24 @@
 
 Remplit de façon 100 % automatique et déterministe les DEUX premiers onglets du
 template officiel DirENS (bundlé dans assets/template_direns.xlsx) à partir des
-données de l'app :
+données de l'app, au plus proche d'un compte de résultat associatif :
 
-  - Onglet 1 « Bilan financier {AAAA-AAAA} » : dépenses RÉALISÉES de l'exercice,
-    une COLONNE par club (entité interne) et une LIGNE par CATÉGORIE OpenFlow
-    (selon la catégorie de chaque transaction), plus la section financement
-    (recettes par catégorie) et les soldes de trésorerie.
-  - Onglet 2 « Budget prévisionnel {AAAA-AAAA} » : dépenses PRÉVISIONNELLES de
-    l'exercice suivant, issues de budget_allocations (direction='expense'),
-    mêmes lignes = catégories.
+  - COLONNES = les clubs ACTIFS (entités internes ayant des dépenses sur la
+    période), ordonnés comme dans l'app. Un club sans activité n'apparaît pas.
+  - LIGNES = les CATÉGORIES OpenFlow, en respectant la HIÉRARCHIE : une catégorie
+    parente devient un en-tête (gras), ses sous-catégories sont indentées en
+    dessous. Les catégories feuilles (sans enfant) sont des lignes simples.
+  - Les cellules sans information restent VIDES (jamais de 0).
+  - Section financement : les recettes par catégorie. Soldes de trésorerie estimés.
   - Onglet 3 « Demande subventions » : laissé vierge.
 
-Il n'y a AUCUN mapping à configurer : les lignes sont exactement les catégories
-définies dans l'app. Le bloc des dépenses (et celui des financements) est
-redimensionné dynamiquement au nombre de catégories réellement utilisées.
+Aucune configuration : tout est déduit des catégories et entités de chaque
+transaction. Le bloc des dépenses (et celui des financements) est redimensionné
+dynamiquement, les formules de totaux sont recalculées, le nom et l'année du
+titre sont dérivés du mandat (exercice) choisi.
 
-Convention monétaire (comme tout OpenFlow) : amount = entier de centimes, positif.
-Sens porté par from_entity_id -> to_entity_id :
-  - DÉPENSE/CHARGE : from = club interne, to = tiers externe.
-  - RECETTE/PRODUIT : to = club interne, from = tiers externe.
-
-Le template est ouvert avec openpyxl (load_workbook) : styles, polices et cellules
-oranges sont préservés ; on insère/supprime des lignes pour coller au nombre de
-catégories, et on recalcule toutes les formules de totaux en conséquence.
+Convention monétaire : amount = entier de centimes, positif. Sens porté par
+from_entity_id -> to_entity_id (dépense = from interne ; recette = to interne).
 """
 import io
 import sqlite3
@@ -54,21 +49,30 @@ TOTAL_ROW = 33         # TOTAL DEPENSES (modèle)
 FIN_FIRST = 35         # première ligne de financement (modèle)
 FIN_SLOTS = 3          # lignes de saisie financement (35..37)
 FIN_TOTAL = 38         # TOTAL FINANCEMENT RECU (modèle)
-DEP_TOTAL = 39         # TOTAL DEPENSES REELLES (=total dépenses) (modèle)
+DEP_TOTAL = 39         # TOTAL DEPENSES REELLES (rappel) (modèle)
 SOLDE_PASS = 40        # SOLDE COMPTE BANCAIRE (Date passation)
 SOLDE_TRES = 41        # SOLDE TRESORERIE (A date)
 SOLDE_DATE = 42        # SOLDE COMPTE BANCAIRE (A date)
 LABEL_NONE = "Non catégorisé"
+HEADER_TPL_ROW = 7     # ligne modèle « ACHAT » (en-tête gras)
+DATA_TPL_ROW = 8       # ligne modèle de saisie (normale)
 
 
 # ───────────────────────── Accès aux données ──────────────────────────────
 
 def _get_clubs(conn) -> list:
-    """Entités internes (clubs), une par colonne, triées comme dans l'app."""
+    """Toutes les entités internes (clubs), ordonnées comme dans l'app."""
     rows = conn.execute(
         "SELECT id, name FROM entities WHERE type = 'internal' ORDER BY position ASC, id ASC"
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _active_clubs(all_clubs: list, amounts: dict) -> list:
+    """Clubs ayant au moins un montant non nul (sinon tous, pour ne pas vider l'onglet)."""
+    active = {club_id for (club_id, _), cents in amounts.items() if cents}
+    clubs = [c for c in all_clubs if c["id"] in active]
+    return clubs or all_clubs
 
 
 def _resolve_fy(conn, fy_id: int) -> dict:
@@ -81,8 +85,20 @@ def _resolve_fy(conn, fy_id: int) -> dict:
     return {"id": row["id"], "name": row["name"], "start": row["start_date"], "end": end}
 
 
-def _category_names(conn) -> dict:
-    return {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM categories").fetchall()}
+def _year_label(start: str, end: str) -> str:
+    """Année universitaire « AAAA-AAAA » dérivée des dates de l'exercice/mandat."""
+    try:
+        sy = int(start[:4])
+        ey = int(end[:4]) if end else sy
+    except Exception:
+        return ""
+    return f"{sy}-{ey}" if ey > sy else f"{sy}-{sy + 1}"
+
+
+def _categories(conn) -> dict:
+    return {r["id"]: dict(r) for r in conn.execute(
+        "SELECT id, name, parent_id FROM categories"
+    ).fetchall()}
 
 
 def _get_expenses(conn, start: str, end: str, club_ids: list) -> dict:
@@ -121,27 +137,62 @@ def _get_budget_expenses(conn, fy_id: int, club_ids: list) -> dict:
 
 
 def _category_rows(conn, amounts: dict, clubs: list) -> list:
-    """Transforme {(club_id, cat_id): cents} en lignes [(label, {club_idx: euros})].
+    """Construit les lignes hiérarchiques du bloc dépenses.
 
-    Une ligne par catégorie ayant un montant non nul, triée par nom (« Non
-    catégorisé » en dernier). Les montants sont en euros.
+    Chaque ligne est un dict : {label, level, header, euros}
+      - parent ayant des enfants -> ligne en-tête (header=True, level=0, pas de valeurs)
+      - sous-catégorie            -> ligne indentée (level=1) avec ses montants
+      - catégorie feuille racine  -> ligne simple (level=0) avec ses montants
+    Triées par nom (en-têtes/feuilles mélangés alphabétiquement, enfants sous leur parent).
     """
-    names = _category_names(conn)
+    cats = _categories(conn)
     id_to_idx = {c["id"]: i for i, c in enumerate(clubs)}
     per_cat: dict = {}
     for (club_id, cat_id), cents in amounts.items():
         idx = id_to_idx.get(club_id)
         if idx is None:
             continue
-        per_cat.setdefault(cat_id, {})[idx] = per_cat.get(cat_id, {}).get(idx, 0) + cents
+        per_cat.setdefault(cat_id, {})
+        per_cat[cat_id][idx] = per_cat[cat_id].get(idx, 0) + cents
+
+    children: dict = {}
+    for cid, c in cats.items():
+        if c["parent_id"] is not None:
+            children.setdefault(c["parent_id"], []).append(cid)
+
+    def total(cid):
+        return sum(per_cat.get(cid, {}).values())
+
+    def euros(cid):
+        return {idx: round(c / 100, 2) for idx, c in per_cat.get(cid, {}).items() if c}
+
+    def name(cid):
+        return cats.get(cid, {}).get("name") or LABEL_NONE
+
     rows = []
-    for cat_id, per_club in per_cat.items():
-        if sum(per_club.values()) == 0:
-            continue
-        label = names.get(cat_id) or LABEL_NONE
-        euros = {idx: round(c / 100, 2) for idx, c in per_club.items() if c}
-        rows.append((label, euros))
-    rows.sort(key=lambda r: (r[0] == LABEL_NONE, r[0].lower()))
+    top_ids = sorted(
+        [cid for cid, c in cats.items() if c["parent_id"] is None],
+        key=lambda cid: name(cid).lower(),
+    )
+    for cid in top_ids:
+        kids = children.get(cid, [])
+        if kids:
+            active_kids = sorted([k for k in kids if total(k) != 0], key=lambda k: name(k).lower())
+            own = total(cid)
+            if not active_kids and own == 0:
+                continue
+            rows.append({"label": name(cid), "level": 0, "header": True, "euros": {}})
+            if own != 0:  # dépense directe sur le parent (rare) : ligne indentée dédiée
+                rows.append({"label": f"{name(cid)} (divers)", "level": 1, "header": False, "euros": euros(cid)})
+            for k in active_kids:
+                rows.append({"label": name(k), "level": 1, "header": False, "euros": euros(k)})
+        else:
+            if total(cid) == 0:
+                continue
+            rows.append({"label": name(cid), "level": 0, "header": False, "euros": euros(cid)})
+
+    if None in per_cat and total(None) != 0:
+        rows.append({"label": LABEL_NONE, "level": 0, "header": False, "euros": euros(None)})
     return rows
 
 
@@ -159,41 +210,37 @@ def _income_rows(conn, start: str, end: str, club_ids: list) -> list:
             GROUP BY category_id""",
         [start, end] + club_ids + club_ids,
     ).fetchall()
-    names = _category_names(conn)
+    names = _categories(conn)
     out = []
     for r in rows:
         if not r["total"]:
             continue
-        out.append((names.get(r["cid"]) or LABEL_NONE, round(r["total"] / 100, 2)))
+        label = (names.get(r["cid"], {}).get("name") if r["cid"] is not None else None) or LABEL_NONE
+        out.append((label, round(r["total"] / 100, 2)))
     out.sort(key=lambda x: (x[0] == LABEL_NONE, x[0].lower()))
     return out
 
 
-def _get_opening_total(conn, fy_id: int, club_ids: list, start: str) -> float:
-    """Solde bancaire à l'ouverture de l'exercice (somme des clubs), en euros."""
+def _opening_explicit(conn, fy_id: int, club_ids: list) -> Optional[float]:
+    """Solde d'ouverture SAISI (fiscal_year_opening_balances) en euros, ou None."""
     if not club_ids:
-        return 0.0
+        return None
     ph = ",".join("?" * len(club_ids))
     try:
         rows = conn.execute(
-            f"SELECT entity_id, amount FROM fiscal_year_opening_balances "
+            f"SELECT amount FROM fiscal_year_opening_balances "
             f"WHERE fiscal_year_id = ? AND entity_id IN ({ph})",
             [fy_id] + club_ids,
         ).fetchall()
     except sqlite3.OperationalError:
-        rows = []
-    if rows:
-        return round(sum(r["amount"] for r in rows) / 100, 2)
-    try:
-        prev = (datetime.fromisoformat(start) - timedelta(days=1)).date().isoformat()
-    except Exception:
-        prev = None
-    total = sum(compute_entity_balance(conn, eid, as_of_date=prev)["balance"] for eid in club_ids)
-    return round(total / 100, 2)
+        return None
+    if not rows:
+        return None
+    return round(sum(r["amount"] for r in rows) / 100, 2)
 
 
 def _get_current_total(conn, club_ids: list) -> float:
-    """Solde bancaire courant (somme des clubs), en euros."""
+    """Trésorerie courante estimée = somme des soldes consolidés des clubs (euros)."""
     total = sum(compute_entity_balance(conn, eid)["balance"] for eid in club_ids)
     return round(total / 100, 2)
 
@@ -236,7 +283,7 @@ def _widen_sheet(ws, extra: int, total_col: int):
 
     ws.insert_cols(6, extra)
     for r in range(1, 43):
-        src = ws.cell(row=r, column=5)  # colonne E (modèle)
+        src = ws.cell(row=r, column=5)
         for c in range(6, 6 + extra):
             dst = ws.cell(row=r, column=c)
             if src.has_style:
@@ -253,14 +300,26 @@ def _widen_sheet(ws, extra: int, total_col: int):
         ws.merge_cells(f"A{row}:{tcl}{row}")
 
 
+def _layout(ws, n_clubs: int):
+    """Prépare les colonnes (insertion si >4 clubs) et renvoie (last_club_col, total_col)."""
+    if n_clubs <= 4:
+        return 5, 6
+    extra = n_clubs - 4
+    last_club_col, total_col = n_clubs + 1, n_clubs + 2
+    _widen_sheet(ws, extra, total_col)
+    return last_club_col, total_col
+
+
 def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
-                with_financing, total_label, opening=None, current=None, fin_year_name=""):
-    """Écrit en-têtes clubs, lignes catégories (dépenses), totaux et, si demandé,
+                with_financing, total_label, year_label="", opening=None, current=None):
+    """Écrit en-têtes clubs, lignes catégories hiérarchiques, totaux et (si bilan)
     la section financement + soldes. Redimensionne les blocs au nombre de lignes."""
+    from openpyxl.styles import Alignment
     from openpyxl.utils import get_column_letter
 
     # Styles de référence capturés AVANT toute insertion/suppression de lignes.
-    data_style = _capture_row_style(ws, 8, total_col)              # ligne de saisie type
+    data_style = _capture_row_style(ws, DATA_TPL_ROW, total_col)
+    header_style = _capture_row_style(ws, HEADER_TPL_ROW, total_col)
     fin_style = _capture_row_style(ws, FIN_FIRST, total_col) if with_financing else {}
 
     n = len(clubs)
@@ -276,7 +335,6 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
     delta_exp = e - EXP_SLOTS
     total_row = TOTAL_ROW + delta_exp
 
-    # Positions de la section financement après décalage du bloc dépenses.
     fin_first = FIN_FIRST + delta_exp
     fin_total = FIN_TOTAL + delta_exp
     dep_total = DEP_TOTAL + delta_exp
@@ -301,14 +359,19 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
     last_cl = get_column_letter(last_club_col)
     total_cl = get_column_letter(total_col)
 
-    # ── Écriture des lignes catégories (dépenses) ──
-    for k, (label, euros) in enumerate(expense_rows):
+    # ── Écriture des lignes catégories (hiérarchie) ──
+    for k, row in enumerate(expense_rows):
         r = EXP_FIRST + k
-        _apply_row_style(ws, r, data_style)
-        ws.cell(row=r, column=1).value = label
-        for idx, val in euros.items():
-            ws.cell(row=r, column=2 + idx).value = val
-        ws.cell(row=r, column=total_col).value = f"=SUM({first_cl}{r}:{last_cl}{r})"
+        _apply_row_style(ws, r, header_style if row["header"] else data_style)
+        a = ws.cell(row=r, column=1)
+        a.value = row["label"]
+        if row["level"] > 0:
+            cur = a.alignment
+            a.alignment = Alignment(horizontal="left", vertical=cur.vertical, indent=row["level"])
+        if not row["header"]:
+            for idx, val in row["euros"].items():
+                ws.cell(row=r, column=2 + idx).value = val
+            ws.cell(row=r, column=total_col).value = f"=SUM({first_cl}{r}:{last_cl}{r})"
 
     # ── Ligne TOTAL dépenses ──
     ws.cell(row=total_row, column=1).value = total_label
@@ -320,7 +383,7 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
     else:
         ws.cell(row=total_row, column=total_col).value = 0
 
-    # ── Section financement (bilan uniquement) ──
+    # ── Section financement + soldes (bilan uniquement) ──
     if with_financing:
         i_count = len(income_rows)
         for k, (label, val) in enumerate(income_rows):
@@ -328,66 +391,69 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
             _apply_row_style(ws, r, fin_style)
             ws.cell(row=r, column=1).value = label
             ws.cell(row=r, column=2).value = val
-        ws.cell(row=fin_total, column=1).value = f"TOTAL FINANCEMENT RECU {fin_year_name}"
+        ws.cell(row=fin_total, column=1).value = f"TOTAL FINANCEMENT RECU {year_label}".rstrip()
         ws.cell(row=fin_total, column=2).value = (
             f"=SUM(B{fin_first}:B{fin_first + i_count - 1})" if i_count > 0 else 0
         )
         ws.cell(row=dep_total, column=1).value = (
-            f"TOTAL DEPENSES REELLES {fin_year_name} (cf tableau ci-dessus)"
+            f"TOTAL DEPENSES REELLES {year_label} (cf tableau ci-dessus)".replace("  ", " ")
         )
         ws.cell(row=dep_total, column=2).value = f"={total_cl}{total_row}"
-        ws.cell(row=solde_pass, column=2).value = opening
-        ws.cell(row=solde_tres, column=2).value = f"=B{fin_total}-B{dep_total}+B{solde_pass}"
-        ws.cell(row=solde_date, column=2).value = current
+        # Solde bancaire à la passation : valeur saisie si disponible, sinon vide.
+        if opening is not None:
+            ws.cell(row=solde_pass, column=2).value = opening
+        # Solde trésorerie (à date) : estimation à partir des données de l'app.
+        if current is not None:
+            ws.cell(row=solde_tres, column=2).value = current
+        # Solde compte bancaire (à date) : laissé vide (l'app ne distingue pas encore
+        # compte courant / Livret A / caisse physique).
 
 
 def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: str) -> bytes:
     from openpyxl import load_workbook
 
     wb = load_workbook(str(TEMPLATE_PATH))
-    clubs = _get_clubs(conn)
-    club_ids = [c["id"] for c in clubs]
-    n = len(clubs)
-    if n <= 4:
-        last_club_col, total_col, extra = 5, 6, 0
-    else:
-        extra = n - 4
-        last_club_col, total_col = n + 1, n + 2
+    all_clubs = _get_clubs(conn)
+    all_ids = [c["id"] for c in all_clubs]
 
     # ── Onglet 1 : bilan financier (réalisé) ──
     ws1 = wb.worksheets[0]
-    if extra:
-        _widen_sheet(ws1, extra, total_col)
-    exp_rows = _category_rows(conn, _get_expenses(conn, bilan_fy["start"], bilan_fy["end"], club_ids), clubs)
-    inc_rows = _income_rows(conn, bilan_fy["start"], bilan_fy["end"], club_ids)
+    exp_amounts = _get_expenses(conn, bilan_fy["start"], bilan_fy["end"], all_ids)
+    clubs1 = _active_clubs(all_clubs, exp_amounts)
+    last1, total1 = _layout(ws1, len(clubs1))
+    bilan_year = _year_label(bilan_fy["start"], bilan_fy["end"])
     _fill_sheet(
-        ws1, clubs, last_club_col, total_col, exp_rows, inc_rows,
-        with_financing=True, total_label="TOTAL DEPENSES REELLES",
-        opening=_get_opening_total(conn, bilan_fy["id"], club_ids, bilan_fy["start"]),
-        current=_get_current_total(conn, club_ids),
-        fin_year_name=bilan_fy["name"],
+        ws1, clubs1, last1, total1,
+        _category_rows(conn, exp_amounts, clubs1),
+        _income_rows(conn, bilan_fy["start"], bilan_fy["end"], all_ids),
+        with_financing=True, total_label="TOTAL DEPENSES REELLES", year_label=bilan_year,
+        opening=_opening_explicit(conn, bilan_fy["id"], all_ids),
+        current=_get_current_total(conn, all_ids),
     )
-    ws1["A1"] = f"BILAN FINANCIER {bilan_fy['name']}"
+    ws1["A1"] = f"BILAN FINANCIER {bilan_year}"
     ws1["A3"] = assoc_name
     try:
-        ws1.title = _safe_title(f"Bilan financier {bilan_fy['name']}")
+        ws1.title = _safe_title(f"Bilan financier {bilan_year}")
     except Exception:
         pass
 
     # ── Onglet 2 : budget prévisionnel ──
     if budget_fy:
         ws2 = wb.worksheets[1]
-        if extra:
-            _widen_sheet(ws2, extra, total_col)
-        bexp = _category_rows(conn, _get_budget_expenses(conn, budget_fy["id"], club_ids), clubs)
+        bexp_amounts = _get_budget_expenses(conn, budget_fy["id"], all_ids)
+        clubs2 = _active_clubs(all_clubs, bexp_amounts)
+        last2, total2 = _layout(ws2, len(clubs2))
+        budget_year = _year_label(budget_fy["start"], budget_fy["end"])
         _fill_sheet(
-            ws2, clubs, last_club_col, total_col, bexp, [],
+            ws2, clubs2, last2, total2,
+            _category_rows(conn, bexp_amounts, clubs2), [],
             with_financing=False, total_label="TOTAL DEPENSES PREVISONNELLES (E)",
+            year_label=budget_year,
         )
-        ws2["A1"] = f"BUDGET PREVISIONNEL {budget_fy['name']}"
+        ws2["A1"] = f"BUDGET PREVISIONNEL {budget_year}"
         ws2["A3"] = assoc_name
         try:
-            ws2.title = _safe_title(f"Budget previsionnel {budget_fy['name']}")
+            ws2.title = _safe_title(f"Budget prévisionnel {budget_year}")
         except Exception:
             pass
 
@@ -405,7 +471,7 @@ def export_direns(
     budget_fiscal_year_id: Optional[int] = None,
     assoc_name: str = "",
 ):
-    """Génère le fichier Excel DirENS pré-rempli (onglets 1 et 2), lignes = catégories."""
+    """Génère le fichier Excel DirENS pré-rempli (onglets 1 et 2)."""
     if not TEMPLATE_PATH.exists():
         raise HTTPException(500, "Template DirENS introuvable dans le module (assets/template_direns.xlsx).")
     try:
@@ -422,7 +488,8 @@ def export_direns(
     finally:
         conn.close()
 
-    safe = bilan_fy["name"].replace(" ", "_").replace("/", "-")
+    year = _year_label(bilan_fy["start"], bilan_fy["end"]) or bilan_fy["name"]
+    safe = year.replace(" ", "_").replace("/", "-")
     filename = f"DirENS_{safe}.xlsx"
     return Response(
         content=data,

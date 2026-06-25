@@ -173,6 +173,63 @@ def test_budget_sheet_category_row(client):
     assert ws2.cell(row=row, column=2).value == 250.0
 
 
+def test_parent_is_bold_header_children_indented(client):
+    ext = _external(client)
+    club = _internal(client, "Club")
+    parent = _cat(client, "Poles")
+    child = client.post("/api/categories/", json={"name": "Théâtre", "parent_id": parent["id"]}).json()
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Spectacle", "amount": 8000,  # 80 €
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": child["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    pr = _row_with_label(ws, "Poles")
+    cr = _row_with_label(ws, "Théâtre")
+    assert pr is not None and cr is not None
+    # Parent = en-tête gras sans valeur ; enfant = indenté avec valeur.
+    assert ws.cell(row=pr, column=1).font.bold is True
+    assert ws.cell(row=pr, column=2).value in (None, 0)
+    assert ws.cell(row=cr, column=2).value == 80.0
+    assert (ws.cell(row=cr, column=1).alignment.indent or 0) >= 1
+
+
+def test_inactive_club_excluded_from_columns(client):
+    ext = _external(client)
+    active = _internal(client, "Actif")
+    _internal(client, "Inactif")  # aucun mouvement
+    cat = _cat(client, "Nourriture")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Repas", "amount": 5000,
+        "from_entity_id": active["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    headers = [ws.cell(row=5, column=c).value for c in range(2, 8)]
+    assert "Actif" in headers
+    assert "Inactif" not in headers
+
+
+def test_year_label_derived_from_dates(client):
+    fy = client.post("/api/budget/fiscal-years", json={"name": "Mandat Truc", "start_date": "2024-09-01"}).json()
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/close", json={"end_date": "2025-08-31"})
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    assert ws["A1"].value == "BILAN FINANCIER 2024-2025"
+
+
+def test_tresorerie_estimated_filled(client):
+    club = _internal(client, "Club")
+    fy = _fy(client)
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "SOLDE TRESORERIE (A date)")
+    assert row is not None
+    assert isinstance(ws.cell(row=row, column=2).value, (int, float))
+
+
 def test_many_categories_expand_rows(client):
     """Plus de 26 catégories : le bloc s'agrandit, toutes les lignes présentes."""
     ext = _external(client)
