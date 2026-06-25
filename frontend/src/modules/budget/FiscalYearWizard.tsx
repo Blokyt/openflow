@@ -19,7 +19,9 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
   const [tresorierName, setTresorierName] = useState("");
 
   const [createdFyId, setCreatedFyId] = useState<number | null>(null);
-  const [copyAllocations, setCopyAllocations] = useState(previousYearId !== null);
+  const [initMode, setInitMode] = useState<"empty" | "copy" | "realized">(
+    previousYearId !== null ? "realized" : "empty",
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,18 +49,21 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
     setError(null);
     setSubmitting(true);
     try {
-      if (copyAllocations && previousYearId !== null) {
+      if (previousYearId !== null && initMode === "copy") {
         const prevAllocs = await api.listAllocations(previousYearId);
         await Promise.all(
           prevAllocs.map((a) =>
             api.createAllocation(createdFyId, {
               entity_id: a.entity_id,
               category_id: a.category_id,
+              direction: a.direction,
               amount: a.amount,
               notes: a.notes,
             })
           )
         );
+      } else if (previousYearId !== null && initMode === "realized") {
+        await api.seedBudgetFromRealized(createdFyId);
       }
       onCreated();
       onClose();
@@ -137,22 +142,40 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
                 </div>
               </div>
               <p className="text-xs text-[#555]">
-                Le mandat restera ouvert jusqu'à ce que tu le closes manuellement.
+                L'exercice restera ouvert jusqu'à ce que tu le closes manuellement.
               </p>
             </div>
           )}
 
           {step === 2 && (
             <div className="space-y-3">
-              {previousYearId !== null && (
-                <label className="flex items-center gap-2 text-sm text-[#B0B0B0]">
-                  <input
-                    type="checkbox"
-                    checked={copyAllocations}
-                    onChange={(e) => setCopyAllocations(e.target.checked)}
-                  />
-                  Copier les allocations de l'exercice précédent
-                </label>
+              {previousYearId !== null ? (
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium text-[#B0B0B0] mb-1">Initialiser le budget</legend>
+                  {([
+                    { v: "realized", label: "Pré-remplir avec le réel de l'an dernier", hint: "À partir des transactions réelles, par catégorie. Recommandé." },
+                    { v: "copy", label: "Copier le budget prévisionnel de l'an dernier", hint: "Reprend les allocations saisies l'an dernier." },
+                    { v: "empty", label: "Partir d'un budget vide", hint: "Tout saisir à la main." },
+                  ] as const).map((opt) => (
+                    <label key={opt.v} className="flex items-start gap-2 text-sm text-[#B0B0B0] cursor-pointer">
+                      <input
+                        type="radio"
+                        name="initMode"
+                        className="mt-1"
+                        checked={initMode === opt.v}
+                        onChange={() => setInitMode(opt.v)}
+                      />
+                      <span>
+                        <span className="text-white">{opt.label}</span>
+                        <span className="block text-xs text-[#666]">{opt.hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+              ) : (
+                <p className="text-sm text-[#666]">
+                  Aucun exercice précédent : tu partiras d'un budget vide.
+                </p>
               )}
               <p className="text-sm text-[#666]">
                 Tu pourras affiner les allocations à tout moment depuis l'onglet Allocation.
@@ -177,7 +200,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
               disabled={submitting}
               className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50"
             >
-              Créer le mandat
+              Créer l'exercice
             </button>
           )}
         </div>

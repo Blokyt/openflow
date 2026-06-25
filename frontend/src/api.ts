@@ -83,6 +83,11 @@ export const api = {
     }),
   deleteAllocation: (id: number) =>
     request<any>(`/budget/allocations/${id}`, { method: "DELETE" }),
+  seedBudgetFromRealized: (fyId: number) =>
+    request<{ created: number; source_fiscal_year_id: number; source_name: string }>(
+      `/budget/fiscal-years/${fyId}/seed-from-realized`,
+      { method: "POST" },
+    ),
   getBudgetView: (fyId: number) =>
     request<any>(`/budget/view?fiscal_year_id=${fyId}`),
   getBudgetCategoryView: (fyId: number) =>

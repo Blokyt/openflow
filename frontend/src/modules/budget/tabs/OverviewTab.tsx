@@ -1,20 +1,23 @@
 import { useEffect, useState, useCallback, type ReactElement } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
-import { formatEuros, eurosToCents, centsToEuros, budgetColor } from "../../../utils/format";
+import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME } from "../../../utils/format";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 interface Props { year: FiscalYear | null }
 
-const EXPENSE = "#FF8A5B";
-const INCOME = "#00C853";
+const EXPENSE = COLOR_EXPENSE;
+const INCOME = COLOR_INCOME;
 
 export default function OverviewTab({ year }: Props) {
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [touched, setTouched] = useState(false);
-  const [showN1, setShowN1] = useState(false);
+  const [showN1, setShowN1] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!year) { setData(null); return; }
@@ -23,7 +26,7 @@ export default function OverviewTab({ year }: Props) {
       const d = await api.getBudgetView(year.id);
       setData(d);
       if (!touched) {
-        // Déplie les groupes racines au premier affichage.
+        // Déplie les groupes racines au premier affichage (catégories repliées).
         setExpanded(new Set(d.groups.map((g: any) => g.entity_id)));
       }
     } finally {
@@ -40,6 +43,9 @@ export default function OverviewTab({ year }: Props) {
 
   const hasN1: boolean = data.previous_fiscal_year_id !== null;
   const t = data.totals;
+  const showN1Cols = hasN1 && showN1;
+  const totalExpN1: number = data.groups.reduce((s: number, g: any) => s + g.realized_expense_n1, 0);
+  const totalIncN1: number = data.groups.reduce((s: number, g: any) => s + g.realized_income_n1, 0);
 
   function toggle(id: number) {
     setTouched(true);
@@ -50,8 +56,79 @@ export default function OverviewTab({ year }: Props) {
     });
   }
 
-  const colCount = 7 + (hasN1 && showN1 ? 1 : 0);
+  function toggleCat(key: string) {
+    setExpandedCats((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
+  }
+
+  async function seed() {
+    if (!year) return;
+    setSeeding(true);
+    setSeedMsg(null);
+    try {
+      const res = await api.seedBudgetFromRealized(year.id);
+      setSeedMsg(
+        res.created > 0
+          ? `${res.created} ligne${res.created > 1 ? "s" : ""} pré-remplie${res.created > 1 ? "s" : ""} depuis « ${res.source_name} ».`
+          : `Rien à pré-remplir : le budget reprend déjà tout le réel de « ${res.source_name} ».`,
+      );
+      await reload();
+    } catch (e: any) {
+      setSeedMsg(e?.message || "Échec de la récupération du réel.");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  const colCount = 6 + (showN1Cols ? 3 : 0);
   const rows: ReactElement[] = [];
+
+  function pushCategory(node: any, cat: any, depth: number) {
+    const key = `${node.entity_id}:${cat.category_id}`;
+    const isOpen = expandedCats.has(key);
+    const hasKids = Array.isArray(cat.children) && cat.children.length > 0;
+    const net1 = cat.realized_income_n1 - cat.realized_expense_n1;
+    rows.push(
+      <tr key={`c-${key}`} className="border-t border-[#141414] bg-[#0c0c0c] text-[13px]">
+        <td className="px-3 py-2 text-[#B0B0B0]" style={{ paddingLeft: 12 + depth * 18 + 18 }}>
+          <div className="flex items-center gap-1.5">
+            {hasKids ? (
+              <button onClick={() => toggleCat(key)} className="text-[#666] hover:text-white">
+                {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            ) : (
+              <span className="text-[#555]">↳</span>
+            )}
+            <span className={hasKids ? "font-medium text-[#cfcfcf]" : ""}>{cat.category_name}</span>
+          </div>
+        </td>
+        {hasKids
+          ? <Num value={cat.allocated_expense} muted />
+          : <EditableBudget year={year!} node={node} cat={cat} direction="expense" onSaved={reload} />}
+        <Num value={cat.realized_expense} color={EXPENSE} />
+        {hasKids
+          ? <Num value={cat.allocated_income} muted />
+          : <EditableBudget year={year!} node={node} cat={cat} direction="income" onSaved={reload} />}
+        <Num value={cat.realized_income} color={INCOME} />
+        <Num value={cat.realized_income - cat.realized_expense} signed />
+        {showN1Cols && (
+          <>
+            <Num value={cat.realized_expense_n1} muted />
+            <Num value={cat.realized_income_n1} muted />
+            <Num value={net1} signed muted />
+          </>
+        )}
+      </tr>,
+    );
+    if (isOpen && hasKids) {
+      [...cat.children]
+        .sort((a, b) => a.category_name.localeCompare(b.category_name, "fr"))
+        .forEach((ch: any) => pushCategory(node, ch, depth + 1));
+    }
+  }
 
   function pushEntity(node: any, depth: number) {
     const isOpen = expanded.has(node.entity_id);
@@ -74,26 +151,19 @@ export default function OverviewTab({ year }: Props) {
         <Num value={node.allocated_income} muted />
         <Num value={node.realized_income} color={INCOME} />
         <Num value={node.realized_net} signed />
-        <td className="px-3 py-2.5 text-right text-xs" style={{ color: budgetColor(node.coverage_pct) }}>
-          {node.realized_expense > 0 ? `${node.coverage_pct.toFixed(0)} %` : "—"}
-        </td>
-        {hasN1 && showN1 && <Num value={net1} signed muted />}
+        {showN1Cols && (
+          <>
+            <Num value={node.realized_expense_n1} muted />
+            <Num value={node.realized_income_n1} muted />
+            <Num value={net1} signed muted />
+          </>
+        )}
       </tr>,
     );
     if (isOpen) {
-      node.categories.forEach((c: any) =>
-        rows.push(
-          <CategoryRow
-            key={`c-${node.entity_id}-${c.category_id}`}
-            year={year!}
-            node={node}
-            cat={c}
-            depth={depth + 1}
-            hasN1={hasN1 && showN1}
-            onSaved={reload}
-          />,
-        ),
-      );
+      [...node.categories]
+        .sort((a, b) => a.category_name.localeCompare(b.category_name, "fr"))
+        .forEach((c: any) => pushCategory(node, c, depth + 1));
       [...node.children]
         .sort((a, b) => a.entity_name.localeCompare(b.entity_name, "fr"))
         .forEach((ch: any) => pushEntity(ch, depth + 1));
@@ -112,32 +182,53 @@ export default function OverviewTab({ year }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-[#666]">
-          Hiérarchie pôle / club / catégorie. Clique sur un montant de budget pour le modifier.
+          Hiérarchie pôle / club / catégorie. Déplie une catégorie pour voir ses sous-catégories. Clique sur un montant de budget pour le modifier.
         </p>
         {hasN1 && (
-          <button
-            onClick={() => setShowN1((v) => !v)}
-            className="text-xs text-[#666] hover:text-white border border-[#222] rounded-full px-3 py-1"
-          >
-            {showN1 ? "Masquer N-1" : "Comparer à N-1"}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={seed}
+              disabled={seeding}
+              title="Pré-remplit les budgets vides à partir des transactions réelles de l'exercice précédent"
+              className="text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] rounded-full px-3 py-1 disabled:opacity-50"
+            >
+              {seeding ? "Récupération…" : "Récupérer le réel de l'an dernier"}
+            </button>
+            <button
+              onClick={() => setShowN1((v) => !v)}
+              className="text-xs text-[#666] hover:text-white border border-[#222] rounded-full px-3 py-1"
+            >
+              {showN1 ? "Masquer l'exercice précédent" : "Comparer à l'exercice précédent"}
+            </button>
+          </div>
         )}
       </div>
 
+      {seedMsg && (
+        <p className="text-xs text-[#F2C48D] bg-[#1a140a] border border-[#F2C48D]/20 rounded-lg px-3 py-2">
+          {seedMsg}
+        </p>
+      )}
+
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[760px]">
+        <table className="w-full text-sm min-w-[1080px]">
           <thead>
             <tr className="border-b border-[#1a1a1a]">
               <Th align="left">Entité / Catégorie</Th>
-              <Th color={EXPENSE}>Budget dép.</Th>
-              <Th color={EXPENSE}>Réalisé dép.</Th>
-              <Th color={INCOME}>Budget rec.</Th>
-              <Th color={INCOME}>Réalisé rec.</Th>
+              <Th color={EXPENSE}>Budget Dépenses</Th>
+              <Th color={EXPENSE}>Réalisé Dépenses</Th>
+              <Th color={INCOME}>Budget Recettes</Th>
+              <Th color={INCOME}>Réalisé Recettes</Th>
               <Th>Solde</Th>
-              <Th>Couv.</Th>
-              {hasN1 && showN1 && <Th>Solde N-1</Th>}
+              {showN1Cols && (
+                <>
+                  <Th>Dépenses N-1</Th>
+                  <Th>Recettes N-1</Th>
+                  <Th>Solde N-1</Th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -155,8 +246,13 @@ export default function OverviewTab({ year }: Props) {
               <td className="px-3 py-3 text-right font-semibold" style={{ color: INCOME }}>{formatEuros(t.allocated_income)}</td>
               <td className="px-3 py-3 text-right font-semibold" style={{ color: INCOME }}>{formatEuros(t.realized_income)}</td>
               <td className={`px-3 py-3 text-right font-bold ${t.realized_net >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>{formatEuros(t.realized_net)}</td>
-              <td className="px-3 py-3" />
-              {hasN1 && showN1 && <td className="px-3 py-3" />}
+              {showN1Cols && (
+                <>
+                  <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(totalExpN1)}</td>
+                  <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(totalIncN1)}</td>
+                  <td className={`px-3 py-3 text-right font-bold ${totalIncN1 - totalExpN1 >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>{formatEuros(totalIncN1 - totalExpN1)}</td>
+                </>
+              )}
             </tr>
           </tfoot>
         </table>
@@ -175,28 +271,6 @@ function Num({ value, color, muted, signed }: { value: number; color?: string; m
     <td className={`px-3 py-2.5 text-right whitespace-nowrap ${cls}`} style={style}>
       {value ? formatEuros(value) : <span className="text-[#444]">—</span>}
     </td>
-  );
-}
-
-function CategoryRow({
-  year, node, cat, depth, hasN1, onSaved,
-}: { year: FiscalYear; node: any; cat: any; depth: number; hasN1: boolean; onSaved: () => void }) {
-  const net1 = cat.realized_income_n1 - cat.realized_expense_n1;
-  return (
-    <tr className="border-t border-[#141414] bg-[#0c0c0c] text-[13px]">
-      <td className="px-3 py-2 text-[#B0B0B0]" style={{ paddingLeft: 12 + depth * 18 + 18 }}>
-        <span className="text-[#555] mr-1">↳</span>{cat.category_name}
-      </td>
-      <EditableBudget year={year} node={node} cat={cat} direction="expense" onSaved={onSaved} />
-      <Num value={cat.realized_expense} color={EXPENSE} />
-      <EditableBudget year={year} node={node} cat={cat} direction="income" onSaved={onSaved} />
-      <Num value={cat.realized_income} color={INCOME} />
-      <Num value={cat.realized_income - cat.realized_expense} signed />
-      <td className="px-3 py-2 text-right text-xs" style={{ color: budgetColor(cat.coverage_pct) }}>
-        {cat.realized_expense > 0 ? `${cat.coverage_pct.toFixed(0)} %` : "—"}
-      </td>
-      {hasN1 && <Num value={net1} signed muted />}
-    </tr>
   );
 }
 

@@ -542,3 +542,110 @@ def test_view_n1_split(client):
     club = _find_entity(data, e["id"])
     assert club["realized_expense_n1"] == 10000
     assert club["realized_income_n1"] == 4000
+
+
+# ─── Hiérarchie de catégories dépliable ──────────────────────────────────────
+
+def test_view_category_tree_nested(client):
+    """Les catégories sont renvoyées en arbre (parent -> sous-catégories) avec agrégation."""
+    fy = _make_fy(client)
+    club = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    parent = client.post("/api/categories/", json={"name": "Spectacles"}).json()
+    child = client.post("/api/categories/", json={"name": "Concerts", "parent_id": parent["id"]}).json()
+
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": club["id"], "category_id": child["id"], "amount": 50000, "direction": "expense"})
+    client.post("/api/transactions/", json={"date": "2025-10-15", "label": "salle", "amount": 15000,
+                                             "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": child["id"]})
+
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club_node = next(g for g in data["groups"] if g["entity_id"] == club["id"])
+    roots = club_node["categories"]
+
+    # La racine d'affichage est la catégorie parente, qui agrège son enfant.
+    spect = next(c for c in roots if c["category_id"] == parent["id"])
+    assert spect["is_leaf"] is False
+    assert spect["parent_id"] is None
+    assert spect["allocated_expense"] == 50000
+    assert spect["realized_expense"] == 15000
+    assert child["id"] in [k["category_id"] for k in spect["children"]]
+    # La sous-catégorie n'apparaît pas comme racine.
+    assert all(c["category_id"] != child["id"] for c in roots)
+
+    concerts = next(k for k in spect["children"] if k["category_id"] == child["id"])
+    assert concerts["is_leaf"] is True
+    assert concerts["parent_id"] == parent["id"]
+    assert concerts["allocated_expense"] == 50000
+    assert concerts["realized_expense"] == 15000
+
+    # Pas de double comptage : le total entité reste le réel des transactions.
+    assert club_node["realized_expense"] == 15000
+
+
+# ─── Pré-remplissage depuis le réel N-1 ──────────────────────────────────────
+
+def test_seed_from_realized_creates_allocations(client):
+    fy_prev = _make_fy(client, "2024-2025", "2024-09-01")
+    club = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    food = client.post("/api/categories/", json={"name": "Food"}).json()
+    # Réel N-1 catégorisé (pendant que fy_prev est ouvert).
+    client.post("/api/transactions/", json={"date": "2024-10-15", "label": "dep", "amount": 10000,
+                                             "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": food["id"]})
+    client.post("/api/transactions/", json={"date": "2024-11-01", "label": "rec", "amount": 4000,
+                                             "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": food["id"]})
+    # Réel N-1 SANS catégorie -> doit être ignoré (pas d'enveloppe globale).
+    client.post("/api/transactions/", json={"date": "2024-12-01", "label": "divers", "amount": 9999,
+                                             "from_entity_id": club["id"], "to_entity_id": ext["id"]})
+    _close_fy(client, fy_prev["id"], "2025-08-31")
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/seed-from-realized")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["created"] == 2
+    assert body["source_fiscal_year_id"] == fy_prev["id"]
+
+    allocs = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    by_dir = {(a["category_id"], a["direction"]): a["amount"] for a in allocs}
+    assert by_dir[(food["id"], "expense")] == 10000   # montant exact, au centime
+    assert by_dir[(food["id"], "income")] == 4000
+    assert all(a["category_id"] is not None for a in allocs)   # aucune enveloppe globale
+
+
+def test_seed_from_realized_fills_only_empty(client):
+    fy_prev = _make_fy(client, "2024-2025", "2024-09-01")
+    club = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    food = client.post("/api/categories/", json={"name": "Food"}).json()
+    client.post("/api/transactions/", json={"date": "2024-10-15", "label": "dep", "amount": 10000,
+                                             "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": food["id"]})
+    client.post("/api/transactions/", json={"date": "2024-11-01", "label": "rec", "amount": 4000,
+                                             "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": food["id"]})
+    _close_fy(client, fy_prev["id"], "2025-08-31")
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+    # Saisie manuelle préalable de la dépense Food.
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": club["id"], "category_id": food["id"], "amount": 12345, "direction": "expense"})
+
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/seed-from-realized")
+    assert r.status_code == 200
+    assert r.json()["created"] == 1   # seule la recette manquante est créée
+
+    allocs = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    by_dir = {(a["category_id"], a["direction"]): a["amount"] for a in allocs}
+    assert by_dir[(food["id"], "expense")] == 12345   # préservé
+    assert by_dir[(food["id"], "income")] == 4000      # pré-rempli
+
+
+def test_seed_from_realized_404(client):
+    r = client.post("/api/budget/fiscal-years/999/seed-from-realized")
+    assert r.status_code == 404
+
+
+def test_seed_from_realized_no_previous_returns_400(client):
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/seed-from-realized")
+    assert r.status_code == 400
+    assert "précédent" in r.json()["detail"].lower()

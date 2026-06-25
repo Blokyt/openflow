@@ -385,6 +385,68 @@ def delete_allocation(alloc_id: int):
         conn.close()
 
 
+@router.post("/fiscal-years/{fy_id}/seed-from-realized")
+def seed_budget_from_realized(fy_id: int):
+    """Pré-remplit le budget prévisionnel à partir du réel de l'exercice précédent.
+
+    Pour chaque (entité interne, catégorie) ayant un réel sur l'exercice précédent,
+    crée l'allocation dépense et/ou recette correspondante — au centime près — SANS
+    écraser les allocations déjà saisies (« remplir les vides »). Les flux sans
+    catégorie sont ignorés : pas d'enveloppe globale (qui masquerait le détail).
+    """
+    conn = get_conn()
+    try:
+        fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone()
+        if fy is None:
+            raise HTTPException(404, f"Exercice {fy_id} introuvable")
+        prev_id = (fy["previous_fiscal_year_id"] if "previous_fiscal_year_id" in fy.keys() else None) \
+            or _find_previous_fiscal_year(conn, fy["start_date"])
+        prev = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (prev_id,)).fetchone() if prev_id else None
+        if prev is None:
+            raise HTTPException(400, "Aucun exercice précédent pour récupérer le réel")
+
+        entity_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM entities WHERE type = 'internal'"
+        ).fetchall()]
+        lookup = _build_realized_split(conn, entity_ids, prev["start_date"], _fy_end(prev))
+
+        # Allocations déjà présentes : « remplir les vides » -> on ne les écrase pas.
+        existing = set()
+        for a in conn.execute(
+            "SELECT entity_id, category_id, direction FROM budget_allocations WHERE fiscal_year_id = ?",
+            (fy_id,),
+        ).fetchall():
+            existing.add((a["entity_id"], a["category_id"], a["direction"]))
+
+        now = _now()
+        created = 0
+        for (entity_id, category_id), split in lookup.items():
+            if category_id is None:
+                continue
+            for direction in ("expense", "income"):
+                amount = int(split[direction])
+                if amount == 0:
+                    continue
+                if (entity_id, category_id, direction) in existing:
+                    continue
+                conn.execute(
+                    """INSERT INTO budget_allocations
+                       (fiscal_year_id, entity_id, category_id, direction, amount, notes, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (fy_id, entity_id, category_id, direction, amount, "", now, now),
+                )
+                existing.add((entity_id, category_id, direction))
+                created += 1
+        conn.commit()
+        return {
+            "created": created,
+            "source_fiscal_year_id": prev["id"],
+            "source_name": prev["name"],
+        }
+    finally:
+        conn.close()
+
+
 # ─── Composite views ─────────────────────────────────────────────────────────
 
 def _build_realized_lookup(conn, entity_ids: list, start: str, end: str) -> dict:
@@ -511,6 +573,12 @@ def get_budget_view(fiscal_year_id: int):
         prev_id = explicit_prev_id or _find_previous_fiscal_year(conn, fy["start_date"])
         prev = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (prev_id,)).fetchone() if prev_id else None
 
+        # Méta catégories (nom + parent) pour reconstruire la hiérarchie d'affichage.
+        cat_meta = {
+            c["id"]: {"name": c["name"], "parent_id": c["parent_id"]}
+            for c in conn.execute("SELECT id, name, parent_id FROM categories").fetchall()
+        }
+
         # Entités internes + toute entité portant une allocation sur cet exercice.
         ent_by_id: dict = {}
         for r in conn.execute("SELECT id, name, parent_id, color FROM entities WHERE type = 'internal'").fetchall():
@@ -564,45 +632,108 @@ def get_budget_view(fiscal_year_id: int):
             return glob if has_glob else det
 
         def build_categories(eid, allocs):
-            cat_ids = {a["category_id"] for a in allocs if a["category_id"] is not None}
-            cat_ids |= {cat for (e, cat) in lookup_n if e == eid and cat is not None}
-            out = []
-            for cid in cat_ids:
-                name = next((a["category_name"] for a in allocs if a["category_id"] == cid and a["category_name"]), None)
-                if name is None:
-                    row = conn.execute("SELECT name FROM categories WHERE id = ?", (cid,)).fetchone()
-                    name = row["name"] if row else "— Catégorie supprimée —"
+            # Catégories « porteuses » : allocation, réel N ou réel N-1 sur cette entité.
+            carrier_ids = {a["category_id"] for a in allocs if a["category_id"] is not None}
+            carrier_ids |= {cat for (e, cat) in lookup_n if e == eid and cat is not None}
+            if prev:
+                carrier_ids |= {cat for (e, cat) in lookup_n1 if e == eid and cat is not None}
+            if not carrier_ids:
+                return []
+
+            # Montants propres (sans descendants) par catégorie porteuse.
+            own: dict = {}
+            for cid in carrier_ids:
                 exp = next((a for a in allocs if a["category_id"] == cid and a["direction"] == "expense"), None)
                 inc = next((a for a in allocs if a["category_id"] == cid and a["direction"] == "income"), None)
                 sn = _split_from_lookup(lookup_n, eid, cid)
                 sn1 = _split_from_lookup(lookup_n1, eid, cid) if prev else {"income": 0, "expense": 0}
-                a_exp = exp["amount"] if exp else 0
-                a_inc = inc["amount"] if inc else 0
-                net = sn["income"] - sn["expense"]
-                net1 = sn1["income"] - sn1["expense"]
-                base = a_exp if a_exp else a_inc
-                pct = abs(net) / base * 100.0 if base else 0.0
-                cov = sn["income"] / sn["expense"] * 100.0 if sn["expense"] else 0.0
-                out.append({
-                    "category_id": cid,
-                    "category_name": name,
-                    "allocation_id": exp["id"] if exp else (inc["id"] if inc else None),
+                name = cat_meta.get(cid, {}).get("name")
+                if not name:
+                    name = next((a["category_name"] for a in allocs if a["category_id"] == cid and a["category_name"]), None) \
+                        or "— Catégorie supprimée —"
+                own[cid] = {
+                    "name": name,
                     "allocation_id_expense": exp["id"] if exp else None,
                     "allocation_id_income": inc["id"] if inc else None,
+                    "allocated_expense": exp["amount"] if exp else 0,
+                    "allocated_income": inc["amount"] if inc else 0,
+                    "realized_expense": sn["expense"],
+                    "realized_income": sn["income"],
+                    "realized_expense_n1": sn1["expense"],
+                    "realized_income_n1": sn1["income"],
+                }
+
+            # Matérialise les ancêtres pour le regroupement (montants propres nuls).
+            node_ids = set(carrier_ids)
+            for cid in carrier_ids:
+                p = cat_meta.get(cid, {}).get("parent_id")
+                while p is not None and p not in node_ids and p in cat_meta:
+                    node_ids.add(p)
+                    p = cat_meta.get(p, {}).get("parent_id")
+            for cid in node_ids:
+                if cid not in own:
+                    own[cid] = {
+                        "name": cat_meta.get(cid, {}).get("name") or "— Catégorie supprimée —",
+                        "allocation_id_expense": None,
+                        "allocation_id_income": None,
+                        "allocated_expense": 0,
+                        "allocated_income": 0,
+                        "realized_expense": 0,
+                        "realized_income": 0,
+                        "realized_expense_n1": 0,
+                        "realized_income_n1": 0,
+                    }
+
+            # Index parent -> enfants ; racines = parent hors ensemble.
+            children_of_cat: dict = {}
+            cat_roots: list = []
+            for cid in node_ids:
+                pid = cat_meta.get(cid, {}).get("parent_id")
+                if pid is not None and pid in node_ids:
+                    children_of_cat.setdefault(pid, []).append(cid)
+                else:
+                    cat_roots.append(cid)
+
+            def build_cat_node(cid):
+                o = own[cid]
+                kids = [build_cat_node(c) for c in children_of_cat.get(cid, [])]
+                kids.sort(key=lambda c: c["category_name"])
+                a_exp = o["allocated_expense"] + sum(k["allocated_expense"] for k in kids)
+                a_inc = o["allocated_income"] + sum(k["allocated_income"] for k in kids)
+                r_exp = o["realized_expense"] + sum(k["realized_expense"] for k in kids)
+                r_inc = o["realized_income"] + sum(k["realized_income"] for k in kids)
+                r_exp1 = o["realized_expense_n1"] + sum(k["realized_expense_n1"] for k in kids)
+                r_inc1 = o["realized_income_n1"] + sum(k["realized_income_n1"] for k in kids)
+                net = r_inc - r_exp
+                net1 = r_inc1 - r_exp1
+                base = a_exp if a_exp else a_inc
+                pct = abs(net) / base * 100.0 if base else 0.0
+                cov = r_inc / r_exp * 100.0 if r_exp else 0.0
+                return {
+                    "category_id": cid,
+                    "category_name": o["name"],
+                    "parent_id": cat_meta.get(cid, {}).get("parent_id"),
+                    "is_leaf": len(kids) == 0,
+                    "allocation_id": o["allocation_id_expense"] or o["allocation_id_income"],
+                    "allocation_id_expense": o["allocation_id_expense"],
+                    "allocation_id_income": o["allocation_id_income"],
                     "allocated": a_exp,            # legacy (dépense)
                     "allocated_expense": a_exp,
                     "allocated_income": a_inc,
                     "realized": net,               # legacy (net)
-                    "realized_expense": sn["expense"],
-                    "realized_income": sn["income"],
+                    "realized_expense": r_exp,
+                    "realized_income": r_inc,
                     "realized_n_minus_1": net1,    # legacy (net)
-                    "realized_expense_n1": sn1["expense"],
-                    "realized_income_n1": sn1["income"],
+                    "realized_expense_n1": r_exp1,
+                    "realized_income_n1": r_inc1,
                     "percent_consumed": round(pct, 1),
                     "coverage_pct": round(cov, 1),
-                })
-            out.sort(key=lambda c: c["category_name"])
-            return out
+                    "children": kids,
+                }
+
+            roots = [build_cat_node(cid) for cid in cat_roots]
+            roots.sort(key=lambda c: c["category_name"])
+            return roots
 
         def build_node(eid):
             ent = ent_by_id[eid]
