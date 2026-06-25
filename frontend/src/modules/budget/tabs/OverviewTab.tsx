@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, type ReactElement } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
+import { Category } from "../../../types";
 import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME } from "../../../utils/format";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 
 interface Props { year: FiscalYear | null }
 
@@ -18,6 +19,12 @@ export default function OverviewTab({ year }: Props) {
   const [showN1, setShowN1] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState<string | null>(null);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [addingEntityId, setAddingEntityId] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getCategories().then((c) => setAllCategories(c as any)).catch(() => setAllCategories([]));
+  }, []);
 
   const reload = useCallback(async () => {
     if (!year) { setData(null); return; }
@@ -164,6 +171,31 @@ export default function OverviewTab({ year }: Props) {
       [...node.categories]
         .sort((a, b) => a.category_name.localeCompare(b.category_name, "fr"))
         .forEach((c: any) => pushCategory(node, c, depth + 1));
+
+      const existingCatIds = collectCatIds(node.categories);
+      rows.push(
+        <tr key={`add-${node.entity_id}`} className="bg-[#0a0a0a]">
+          <td colSpan={colCount} className="px-3 py-1.5" style={{ paddingLeft: 12 + (depth + 1) * 18 + 18 }}>
+            {addingEntityId === node.entity_id ? (
+              <AddCategoryForm
+                yearId={year!.id}
+                entityId={node.entity_id}
+                categories={allCategories.filter((c) => !existingCatIds.has(c.id))}
+                onSaved={() => { setAddingEntityId(null); reload(); }}
+                onCancel={() => setAddingEntityId(null)}
+              />
+            ) : (
+              <button
+                onClick={() => setAddingEntityId(node.entity_id)}
+                className="inline-flex items-center gap-1 text-xs text-[#666] hover:text-[#F2C48D]"
+              >
+                <Plus size={13} /> Ajouter une catégorie à budgéter
+              </button>
+            )}
+          </td>
+        </tr>,
+      );
+
       [...node.children]
         .sort((a, b) => a.entity_name.localeCompare(b.entity_name, "fr"))
         .forEach((ch: any) => pushEntity(ch, depth + 1));
@@ -261,6 +293,87 @@ export default function OverviewTab({ year }: Props) {
   );
 }
 
+/** Ensemble des category_id présents dans un arbre de catégories (tous niveaux). */
+function collectCatIds(cats: any[]): Set<number> {
+  const ids = new Set<number>();
+  const walk = (list: any[]) =>
+    (list || []).forEach((c) => {
+      if (c.category_id != null) ids.add(c.category_id);
+      if (Array.isArray(c.children)) walk(c.children);
+    });
+  walk(cats);
+  return ids;
+}
+
+/** Ajout inline d'une catégorie à budgéter pour une entité (remplace l'onglet Allocation). */
+function AddCategoryForm({
+  yearId, entityId, categories, onSaved, onCancel,
+}: { yearId: number; entityId: number; categories: Category[]; onSaved: () => void; onCancel: () => void }) {
+  const [catId, setCatId] = useState("");
+  const [dir, setDir] = useState<"expense" | "income">("expense");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    if (!catId) { setErr("Choisis une catégorie."); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.createAllocation(yearId, {
+        entity_id: entityId,
+        category_id: parseInt(catId, 10),
+        direction: dir,
+        amount: eurosToCents(amount),
+      });
+      onSaved();
+    } catch (e: any) {
+      setErr(e?.message || "Échec de l'ajout.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        value={catId}
+        autoFocus
+        onChange={(e) => setCatId(e.target.value)}
+        className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-xs text-white"
+      >
+        <option value="">— Catégorie —</option>
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <select
+        value={dir}
+        onChange={(e) => setDir(e.target.value as "expense" | "income")}
+        className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-xs text-white"
+      >
+        <option value="expense">Dépense</option>
+        <option value="income">Recette</option>
+      </select>
+      <input
+        type="number"
+        step="0.01"
+        value={amount}
+        placeholder="Montant €"
+        onChange={(e) => setAmount(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") onCancel(); }}
+        className="w-24 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-[#F2C48D]"
+      />
+      <button
+        onClick={save}
+        disabled={busy}
+        className="text-xs font-semibold text-black bg-[#F2C48D] rounded-full px-3 py-1 disabled:opacity-50"
+      >
+        {busy ? "…" : "Ajouter"}
+      </button>
+      <button onClick={onCancel} className="text-[#666] hover:text-white" title="Annuler"><X size={14} /></button>
+      {err && <span className="text-xs text-[#FF5252]">{err}</span>}
+    </div>
+  );
+}
+
 function Num({ value, color, muted, signed }: { value: number; color?: string; muted?: boolean; signed?: boolean }) {
   let cls = "text-white";
   let style: React.CSSProperties = {};
@@ -293,7 +406,10 @@ function EditableBudget({
     setBusy(true);
     try {
       const cents = eurosToCents(val);
-      if (allocId) {
+      if (allocId && cents === 0) {
+        // Vider la case supprime la ligne budgétée.
+        await api.deleteAllocation(allocId);
+      } else if (allocId) {
         await api.updateAllocation(allocId, { amount: cents });
       } else if (cents > 0) {
         await api.createAllocation(year.id, {

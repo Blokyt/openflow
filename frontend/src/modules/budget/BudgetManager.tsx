@@ -1,21 +1,19 @@
 import { useState } from "react";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import OverviewTab from "./tabs/OverviewTab";
-import AllocationTab from "./tabs/AllocationTab";
 import FiscalYearsTab from "./tabs/FiscalYearsTab";
 import CategoriesTab from "./tabs/CategoriesTab";
 
-type TabId = "overview" | "categories" | "allocation" | "years";
+type TabId = "overview" | "categories" | "years";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
   { id: "categories", label: "Catégories" },
-  { id: "allocation", label: "Allocation" },
   { id: "years", label: "Exercices" },
 ];
 
 export default function BudgetManager() {
-  const { years, selectedYear, setSelectedYearId, reload } = useFiscalYear();
+  const { years, selectedYear, setSelectedYearId } = useFiscalYear();
   const [tab, setTab] = useState<TabId>("overview");
 
   return (
@@ -62,7 +60,6 @@ export default function BudgetManager() {
 
       {tab === "overview" && <OverviewTab year={selectedYear} />}
       {tab === "categories" && <CategoriesTab year={selectedYear} />}
-      {tab === "allocation" && <AllocationTab year={selectedYear} onChange={reload} />}
       {tab === "years" && <FiscalYearsTab />}
     </div>
   );
