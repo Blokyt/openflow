@@ -41,9 +41,12 @@ export const api = {
     const query = params ? "?" + new URLSearchParams(params).toString() : "";
     return request<{ total: number; items: any[] }>(`/transactions/${query}`);
   },
-  createTransaction: (tx: any) => request<any>("/transactions/", { method: "POST", body: JSON.stringify(tx) }),
-  updateTransaction: (id: number, tx: any) => request<any>(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(tx) }),
-  deleteTransaction: (id: number) => request<any>(`/transactions/${id}`, { method: "DELETE" }),
+  createTransaction: (tx: any, force = false) =>
+    request<any>(`/transactions/${force ? "?force=true" : ""}`, { method: "POST", body: JSON.stringify(tx) }),
+  updateTransaction: (id: number, tx: any, force = false) =>
+    request<any>(`/transactions/${id}${force ? "?force=true" : ""}`, { method: "PUT", body: JSON.stringify(tx) }),
+  deleteTransaction: (id: number, force = false) =>
+    request<any>(`/transactions/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
   getCategories: () => request<any[]>("/categories/"),
   getCategoryTree: () => request<any[]>("/categories/tree"),
   createCategory: (cat: any) => request<any>("/categories/", { method: "POST", body: JSON.stringify(cat) }),
@@ -224,4 +227,31 @@ export const api = {
     request<any>(`/helloasso/campaigns/${campaignId}/links/${transactionId}`, { method: "DELETE" }),
   getHelloAssoSuggestions: (campaignId: number) =>
     request<any>(`/helloasso/campaigns/${campaignId}/suggestions`),
+  // DirENS — export Excel officiel
+  getDirensLineMap: () =>
+    request<{ mapping: any[]; unmapped: any[]; rows: any[] }>("/direns/line-map"),
+  setDirensLineMap: (category_id: number, direns_row: number, section: string) =>
+    request<any>("/direns/line-map", {
+      method: "PUT",
+      body: JSON.stringify({ category_id, direns_row, section }),
+    }),
+  deleteDirensLineMap: (category_id: number) =>
+    request<any>(`/direns/line-map/${category_id}`, { method: "DELETE" }),
+  downloadDirens: async (params: {
+    bilan_fiscal_year_id: number;
+    budget_fiscal_year_id?: number;
+    assoc_name?: string;
+  }) => {
+    const q = new URLSearchParams();
+    q.set("bilan_fiscal_year_id", String(params.bilan_fiscal_year_id));
+    if (params.budget_fiscal_year_id != null) q.set("budget_fiscal_year_id", String(params.budget_fiscal_year_id));
+    if (params.assoc_name) q.set("assoc_name", params.assoc_name);
+    const response = await fetch(`${BASE_URL}/direns/export?${q.toString()}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || response.statusText);
+    }
+    const blob = await response.blob();
+    triggerBlobDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), "DirENS.xlsx"));
+  },
 };

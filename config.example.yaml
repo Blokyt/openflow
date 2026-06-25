@@ -16,6 +16,7 @@ modules:
   budget: false
   categories: true
   dashboard: true
+  direns: false
   entities: true
   helloasso: true
   reimbursements: false

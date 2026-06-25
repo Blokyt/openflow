@@ -5,9 +5,9 @@ import { useEntity } from "../../core/EntityContext";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
-import { formatEuros, txTone } from "../../utils/format";
+import { formatEuros, formatDate, eurosToCents, txTone } from "../../utils/format";
 import { transactionsToCsv, downloadCsv } from "../../utils/csv";
-import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw, Download, AlertTriangle } from "lucide-react";
 
 const PAGE_SIZE = 100;
 
@@ -40,6 +40,8 @@ export default function TransactionList() {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [detailTx, setDetailTx] = useState<Transaction | null>(null);
   const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
+  // Action en attente de confirmation « exercice clôturé » (relancée avec force=true).
+  const [pendingForceAction, setPendingForceAction] = useState<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     api.getModules()
@@ -95,8 +97,9 @@ export default function TransactionList() {
     if (dateTo) params.date_to = dateTo;
     if (categoryFilter) params.category_id = categoryFilter;
     if (reimbFilter) params.reimb_status = reimbFilter;
-    if (amountMin) params.amount_min = amountMin;
-    if (amountMax) params.amount_max = amountMax;
+    // Saisie en euros, l'API attend des centimes entiers.
+    if (amountMin) params.amount_min = String(eurosToCents(amountMin));
+    if (amountMax) params.amount_max = String(eurosToCents(amountMax));
     if (selectedEntityId) {
       params.entity_id = String(selectedEntityId);
       params.include_children = "true";
@@ -141,24 +144,43 @@ export default function TransactionList() {
     }
   }
 
+  // Exécute `action(false)` ; si le backend refuse à cause d'un exercice clôturé
+  // (409 « clôturé »), garde l'action de côté pour la relancer avec force=true
+  // après confirmation, au lieu d'afficher une erreur bloquante.
+  async function withForceConfirm(action: (force: boolean) => Promise<void>) {
+    try {
+      await action(false);
+    } catch (e: any) {
+      if (typeof e?.message === "string" && e.message.includes("clôturé")) {
+        setPendingForceAction(() => () => action(true));
+      } else {
+        setError(e.message);
+      }
+    }
+  }
+
   async function handleCreate(tx: Omit<Transaction, "id">) {
-    await api.createTransaction(tx);
-    setShowForm(false);
-    loadFirstPage();
+    await withForceConfirm(async (force) => {
+      await api.createTransaction(tx, force);
+      setShowForm(false);
+      loadFirstPage();
+    });
   }
 
   async function handleUpdate(tx: Omit<Transaction, "id">) {
     if (!editingTx) return;
-    await api.updateTransaction(editingTx.id, tx);
-    setEditingTx(null);
-    loadFirstPage();
+    await withForceConfirm(async (force) => {
+      await api.updateTransaction(editingTx.id, tx, force);
+      setEditingTx(null);
+      loadFirstPage();
+    });
   }
 
   async function handleDelete(id: number) {
     const target = transactions.find((t) => t.id === id) ?? null;
     setDeletingId(id);
-    try {
-      await api.deleteTransaction(id);
+    await withForceConfirm(async (force) => {
+      await api.deleteTransaction(id, force);
       setConfirmDelete(null);
       if (target) {
         setUndoTx(target);
@@ -167,30 +189,26 @@ export default function TransactionList() {
         }, 6000);
       }
       loadFirstPage();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setDeletingId(null);
-    }
+    });
+    setDeletingId(null);
   }
 
   async function handleUndoDelete() {
     if (!undoTx) return;
-    try {
-      await api.createTransaction({
-        date: undoTx.date,
-        label: undoTx.label,
-        amount: undoTx.amount,
-        description: undoTx.description,
-        category_id: undoTx.category_id,
-        from_entity_id: undoTx.from_entity_id,
-        to_entity_id: undoTx.to_entity_id,
-      });
+    const restore = {
+      date: undoTx.date,
+      label: undoTx.label,
+      amount: undoTx.amount,
+      description: undoTx.description,
+      category_id: undoTx.category_id,
+      from_entity_id: undoTx.from_entity_id,
+      to_entity_id: undoTx.to_entity_id,
+    };
+    await withForceConfirm(async (force) => {
+      await api.createTransaction(restore, force);
       setUndoTx(null);
       loadFirstPage();
-    } catch (e: any) {
-      setError(e.message);
-    }
+    });
   }
 
   function toggleSort(col: "date" | "amount" | "label") {
@@ -232,7 +250,7 @@ export default function TransactionList() {
             onClick={() => { setShowForm(true); setEditingTx(null); }}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
           >
-            <Plus size={15} /> Ajouter
+            <Plus size={15} /> Nouvelle transaction
           </button>
         </div>
       </div>
@@ -316,10 +334,10 @@ export default function TransactionList() {
           onChange={(e) => setReimbFilter(e.target.value)}
           className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
         >
-          <option value="">Tous payeurs</option>
+          <option value="">Toutes les avances</option>
           <option value="pending">En attente</option>
-          <option value="reimbursed">Remboursés</option>
-          <option value="none">Sans payeur</option>
+          <option value="reimbursed">Remboursées</option>
+          <option value="none">Sans avance</option>
         </select>
         <input
           type="number"
@@ -392,7 +410,7 @@ export default function TransactionList() {
                 </th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Flux</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Payeur</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Avance de frais</th>
                 <th
                   onClick={() => toggleSort("amount")}
                   className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
@@ -409,7 +427,7 @@ export default function TransactionList() {
                   className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
                 >
                   <td className="px-3 py-3.5 text-[#555] text-xs font-mono">#{tx.id}</td>
-                  <td className="px-4 py-3.5 text-[#B0B0B0] whitespace-nowrap">{tx.date}</td>
+                  <td className="px-4 py-3.5 text-[#B0B0B0] whitespace-nowrap">{formatDate(tx.date)}</td>
                   <td className="px-4 py-3.5 font-medium text-white max-w-xs">
                     <span title={tx.description || undefined}>{tx.label}</span>
                     {tx.description && (
@@ -503,7 +521,7 @@ export default function TransactionList() {
                           <button
                             onClick={() => setDetailTx(tx)}
                             className="p-1.5 text-[#666] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
-                            title="Détails (pièces jointes)"
+                            title="Voir les détails"
                           >
                             <Eye size={14} strokeWidth={1.5} />
                           </button>
@@ -564,6 +582,44 @@ export default function TransactionList() {
         </div>
       )}
 
+      {pendingForceAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#111] border border-[#333] rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={20} className="text-[#F2C48D] flex-shrink-0" />
+              <h3 className="text-base font-semibold text-white">Exercice clôturé</h3>
+            </div>
+            <p className="text-sm text-[#999]">
+              Cette écriture appartient à un exercice clôturé. La modifier peut
+              affecter un bilan déjà rendu. Forcer la modification ?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setPendingForceAction(null)}
+                className="px-4 py-2 text-sm text-[#666] border border-[#333] rounded-xl hover:text-white transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  const action = pendingForceAction;
+                  setPendingForceAction(null);
+                  if (!action) return;
+                  try {
+                    await action();
+                  } catch (e: any) {
+                    setError(e.message);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-black bg-[#F2C48D] rounded-xl hover:bg-[#e8b87a] transition-colors"
+              >
+                Forcer la modification
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailTx && (
         <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setDetailTx(null)}>
           <div
@@ -576,7 +632,7 @@ export default function TransactionList() {
                   <span className="text-xs font-mono text-[#555] bg-[#1a1a1a] px-1.5 py-0.5 rounded">#{detailTx.id}</span>
                   <h2 className="text-xl font-bold text-white break-words">{detailTx.label}</h2>
                 </div>
-                <div className="text-sm text-[#666] mt-1">{detailTx.date}</div>
+                <div className="text-sm text-[#666] mt-1">{formatDate(detailTx.date)}</div>
                 {(() => {
                   const { color, sign } = txTone(detailTx);
                   return (

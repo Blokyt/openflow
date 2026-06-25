@@ -8,6 +8,7 @@ import TiersList from "./modules/tiers/TiersList";
 import ReimbursementManager from "./modules/reimbursements/ReimbursementManager";
 import Reports from "./modules/reports/index";
 import HelloAssoPage from "./modules/helloasso/HelloAssoPage";
+import DirensPage from "./modules/direns/index";
 
 export type ModuleRoute = { path: string; element: React.ReactNode };
 
@@ -19,6 +20,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   tiers: { path: "/contacts", element: <TiersList /> },
   reimbursements: { path: "/reimbursements", element: <ReimbursementManager /> },
   reports: { path: "/reports", element: <Reports /> },
+  direns: { path: "/direns", element: <DirensPage /> },
   backup: { path: "/backup", element: <BackupManager /> },
   system: { path: "/system", element: <SystemPage /> },
   helloasso: { path: "/helloasso", element: <HelloAssoPage /> },

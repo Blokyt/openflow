@@ -1,0 +1,20 @@
+{
+  "id": "direns",
+  "name": "DirENS",
+  "description": "Export Excel pré-rempli au format DirENS (bilan financier réalisé + budget prévisionnel)",
+  "help": "Génère le fichier Excel officiel demandé par la DirENS à partir des données de l'app. Les deux premiers onglets (bilan financier et budget prévisionnel) sont remplis automatiquement : un club par colonne, les montants ventilés sur les lignes de nature selon l'écran de correspondance. Le 3e onglet (demande de subventions) reste vierge.",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "categories", "entities", "budget"],
+  "menu": {
+    "label": "DirENS",
+    "icon": "table-2",
+    "position": 18
+  },
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {},
+  "example": "J'exporte le bilan DirENS 2025-2026 : 3 clubs en colonnes, dépenses ventilées par ligne (nourriture, locations, assurance) et financement DirENS reçu."
+}

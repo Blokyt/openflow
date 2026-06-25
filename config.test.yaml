@@ -24,3 +24,4 @@ modules:
   system: true
   reports: true
   helloasso: true
+  direns: true

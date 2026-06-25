@@ -184,7 +184,7 @@ def list_transactions(
 
 
 @router.post("/", status_code=201)
-def create_transaction(tx: TransactionCreate):
+def create_transaction(tx: TransactionCreate, force: bool = False):
     # Convention : montant strictement positif, sens porté par from/to distincts.
     if tx.amount <= 0:
         raise HTTPException(status_code=400, detail="Le montant doit être strictement positif")
@@ -193,11 +193,12 @@ def create_transaction(tx: TransactionCreate):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
-        # Verrou de clôture : la date ne doit pas tomber dans un exercice clôturé.
-        if _date_in_closed_period(conn, tx.date):
+        # Verrou de clôture : la date ne doit pas tomber dans un exercice clôturé,
+        # sauf si l'appelant force explicitement (force=true).
+        if not force and _date_in_closed_period(conn, tx.date):
             raise HTTPException(
                 status_code=409,
-                detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
+                detail="Exercice clôturé : modifier quand même ?",
             )
         for field, value in (("from_entity_id", tx.from_entity_id), ("to_entity_id", tx.to_entity_id)):
             exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (value,)).fetchone()
@@ -267,7 +268,7 @@ def get_transaction(tx_id: int):
 
 
 @router.put("/{tx_id}")
-def update_transaction(tx_id: int, tx: TransactionUpdate):
+def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
@@ -276,14 +277,16 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
 
         # Verrou de clôture : la tx existante ou la nouvelle date ne doivent pas
-        # tomber dans un exercice clôturé.
+        # tomber dans un exercice clôturé, sauf si l'appelant force (force=true).
         updates_preview = tx.model_dump(exclude_unset=True)
         existing_date = existing["date"]
         new_date = updates_preview.get("date", existing_date)
-        if _date_in_closed_period(conn, existing_date) or _date_in_closed_period(conn, new_date):
+        if not force and (
+            _date_in_closed_period(conn, existing_date) or _date_in_closed_period(conn, new_date)
+        ):
             raise HTTPException(
                 status_code=409,
-                detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
+                detail="Exercice clôturé : modifier quand même ?",
             )
 
         updates = tx.model_dump(exclude_unset=True)
@@ -370,17 +373,17 @@ def update_transaction(tx_id: int, tx: TransactionUpdate):
 
 
 @router.delete("/{tx_id}")
-def delete_transaction(tx_id: int):
+def delete_transaction(tx_id: int, force: bool = False):
     conn = get_conn()
     try:
         existing = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
-        # Verrou de clôture.
-        if _date_in_closed_period(conn, existing["date"]):
+        # Verrou de clôture, franchissable avec force=true.
+        if not force and _date_in_closed_period(conn, existing["date"]):
             raise HTTPException(
                 status_code=409,
-                detail="Exercice clôturé : rouvrez-le pour modifier cette écriture.",
+                detail="Exercice clôturé : modifier quand même ?",
             )
         # Nettoyage des remboursements qui référencent cette écriture comme avance,
         # pour éviter les orphelins (FK OFF, pas de cascade). Les écritures de
