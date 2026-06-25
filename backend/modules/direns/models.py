@@ -1,17 +1,10 @@
 """Modèles de données du module DirENS.
 
-Migration 1.0.0 : table de correspondance catégorie -> ligne du template DirENS.
-Le template officiel impose une nomenclature de natures FIXE (Nourriture,
-Boissons, Location de salles, Assurance, etc.). Cette table associe chaque
-catégorie OpenFlow au numéro de ligne Excel correspondant, ce qui rend l'export
-100 % déterministe et réutilisable d'une année sur l'autre.
-
-  - `direns_row`  : numéro de ligne Excel absolu (8 = Nourriture, 15 = Location
-                    d'hébergement, 35 = Financement DirENS, ...).
-  - `section`     : 'expense' (lignes de dépense 8-32) ou 'income' (lignes de
-                    financement 35-37). Une catégorie de recette se mappe en
-                    section 'income'.
-Une catégorie non mappée n'apparaît tout simplement pas dans le fichier généré.
+Migration 1.0.0 : table `direns_line_map` historique. Elle servait à un mapping
+manuel catégorie -> ligne du template. Ce mapping a été abandonné : l'export
+utilise désormais DIRECTEMENT les catégories de l'app comme lignes (aucune
+configuration). La table est conservée (création idempotente) pour ne pas casser
+les bases déjà migrées, mais elle n'est plus lue ni écrite.
 """
 
 migrations = {

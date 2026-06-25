@@ -1,4 +1,4 @@
-"""Tests — module DirENS (mapping catégorie -> ligne + export Excel pré-rempli)."""
+"""Tests — module DirENS (export Excel, lignes = catégories, aucun mapping)."""
 import io
 import os
 import sys
@@ -26,47 +26,15 @@ def _external(client, name="Fournisseur"):
     return client.post("/api/entities/", json={"name": name, "type": "external"}).json()
 
 
-# ─── Mapping ────────────────────────────────────────────────────────────────
-
-def test_put_line_map_valid(client):
-    cat = _cat(client, "Nourriture")
-    r = client.put("/api/direns/line-map", json={"category_id": cat["id"], "direns_row": 8})
-    assert r.status_code == 200, r.text
-    assert r.json()["direns_row"] == 8
-
-
-def test_put_line_map_title_row_rejected(client):
-    cat = _cat(client, "X")
-    r = client.put("/api/direns/line-map", json={"category_id": cat["id"], "direns_row": 7})
-    assert r.status_code == 400, r.text
+def _row_with_label(ws, label, max_row=60):
+    """Numéro de ligne dont la colonne A vaut `label` (None si absente)."""
+    for r in range(1, max_row + 1):
+        if ws.cell(row=r, column=1).value == label:
+            return r
+    return None
 
 
-def test_put_line_map_section_mismatch_rejected(client):
-    cat = _cat(client, "Sub")
-    r = client.put(
-        "/api/direns/line-map",
-        json={"category_id": cat["id"], "direns_row": 35, "section": "expense"},
-    )
-    assert r.status_code == 400, r.text
-
-
-def test_get_line_map_lists_unmapped_and_catalog(client):
-    cat = _cat(client, "Boissons")
-    data = client.get("/api/direns/line-map").json()
-    assert any(c["category_id"] == cat["id"] for c in data["unmapped"])
-    assert len(data["rows"]) >= 4  # au moins les groupes Achats/Services/Prestataires/Clubs/Financements
-
-
-def test_delete_line_map(client):
-    cat = _cat(client, "Matériel")
-    client.put("/api/direns/line-map", json={"category_id": cat["id"], "direns_row": 11})
-    r = client.delete(f"/api/direns/line-map/{cat['id']}")
-    assert r.status_code == 200, r.text
-    data = client.get("/api/direns/line-map").json()
-    assert all(m["category_id"] != cat["id"] for m in data["mapping"])
-
-
-# ─── Export ─────────────────────────────────────────────────────────────────
+# ─── Export : structure ───────────────────────────────────────────────────
 
 def test_export_returns_xlsx(client):
     fy = _fy(client)
@@ -92,55 +60,6 @@ def test_export_writes_club_names_row5(client):
     assert "GastronomINE" in row5
 
 
-def test_export_expense_value_in_mapped_cell(client):
-    ext = _external(client)
-    club = _internal(client, "Club")
-    cat = _cat(client, "Nourriture")
-    client.put("/api/direns/line-map", json={"category_id": cat["id"], "direns_row": 8})
-    fy = _fy(client)
-    client.post("/api/transactions/", json={
-        "date": "2025-10-01", "label": "Repas", "amount": 5000,  # 50 €
-        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
-    })
-    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
-    wb = load_workbook(io.BytesIO(r.content))
-    ws = wb.worksheets[0]
-    assert ws["B8"].value == 50.0
-
-
-def test_export_respects_mapping_row(client):
-    ext = _external(client)
-    club = _internal(client, "Club")
-    cat = _cat(client, "Hébergement")
-    client.put("/api/direns/line-map", json={"category_id": cat["id"], "direns_row": 15})
-    fy = _fy(client)
-    client.post("/api/transactions/", json={
-        "date": "2025-10-01", "label": "Hotel", "amount": 10000,  # 100 €
-        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
-    })
-    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
-    wb = load_workbook(io.BytesIO(r.content))
-    ws = wb.worksheets[0]
-    assert ws["B15"].value == 100.0
-    assert ws["B8"].value in (None, 0)
-
-
-def test_export_budget_sheet_from_allocations(client):
-    club = _internal(client, "Club")
-    cat = _cat(client, "Matériel")
-    client.put("/api/direns/line-map", json={"category_id": cat["id"], "direns_row": 11})
-    fy = _fy(client)
-    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
-        "entity_id": club["id"], "category_id": cat["id"], "direction": "expense", "amount": 25000,  # 250 €
-    })
-    r = client.get(
-        f"/api/direns/export?bilan_fiscal_year_id={fy['id']}&budget_fiscal_year_id={fy['id']}"
-    )
-    wb = load_workbook(io.BytesIO(r.content))
-    ws2 = wb.worksheets[1]
-    assert ws2["B11"].value == 250.0
-
-
 def test_export_assoc_name_written(client):
     fy = _fy(client)
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}&assoc_name=Mon%20Asso")
@@ -151,3 +70,124 @@ def test_export_assoc_name_written(client):
 def test_export_unknown_fy_returns_404(client):
     r = client.get("/api/direns/export?bilan_fiscal_year_id=9999")
     assert r.status_code == 404, r.text
+
+
+# ─── Export : lignes = catégories ──────────────────────────────────────────
+
+def test_expense_category_appears_as_row(client):
+    ext = _external(client)
+    club = _internal(client, "Club")
+    cat = _cat(client, "Nourriture")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Repas", "amount": 5000,  # 50 €
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    wb = load_workbook(io.BytesIO(r.content))
+    ws = wb.worksheets[0]
+    row = _row_with_label(ws, "Nourriture")
+    assert row is not None, "la catégorie devrait apparaître en ligne"
+    assert ws.cell(row=row, column=2).value == 50.0  # colonne B = premier club
+
+
+def test_two_categories_two_rows(client):
+    ext = _external(client)
+    club = _internal(client, "Club")
+    c1 = _cat(client, "Nourriture")
+    c2 = _cat(client, "Transport")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Repas", "amount": 5000,
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": c1["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Train", "amount": 3000,
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": c2["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    assert ws.cell(row=_row_with_label(ws, "Nourriture"), column=2).value == 50.0
+    assert ws.cell(row=_row_with_label(ws, "Transport"), column=2).value == 30.0
+
+
+def test_uncategorized_expense_grouped(client):
+    ext = _external(client)
+    club = _internal(client, "Club")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Sans cat", "amount": 1200,
+        "from_entity_id": club["id"], "to_entity_id": ext["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "Non catégorisé")
+    assert row is not None
+    assert ws.cell(row=row, column=2).value == 12.0
+
+
+def test_income_category_in_financing_section(client):
+    ext = _external(client)
+    club = _internal(client, "Club")
+    cat = _cat(client, "Subventions")
+    fy = _fy(client)
+    # Recette : from externe -> to club
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Subvention", "amount": 20000,  # 200 €
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "Subventions")
+    assert row is not None
+    assert ws.cell(row=row, column=2).value == 200.0
+
+
+def test_total_label_present(client):
+    ext = _external(client)
+    club = _internal(client, "Club")
+    cat = _cat(client, "Nourriture")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Repas", "amount": 5000,
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    assert _row_with_label(ws, "TOTAL DEPENSES REELLES") is not None
+
+
+def test_budget_sheet_category_row(client):
+    club = _internal(client, "Club")
+    cat = _cat(client, "Matériel")
+    fy = _fy(client)
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": club["id"], "category_id": cat["id"], "direction": "expense", "amount": 25000,  # 250 €
+    })
+    r = client.get(
+        f"/api/direns/export?bilan_fiscal_year_id={fy['id']}&budget_fiscal_year_id={fy['id']}"
+    )
+    ws2 = load_workbook(io.BytesIO(r.content)).worksheets[1]
+    row = _row_with_label(ws2, "Matériel")
+    assert row is not None
+    assert ws2.cell(row=row, column=2).value == 250.0
+
+
+def test_many_categories_expand_rows(client):
+    """Plus de 26 catégories : le bloc s'agrandit, toutes les lignes présentes."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    fy = _fy(client)
+    names = [f"Categorie {i:02d}" for i in range(30)]
+    for i, nm in enumerate(names):
+        c = _cat(client, nm)
+        client.post("/api/transactions/", json={
+            "date": "2025-10-01", "label": nm, "amount": 100 * (i + 1),
+            "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": c["id"],
+        })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    for nm in names:
+        assert _row_with_label(ws, nm) is not None, f"{nm} manquante"
+    # Le total reste cohérent (présent sous les catégories).
+    assert _row_with_label(ws, "TOTAL DEPENSES REELLES") is not None

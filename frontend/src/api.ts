@@ -227,16 +227,7 @@ export const api = {
     request<any>(`/helloasso/campaigns/${campaignId}/links/${transactionId}`, { method: "DELETE" }),
   getHelloAssoSuggestions: (campaignId: number) =>
     request<any>(`/helloasso/campaigns/${campaignId}/suggestions`),
-  // DirENS — export Excel officiel
-  getDirensLineMap: () =>
-    request<{ mapping: any[]; unmapped: any[]; rows: any[] }>("/direns/line-map"),
-  setDirensLineMap: (category_id: number, direns_row: number, section: string) =>
-    request<any>("/direns/line-map", {
-      method: "PUT",
-      body: JSON.stringify({ category_id, direns_row, section }),
-    }),
-  deleteDirensLineMap: (category_id: number) =>
-    request<any>(`/direns/line-map/${category_id}`, { method: "DELETE" }),
+  // DirENS — export Excel officiel (lignes = catégories, aucun mapping)
   downloadDirens: async (params: {
     bilan_fiscal_year_id: number;
     budget_fiscal_year_id?: number;
