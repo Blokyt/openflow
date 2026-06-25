@@ -304,3 +304,67 @@ def test_bilan_pdf(client):
 def test_bilan_pdf_exercice_inconnu_404(client):
     r = client.get("/api/reports/bilan/pdf", params={"fiscal_year_id": 99999})
     assert r.status_code == 404
+
+
+def test_compte_resultat_pdf_avec_categories(client):
+    """Le PDF se génère même avec des contributions détaillées par catégorie."""
+    bda = _make_entity(client, "BDA", "internal")
+    ext = _make_entity(client, "Ext", "external")
+    cot = _make_category(client, "Cotisations")
+    buv = _make_category(client, "Buvette")
+    _map(client, cot["id"], _account_id_by_code(client, "756"))
+    _map(client, buv["id"], _account_id_by_code(client, "70"))
+    _make_tx(client, date="2025-03-01", label="Cotis", amount=20000,
+             from_entity_id=ext["id"], to_entity_id=bda["id"], category_id=cot["id"])
+    _make_tx(client, date="2025-04-01", label="Buvette", amount=5000,
+             from_entity_id=ext["id"], to_entity_id=bda["id"], category_id=buv["id"])
+    r = client.get("/api/reports/compte-resultat/pdf",
+                   params={"start_date": "2025-01-01", "end_date": "2025-12-31"})
+    assert r.status_code == 200, r.text
+    assert r.content[:4] == b"%PDF"
+
+
+# ---------------------------------------------------------------------------
+# Bilan : détail des créances / dettes par catégorie
+# ---------------------------------------------------------------------------
+
+def test_bilan_detaille_creances_dettes_par_categorie(client):
+    """Le bilan expose le détail par catégorie des créances et dettes, dont la
+    somme reconstitue exactement les totaux."""
+    bda = _make_entity(client, "BDA", "internal")
+    sub = _make_category(client, "Subvention")
+    fy = _make_fy(client, name="EX2025", start="2025-01-01", end="2025-12-31")
+
+    r1 = client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "creance", "amount": 30000,
+        "label": "Subvention à recevoir", "category_id": sub["id"],
+    })
+    assert r1.status_code == 201, r1.text
+    r2 = client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "dette", "amount": 12000,
+        "label": "Facture à payer", "category_id": sub["id"],
+    })
+    assert r2.status_code == 201, r2.text
+
+    data = client.get("/api/reports/bilan", params={"fiscal_year_id": fy["id"]}).json()
+    cre = data["actif"]["creances_detail"]
+    det = data["passif"]["dettes_detail"]
+    assert any(r["category_name"] == "Subvention" and r["montant"] == 30000 for r in cre)
+    assert any(r["category_name"] == "Subvention" and r["montant"] == 12000 for r in det)
+    # Cohérence : la somme du détail = le total affiché.
+    assert sum(r["montant"] for r in cre) == data["actif"]["total_creances"]
+    assert sum(r["montant"] for r in det) == data["passif"]["total_dettes"]
+
+
+def test_bilan_pdf_avec_accruals(client):
+    """Le PDF du bilan se génère avec le détail créances/dettes par catégorie."""
+    bda = _make_entity(client, "BDA", "internal")
+    sub = _make_category(client, "Subvention")
+    fy = _make_fy(client, name="EX2025", start="2025-01-01", end="2025-12-31")
+    client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "creance", "amount": 30000,
+        "label": "Subvention à recevoir", "category_id": sub["id"],
+    })
+    r = client.get("/api/reports/bilan/pdf", params={"fiscal_year_id": fy["id"]})
+    assert r.status_code == 200, r.text
+    assert r.content[:4] == b"%PDF"

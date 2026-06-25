@@ -609,6 +609,17 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
     eng = cr["engagement"]
     creances, dettes = eng["creances"], eng["dettes"]
 
+    # Détail par catégorie des créances/dettes de l'exercice (mêmes lignes que
+    # celles dont la somme constitue les totaux ci-dessus) -> rapport lisible.
+    creances_detail = sorted(
+        _accruals_rows(conn, fiscal_year_id, "creance", perimeter),
+        key=lambda r: r["category_name"],
+    )
+    dettes_detail = sorted(
+        _accruals_rows(conn, fiscal_year_id, "dette", perimeter),
+        key=lambda r: r["category_name"],
+    )
+
     # Report à nouveau = actif net d'ouverture (trésorerie + créances N-1 - dettes N-1).
     report_a_nouveau = tresorerie_ouverture + eng["creances_n1"] - eng["dettes_n1"]
 
@@ -624,12 +635,14 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
             "disponibilites": disponibilites,
             "total_disponibilites": total_disponibilites,
             "total_creances": creances,
+            "creances_detail": creances_detail,
             "total": total_actif,
         },
         "passif": {
             "report_a_nouveau": report_a_nouveau,
             "resultat_exercice": resultat,
             "total_dettes": dettes,
+            "dettes_detail": dettes_detail,
             "total": total_passif,
         },
         "equilibre": total_actif == total_passif,
@@ -855,12 +868,22 @@ def get_compte_resultat_pdf(
         pdf.cell(130, 7, "Poste", border=1, fill=True)
         pdf.cell(50, 7, f"Montant ({eur})", border=1, fill=True, align="R",
                  new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font(font, "", 9)
         for poste in postes:
+            # Ligne du compte (poste), en gras.
+            pdf.set_font(font, "B", 9)
             libelle = f"{poste['code']}  {poste['label']}"
             pdf.cell(130, 6, libelle[:70], border=1)
             pdf.cell(50, 6, _fmt_eur(poste["montant"], eur), border=1, align="R",
                      new_x="LMARGIN", new_y="NEXT")
+            # Détail des contributions par catégorie, sous le compte, en plus clair.
+            pdf.set_font(font, "", 8)
+            pdf.set_text_color(110, 110, 110)
+            for cat in poste.get("categories", []):
+                nom = f"        {cat['category_name']}"
+                pdf.cell(130, 5, nom[:80], border="LR")
+                pdf.cell(50, 5, _fmt_eur(cat["montant"], eur), border="LR", align="R",
+                         new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
         pdf.set_font(font, "B", 10)
         pdf.cell(130, 7, total_label, border=1)
         pdf.cell(50, 7, _fmt_eur(total, eur), border=1, align="R",
@@ -928,12 +951,24 @@ def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int]
         pdf.cell(50, 7 if bold else 6, _fmt_eur(montant, eur), border=1, align="R",
                  new_x="LMARGIN", new_y="NEXT")
 
+    def _detail(rows):
+        # Sous-lignes par catégorie (contributions), en plus clair.
+        pdf.set_font(font, "", 8)
+        pdf.set_text_color(110, 110, 110)
+        for r in rows:
+            nom = f"        {r['category_name']}"
+            pdf.cell(130, 5, nom[:80], border="LR")
+            pdf.cell(50, 5, _fmt_eur(r["montant"], eur), border="LR", align="R",
+                     new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+
     pdf.set_font(font, "B", 12)
     pdf.cell(0, 8, "ACTIF", new_x="LMARGIN", new_y="NEXT")
     for d in actif["disponibilites"]:
         _line(f"Disponibilités  {d['name']}", d["montant"])
     if actif["total_creances"]:
         _line("Créances (produits à recevoir)", actif["total_creances"])
+        _detail(actif.get("creances_detail", []))
     _line("TOTAL DE L'ACTIF", actif["total"], bold=True)
     pdf.ln(4)
 
@@ -943,6 +978,7 @@ def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int]
     _line("Résultat de l'exercice", passif["resultat_exercice"])
     if passif["total_dettes"]:
         _line("Dettes (charges à payer)", passif["total_dettes"])
+        _detail(passif.get("dettes_detail", []))
     _line("TOTAL DU PASSIF", passif["total"], bold=True)
     pdf.ln(6)
 

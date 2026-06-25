@@ -306,7 +306,7 @@ function BilanTab({ year, entityId }: { year: any; entityId: number | null }) {
             <BilanRow key={d.entity_id} label={`Disponibilités · ${d.name}`} montant={d.montant} />
           ))}
           {actif.total_creances > 0 && (
-            <BilanRow label="Créances (produits à recevoir)" montant={actif.total_creances} />
+            <BilanRow label="Créances (produits à recevoir)" montant={actif.total_creances} detail={actif.creances_detail} />
           )}
           <BilanRow label="Total de l'actif" montant={actif.total} bold />
         </BilanColumn>
@@ -315,7 +315,7 @@ function BilanTab({ year, entityId }: { year: any; entityId: number | null }) {
           <BilanRow label="Fonds associatifs et report à nouveau" montant={passif.report_a_nouveau} />
           <BilanRow label="Résultat de l'exercice" montant={passif.resultat_exercice} />
           {passif.total_dettes > 0 && (
-            <BilanRow label="Dettes (charges à payer)" montant={passif.total_dettes} />
+            <BilanRow label="Dettes (charges à payer)" montant={passif.total_dettes} detail={passif.dettes_detail} />
           )}
           <BilanRow label="Total du passif" montant={passif.total} bold />
         </BilanColumn>
@@ -335,19 +335,29 @@ function BilanColumn({ title, children }: { title: string; children: React.React
   );
 }
 
-function BilanRow({ label, montant, bold }: { label: string; montant: number; bold?: boolean }) {
+function BilanRow({
+  label, montant, bold, detail,
+}: { label: string; montant: number; bold?: boolean; detail?: any[] }) {
   return (
-    <div
-      className={`flex items-center justify-between px-5 py-3 border-b border-[#1a1a1a] last:border-0 ${
-        bold ? "bg-[#0d0d0d]" : ""
-      }`}
-    >
-      <span className={bold ? "text-xs font-semibold uppercase tracking-wide text-white" : "text-sm text-[#ccc]"}>
-        {label}
-      </span>
-      <span className={`whitespace-nowrap ${bold ? "font-bold text-white" : "text-white"}`}>
-        {formatEuros(montant)}
-      </span>
+    <div className={`border-b border-[#1a1a1a] last:border-0 ${bold ? "bg-[#0d0d0d]" : ""}`}>
+      <div className="flex items-center justify-between px-5 py-3">
+        <span className={bold ? "text-xs font-semibold uppercase tracking-wide text-white" : "text-sm text-[#ccc]"}>
+          {label}
+        </span>
+        <span className={`whitespace-nowrap ${bold ? "font-bold text-white" : "text-white"}`}>
+          {formatEuros(montant)}
+        </span>
+      </div>
+      {detail && detail.length > 0 && (
+        <div className="px-5 pb-3 -mt-1 space-y-0.5">
+          {detail.map((d: any) => (
+            <div key={d.category_id ?? d.category_name} className="flex justify-between text-xs text-[#666] pl-6">
+              <span>{d.category_name}</span>
+              <span>{formatEuros(d.montant)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
