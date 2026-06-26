@@ -291,22 +291,10 @@ export default function OverviewTab({ year }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#666]">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_BUDGET_SEEDED }} />
-          Budget hérité du mandat précédent
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_BUDGET_MODIFIED }} />
-          Budget modifié ce mandat
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_EXPENSE }} />
-          Dépense réelle
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_INCOME }} />
-          Recette réelle
-        </span>
+        <LegendDot color={COLOR_BUDGET_SEEDED} label="Budget hérité du mandat précédent" />
+        <LegendDot color={COLOR_BUDGET_MODIFIED} label="Budget modifié ce mandat" />
+        <LegendDot color={COLOR_EXPENSE} label="Dépense réelle" />
+        <LegendDot color={COLOR_INCOME} label="Recette réelle" />
       </div>
     </div>
   );
@@ -390,6 +378,15 @@ function AddCategoryForm({
       <button onClick={onCancel} className="text-[#666] hover:text-white" title="Annuler"><X size={14} /></button>
       {err && <span className="text-xs text-[#FF5252]">{err}</span>}
     </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+      {label}
+    </span>
   );
 }
 

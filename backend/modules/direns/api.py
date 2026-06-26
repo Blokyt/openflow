@@ -60,9 +60,10 @@ PLACEHOLDER = "à compléter"   # cellules non déductibles des données (à sai
 # produits (subventions 74, dons 754, cotisations 756, autres produits 75…) restent en
 # financement.
 ACTIVITY_INCOME_CODE = "70"
-# Repli (catégories non mappées dans le plan comptable du module reports) : un nom évoquant
-# une ressource générale (subvention, cotisation, don…) est classé en financement, pas déduit.
-# Mots-clés alignés sur l'heuristique du module reports.
+# Repli pour les catégories NON mappées dans le plan comptable : un nom évoquant une ressource
+# générale (subvention, cotisation, don…) est classé en financement, pas déduit. Liste locale
+# volontairement autonome (direns reste fonctionnel si le module reports est absent) ; elle
+# recoupe les mots-clés produits hors compte 70 de reports sans en dépendre.
 FINANCEMENT_KEYWORDS = ("subvention", "subv", "cotis", "don", "mécénat", "mecenat",
                         "adhésion", "adhesion", "parrainage")
 HEADER_TPL_ROW = 7     # ligne modèle « ACHAT » (en-tête gras)
@@ -177,25 +178,27 @@ def _split_net_and_financement(exp_amounts: dict, income_by_cell: dict, fin_ids:
     return net, financement
 
 
-def _get_expenses(conn, start: str, end: str, club_ids: list) -> dict:
-    """{(club_id, category_id): cents} des dépenses réelles (sortantes vers l'externe)."""
+def _get_realized_amounts(conn, start: str, end: str, club_ids: list, direction: str) -> dict:
+    """{(club_id, category_id): cents} des dépenses ('expense') ou recettes ('income') réelles
+    d'un club : flux avec l'externe uniquement (virements internes exclus des deux côtés)."""
     if not club_ids:
         return {}
     ph = ",".join("?" * len(club_ids))
+    side, other = ("from_entity_id", "to_entity_id") if direction == "expense" else ("to_entity_id", "from_entity_id")
     rows = conn.execute(
-        f"""SELECT from_entity_id AS eid, category_id AS cid, SUM(amount) AS total
+        f"""SELECT {side} AS eid, category_id AS cid, SUM(amount) AS total
             FROM transactions
             WHERE date BETWEEN ? AND ?
-              AND from_entity_id IN ({ph})
-              AND (to_entity_id IS NULL OR to_entity_id NOT IN ({ph}))
-            GROUP BY from_entity_id, category_id""",
+              AND {side} IN ({ph})
+              AND ({other} IS NULL OR {other} NOT IN ({ph}))
+            GROUP BY {side}, category_id""",
         [start, end] + club_ids + club_ids,
     ).fetchall()
-    return {(r["eid"], r["cid"]): r["total"] for r in rows}
+    return {(r["eid"], r["cid"]): r["total"] for r in rows if r["total"]}
 
 
-def _get_budget_expenses(conn, fy_id: int, club_ids: list) -> dict:
-    """{(club_id, category_id): cents} des dépenses prévisionnelles (budget_allocations)."""
+def _get_budget_amounts(conn, fy_id: int, club_ids: list, direction: str) -> dict:
+    """{(club_id, category_id): cents} des allocations budgétaires d'un sens ('expense'/'income')."""
     if not club_ids:
         return {}
     ph = ",".join("?" * len(club_ids))
@@ -203,13 +206,13 @@ def _get_budget_expenses(conn, fy_id: int, club_ids: list) -> dict:
         rows = conn.execute(
             f"""SELECT entity_id AS eid, category_id AS cid, SUM(amount) AS total
                 FROM budget_allocations
-                WHERE fiscal_year_id = ? AND direction = 'expense' AND entity_id IN ({ph})
+                WHERE fiscal_year_id = ? AND direction = ? AND entity_id IN ({ph})
                 GROUP BY entity_id, category_id""",
-            [fy_id] + club_ids,
+            [fy_id, direction] + club_ids,
         ).fetchall()
     except sqlite3.OperationalError:
         return {}
-    return {(r["eid"], r["cid"]): r["total"] for r in rows}
+    return {(r["eid"], r["cid"]): r["total"] for r in rows if r["total"]}
 
 
 def _category_rows(conn, amounts: dict, clubs: list) -> list:
@@ -270,41 +273,6 @@ def _category_rows(conn, amounts: dict, clubs: list) -> list:
     if None in per_cat and total(None) != 0:
         rows.append({"label": LABEL_NONE, "level": 0, "header": False, "euros": euros(None)})
     return rows
-
-
-def _get_income_by_cell(conn, start: str, end: str, club_ids: list) -> dict:
-    """{(club_id, category_id): cents} de toutes les recettes réelles entrantes (externe -> club)."""
-    if not club_ids:
-        return {}
-    ph = ",".join("?" * len(club_ids))
-    rows = conn.execute(
-        f"""SELECT to_entity_id AS eid, category_id AS cid, SUM(amount) AS total
-            FROM transactions
-            WHERE date BETWEEN ? AND ?
-              AND to_entity_id IN ({ph})
-              AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph}))
-            GROUP BY to_entity_id, category_id""",
-        [start, end] + club_ids + club_ids,
-    ).fetchall()
-    return {(r["eid"], r["cid"]): r["total"] for r in rows if r["total"]}
-
-
-def _get_budget_income_by_cell(conn, fy_id: int, club_ids: list) -> dict:
-    """{(club_id, category_id): cents} des recettes prévisionnelles (budget_allocations, 'income')."""
-    if not club_ids:
-        return {}
-    ph = ",".join("?" * len(club_ids))
-    try:
-        rows = conn.execute(
-            f"""SELECT entity_id AS eid, category_id AS cid, SUM(amount) AS total
-                FROM budget_allocations
-                WHERE fiscal_year_id = ? AND direction = 'income' AND entity_id IN ({ph})
-                GROUP BY entity_id, category_id""",
-            [fy_id] + club_ids,
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return {}
-    return {(r["eid"], r["cid"]): r["total"] for r in rows if r["total"]}
 
 
 def _financement_rows(conn, financement: dict) -> list:
@@ -522,8 +490,8 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     # dépense (net négatif) : aucune dépense n'apparaît jamais en négatif.
     ws1 = wb.worksheets[0]
     fin_ids = _financement_category_ids(conn)
-    exp_amounts = _get_expenses(conn, bilan_fy["start"], bilan_fy["end"], all_ids)
-    income_by_cell = _get_income_by_cell(conn, bilan_fy["start"], bilan_fy["end"], all_ids)
+    exp_amounts = _get_realized_amounts(conn, bilan_fy["start"], bilan_fy["end"], all_ids, "expense")
+    income_by_cell = _get_realized_amounts(conn, bilan_fy["start"], bilan_fy["end"], all_ids, "income")
     net_amounts, financement = _split_net_and_financement(exp_amounts, income_by_cell, fin_ids)
     clubs1 = _active_clubs(all_clubs, net_amounts)
     last1, total1 = _layout(ws1, len(clubs1))
@@ -549,8 +517,8 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     # (il s'arrête au TOTAL), donc les subventions prévues ne sont pas listées ici.
     if budget_fy:
         ws2 = wb.worksheets[1]
-        bexp_amounts = _get_budget_expenses(conn, budget_fy["id"], all_ids)
-        bincome = _get_budget_income_by_cell(conn, budget_fy["id"], all_ids)
+        bexp_amounts = _get_budget_amounts(conn, budget_fy["id"], all_ids, "expense")
+        bincome = _get_budget_amounts(conn, budget_fy["id"], all_ids, "income")
         bnet_amounts, _bfin = _split_net_and_financement(bexp_amounts, bincome, fin_ids)
         clubs2 = _active_clubs(all_clubs, bnet_amounts)
         last2, total2 = _layout(ws2, len(clubs2))
