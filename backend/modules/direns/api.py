@@ -22,7 +22,9 @@ Convention monétaire : amount = entier de centimes, positif. Sens porté par
 from_entity_id -> to_entity_id (dépense = from interne ; recette = to interne).
 """
 import io
+import re
 import sqlite3
+import zipfile
 from copy import copy
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -161,16 +163,17 @@ def _split_net_and_financement(exp_amounts: dict, income_by_cell: dict, fin_ids:
         galas, masterclass… bénéficiaires), regroupés sous une SEULE ligne neutre.
 
     Le partage suit le plan comptable (source de vérité), au plus près du tableau DirENS
-    officiel — où les pôles et les charges restent toujours en dépense, et seul un produit
-    « ressource » figure nommément en financement :
+    officiel (où les pôles et les charges restent toujours en dépense, et seul un produit
+    « ressource » figure nommément en financement) :
 
       - `cat in fin_ids` (produit 74/75/754/756… ou repli mot-clé) → la recette est une
         ressource : elle va en financement SOUS LE NOM de sa catégorie, jamais déduite.
       - sinon recette d'activité (compte 70 ou catégorie non mappée) : déduite de la dépense
         de la même (club, catégorie). Si elle dépasse la dépense (net négatif), la dépense
-        reste affichée brute et l'excédent est versé dans `recettes_propres` — PAS sous le
-        nom de la catégorie, pour qu'un pôle (Théâtre…) ou une charge (Nourriture…)
-        bénéficiaire n'apparaisse jamais comme une fausse subvention.
+        reste affichée brute et la recette ENTIÈRE (i) part dans `recettes_propres` (le
+        lecteur voit dépense e + recette i, soit un excédent net i − e), jamais sous le nom
+        de la catégorie : un pôle (Théâtre…) ou une charge (Nourriture…) bénéficiaire
+        n'apparaît ainsi jamais comme une fausse subvention.
 
     Les totaux restent équilibrés (financement + recettes propres − dépenses = recettes −
     dépenses).
@@ -516,29 +519,29 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
 
 def _patch_sheet_xml(xml_bytes: bytes, cache: dict) -> bytes:
     """Insère la valeur calculée `<v>` dans chaque cellule-formule listée dans `cache`
-    ({coord: valeur}), sans toucher au reste du XML (pas de re-sérialisation globale, donc
+    ({coord: valeur}), en UNE seule passe regex, sans re-sérialiser le reste du XML (donc
     aucun risque de mélanger les préfixes de namespaces OOXML)."""
-    import re
+    if not cache:
+        return xml_bytes
+    num_by_coord = {coord: repr(round(val, 2)) for coord, val in cache.items()}
+    # Un seul motif pour toutes les cellules ciblées (chaque coord est unique dans la feuille).
+    cell_re = re.compile(
+        r'(<c\b[^>]*\br="(' + "|".join(re.escape(c) for c in num_by_coord) + r')"[^>]*>)(.*?)(</c>)',
+        re.DOTALL)
 
-    text = xml_bytes.decode("utf-8")
-    for coord, val in cache.items():
-        num = repr(round(val, 2))
-        cell_re = re.compile(
-            r'(<c\b[^>]*\br="' + re.escape(coord) + r'"[^>]*>)(.*?)(</c>)', re.DOTALL)
+    def repl(m):
+        head, coord, body, tail = m.group(1), m.group(2), m.group(3), m.group(4)
+        if "<f" not in body:  # uniquement les cellules à formule
+            return m.group(0)
+        vtag = f"<v>{num_by_coord[coord]}</v>"
+        # openpyxl écrit normalement un <v></v> VIDE après la formule : on le remplit ;
+        # sinon (aucun <v>) on l'ajoute.
+        body, replaced = re.subn(r"<v\s*/>|<v>.*?</v>", vtag, body, count=1, flags=re.DOTALL)
+        if not replaced:
+            body = f"{body}{vtag}"
+        return f"{head}{body}{tail}"
 
-        def repl(m, num=num):
-            head, body, tail = m.group(1), m.group(2), m.group(3)
-            if "<f" not in body:  # uniquement les cellules à formule
-                return m.group(0)
-            if re.search(r"<v\s*/?>", body):
-                # openpyxl écrit un <v></v> VIDE après la formule : on le remplit.
-                body = re.sub(r"<v\s*/>|<v>.*?</v>", f"<v>{num}</v>", body, count=1, flags=re.DOTALL)
-            else:
-                body = f"{body}<v>{num}</v>"
-            return f"{head}{body}{tail}"
-
-        text = cell_re.sub(repl, text, count=1)
-    return text.encode("utf-8")
+    return cell_re.sub(repl, xml_bytes.decode("utf-8")).encode("utf-8")
 
 
 def _inject_cached_values(xlsx_bytes: bytes, caches: dict) -> bytes:
@@ -546,8 +549,6 @@ def _inject_cached_values(xlsx_bytes: bytes, caches: dict) -> bytes:
     calculée (cache `<v>`). Les totaux s'affichent alors dans tout lecteur sans recalcul, tout
     en restant des formules `=SUM(...)` éditables. `caches = {sheet_index: {coord: valeur}}` ;
     l'ordre des feuilles dans le zip (sheet1.xml, sheet2.xml…) suit `wb.worksheets`."""
-    import zipfile
-
     prefix, suffix = "xl/worksheets/sheet", ".xml"
     src = zipfile.ZipFile(io.BytesIO(xlsx_bytes))
     out = io.BytesIO()
@@ -560,8 +561,8 @@ def _inject_cached_values(xlsx_bytes: bytes, caches: dict) -> bytes:
                     idx = int(name[len(prefix):-len(suffix)]) - 1
                 except ValueError:
                     idx = None
-                if idx is not None and caches.get(idx):
-                    data = _patch_sheet_xml(data, caches[idx])
+                if cache := caches.get(idx):
+                    data = _patch_sheet_xml(data, cache)
             dst.writestr(item, data)
     return out.getvalue()
 

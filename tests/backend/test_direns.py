@@ -437,8 +437,9 @@ def test_totals_are_formulas_with_cached_values(client):
     tx(ext["id"], a["id"], 20000, subv["id"])   # subvention 200 € -> Alpha
 
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
-    fsheet = load_workbook(io.BytesIO(r.content)).worksheets[0]                 # formules
-    vsheet = load_workbook(io.BytesIO(r.content), data_only=True).worksheets[0]  # valeurs en cache
+    data = r.content
+    fsheet = load_workbook(io.BytesIO(data)).worksheets[0]                 # formules
+    vsheet = load_workbook(io.BytesIO(data), data_only=True).worksheets[0]  # valeurs en cache
 
     cols = {fsheet.cell(row=5, column=c).value: c for c in range(2, 7)
             if fsheet.cell(row=5, column=c).value}
