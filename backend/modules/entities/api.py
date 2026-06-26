@@ -1,4 +1,5 @@
 """Entities API module for OpenFlow."""
+import sqlite3
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -35,7 +36,7 @@ class EntityUpdate(BaseModel):
 
 
 class BalanceRefUpdate(BaseModel):
-    reference_date: str
+    reference_date: Optional[str] = None  # null accepté (date de référence effacée côté UI)
     reference_amount: int  # centimes entiers (cohérent avec le stockage et les calculs de solde)
 
 
@@ -146,11 +147,18 @@ def update_entity(entity_id: int, update: EntityUpdate):
             raise HTTPException(404, "Entity not found")
 
         old_data = row_to_dict(existing)
+        # exclude_unset distingue « champ non fourni » de « fourni à null ».
+        provided = update.model_dump(exclude_unset=True)
         fields = {}
         for field in ["name", "description", "color", "position", "parent_id", "balance_mode"]:
-            val = getattr(update, field, None)
-            if val is not None:
-                fields[field] = val
+            if field not in provided:
+                continue
+            val = provided[field]
+            # parent_id peut être explicitement null (détacher l'entité vers la
+            # racine) ; les autres champs ignorent null pour ne pas écraser.
+            if val is None and field != "parent_id":
+                continue
+            fields[field] = val
 
         if not fields:
             return row_to_dict(existing)
@@ -215,9 +223,16 @@ def delete_entity(entity_id: int):
             pass
 
         conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
-        # Cascade to budget module (PRAGMA foreign_keys OFF)
-        conn.execute("DELETE FROM fiscal_year_opening_balances WHERE entity_id = ?", (entity_id,))
-        conn.execute("DELETE FROM budget_allocations WHERE entity_id = ?", (entity_id,))
+        # Cascade vers le module budget (PRAGMA foreign_keys OFF). Ignorée si le
+        # module budget est désactivé (tables inexistantes -> pas de 500).
+        for stmt in (
+            "DELETE FROM fiscal_year_opening_balances WHERE entity_id = ?",
+            "DELETE FROM budget_allocations WHERE entity_id = ?",
+        ):
+            try:
+                conn.execute(stmt, (entity_id,))
+            except sqlite3.OperationalError:
+                pass
         conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
         conn.commit()
         return {"deleted": entity_id}
@@ -257,7 +272,7 @@ def get_balance_ref(entity_id: int):
     try:
         row = conn.execute("SELECT * FROM entity_balance_refs WHERE entity_id = ?", (entity_id,)).fetchone()
         if not row:
-            return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0.0}
+            return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0}
         return row_to_dict(row)
     finally:
         conn.close()

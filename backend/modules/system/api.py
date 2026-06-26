@@ -211,9 +211,14 @@ def list_backups():
 
 @router.delete("/backups/{name}")
 def delete_backup(name: str):
-    if not name.startswith("openflow.db.backup"):
-        raise HTTPException(400, "Invalid backup name")
-    path = DATA_DIR / name
+    # Anti path traversal : on résout le chemin et on vérifie qu'il reste dans
+    # DATA_DIR ET que le fichier porte bien le préfixe de backup. Un nom comme
+    # "openflow.db.backup../../config.yaml" passe le startswith mais sort de
+    # DATA_DIR : is_relative_to le rejette.
+    base = DATA_DIR.resolve()
+    path = (DATA_DIR / name).resolve()
+    if not path.is_relative_to(base) or not path.name.startswith("openflow.db.backup"):
+        raise HTTPException(400, "Nom de sauvegarde invalide")
     if not path.exists():
         raise HTTPException(404, "Backup not found")
     path.unlink()

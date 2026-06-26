@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Activity, HardDrive, Database, FileUp, Archive, AlertTriangle,
-  Check, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
+  Check, X, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
 } from "lucide-react";
 import ConfirmDialog from "../../core/ConfirmDialog";
 
@@ -178,7 +178,7 @@ export default function SystemPage() {
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-start gap-2">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError("")} className="text-xs">✕</button>
+          <button onClick={() => setError("")} className="text-xs" aria-label="Fermer"><X size={14} /></button>
         </div>
       )}
 
@@ -186,7 +186,7 @@ export default function SystemPage() {
         <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-sm flex items-start gap-2">
           <Check size={16} className="mt-0.5 shrink-0" />
           <span className="flex-1">{msg}</span>
-          <button onClick={() => setMsg("")} className="text-xs">✕</button>
+          <button onClick={() => setMsg("")} className="text-xs" aria-label="Fermer"><X size={14} /></button>
         </div>
       )}
 
@@ -194,7 +194,7 @@ export default function SystemPage() {
       <section className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-[#111] border border-[#222] rounded-xl p-4">
           <div className="flex items-center gap-2 text-[#666] text-xs uppercase tracking-wider mb-2">
-            <Database size={13} /> Données user
+            <Database size={13} /> Données utilisateur
           </div>
           <p className="text-2xl font-bold text-white">{status.totals.user_data_human}</p>
           <p className="text-xs text-[#666] mt-1">
@@ -329,7 +329,7 @@ export default function SystemPage() {
                   className="w-14 bg-[#0a0a0a] border border-[#F2C48D] rounded px-2 py-1 text-white text-xs focus:outline-none"
                 />
                 <button onClick={saveMaxBackups} className="text-green-400 hover:text-green-300">✓</button>
-                <button onClick={() => { setEditingBackups(false); setMaxBackupsInput(status.settings.max_backups); }} className="text-red-400 hover:text-red-300">✕</button>
+                <button onClick={() => { setEditingBackups(false); setMaxBackupsInput(status.settings.max_backups); }} className="text-red-400 hover:text-red-300" aria-label="Annuler"><X size={14} /></button>
               </>
             ) : (
               <button

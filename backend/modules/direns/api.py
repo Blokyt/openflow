@@ -112,7 +112,7 @@ def _get_expenses(conn, start: str, end: str, club_ids: list) -> dict:
             FROM transactions
             WHERE date BETWEEN ? AND ?
               AND from_entity_id IN ({ph})
-              AND to_entity_id NOT IN ({ph})
+              AND (to_entity_id IS NULL OR to_entity_id NOT IN ({ph}))
             GROUP BY from_entity_id, category_id""",
         [start, end] + club_ids + club_ids,
     ).fetchall()
@@ -207,7 +207,7 @@ def _income_rows(conn, start: str, end: str, club_ids: list) -> list:
             FROM transactions
             WHERE date BETWEEN ? AND ?
               AND to_entity_id IN ({ph})
-              AND from_entity_id NOT IN ({ph})
+              AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph}))
             GROUP BY category_id""",
         [start, end] + club_ids + club_ids,
     ).fetchall()
@@ -485,7 +485,12 @@ def export_direns(
         bilan_fy = _resolve_fy(conn, bilan_fiscal_year_id)
         budget_fy = _resolve_fy(conn, budget_fiscal_year_id) if budget_fiscal_year_id else None
         name = _resolve_assoc_name(assoc_name)
-        data = _build_excel(conn, bilan_fy, budget_fy, name)
+        try:
+            data = _build_excel(conn, bilan_fy, budget_fy, name)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, f"Erreur lors de la génération du fichier Excel : {e}")
     finally:
         conn.close()
 

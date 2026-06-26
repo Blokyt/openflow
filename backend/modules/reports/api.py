@@ -28,6 +28,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from backend.core.config import load_config
+
 from backend.core.balance import (
     compute_consolidated_balance,
     compute_entity_balance,
@@ -341,7 +343,7 @@ def _category_rows(conn, internal_ids, ph, start, end, in_col, out_col) -> list:
             FROM transactions t
             LEFT JOIN categories c ON c.id = t.category_id
             WHERE t.{in_col} IN ({ph})
-              AND t.{out_col} NOT IN ({ph})
+              AND (t.{out_col} IS NULL OR t.{out_col} NOT IN ({ph}))
               AND t.date BETWEEN ? AND ?
             GROUP BY t.category_id, c.name
             ORDER BY c.name""",
@@ -397,9 +399,33 @@ def _aggregate_compte_resultat(conn, start: str, end: str, perimeter: Optional[l
 
 def _prev_fy_id(conn, fiscal_year_id: int) -> Optional[int]:
     row = conn.execute(
-        "SELECT previous_fiscal_year_id FROM fiscal_years WHERE id = ?", (fiscal_year_id,)
+        "SELECT previous_fiscal_year_id, start_date FROM fiscal_years WHERE id = ?",
+        (fiscal_year_id,),
     ).fetchone()
-    return row[0] if row and row[0] is not None else None
+    if row is None:
+        return None
+    if row["previous_fiscal_year_id"] is not None:
+        return row["previous_fiscal_year_id"]
+    # Fallback par date (même fenêtre ±31 j que le module budget) quand le lien
+    # explicite manque : sans cela les extournes N-1 sont perdues et les
+    # créances/dettes de N sont comptées deux fois en N+1.
+    start = row["start_date"]
+    if not start:
+        return None
+    try:
+        d = date.fromisoformat(str(start)[:10])
+        target = date(d.year - 1, d.month, d.day).isoformat()
+    except Exception:
+        return None
+    low = (date.fromisoformat(target) - timedelta(days=31)).isoformat()
+    high = (date.fromisoformat(target) + timedelta(days=31)).isoformat()
+    prev = conn.execute(
+        """SELECT id FROM fiscal_years
+           WHERE start_date BETWEEN ? AND ? AND start_date < ?
+           ORDER BY ABS(julianday(start_date) - julianday(?)) ASC LIMIT 1""",
+        (low, high, start, target),
+    ).fetchone()
+    return prev["id"] if prev else None
 
 
 def _accruals_rows(conn, fiscal_year_id: Optional[int], kind: str,
@@ -696,13 +722,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _validate_accrual(conn, kind, amount, fiscal_year_id):
+def _validate_accrual(conn, kind, amount, fiscal_year_id, entity_id=None):
     if kind not in ACCRUAL_KINDS:
         raise HTTPException(400, "kind doit être 'creance' (produit à recevoir) ou 'dette' (charge à payer)")
     if amount is None or amount <= 0:
         raise HTTPException(400, "Le montant doit être un entier de centimes positif")
     if conn.execute("SELECT 1 FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone() is None:
         raise HTTPException(404, f"Exercice fiscal {fiscal_year_id} introuvable")
+    # Une régularisation rattachée à une entité externe serait comptée dans le
+    # compte de résultat mais exclue du bilan (déséquilibre). On l'interdit.
+    if entity_id is not None:
+        ent = conn.execute("SELECT type FROM entities WHERE id = ?", (entity_id,)).fetchone()
+        if ent is None or ent["type"] != "internal":
+            raise HTTPException(400, "entity_id doit référencer une entité interne (ou être absent pour le niveau global)")
 
 
 @router.get("/accruals")
@@ -729,7 +761,7 @@ def create_accrual(body: AccrualIn):
     """Crée une créance (produit à recevoir) ou une dette (charge à payer)."""
     conn = get_conn()
     try:
-        _validate_accrual(conn, body.kind, body.amount, body.fiscal_year_id)
+        _validate_accrual(conn, body.kind, body.amount, body.fiscal_year_id, body.entity_id)
         now = _now_iso()
         cur = conn.execute(
             """INSERT INTO report_accruals
@@ -754,7 +786,8 @@ def update_accrual(accrual_id: int, body: AccrualUpdate):
             raise HTTPException(404, f"Régularisation {accrual_id} introuvable")
         merged_kind = body.kind if body.kind is not None else existing["kind"]
         merged_amount = body.amount if body.amount is not None else existing["amount"]
-        _validate_accrual(conn, merged_kind, merged_amount, existing["fiscal_year_id"])
+        merged_entity_id = body.entity_id if body.entity_id is not None else existing["entity_id"]
+        _validate_accrual(conn, merged_kind, merged_amount, existing["fiscal_year_id"], merged_entity_id)
         conn.execute(
             """UPDATE report_accruals
                SET kind=?, amount=?, label=?, category_id=?, entity_id=?, description=?, updated_at=?
@@ -793,20 +826,70 @@ def delete_accrual(accrual_id: int):
 # ───────────────────────── Export PDF ─────────────────────────────────────
 
 FONT_DIR = Path(__file__).parent / "assets" / "fonts"
+_CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "config.yaml"
 
 
 def _fmt_eur(cents: int, symbol: str = "€") -> str:
     """Formate des centimes en montant français : « 1 234,56 € »."""
-    s = f"{abs(int(cents)) / 100:,.2f}".replace(",", " ").replace(".", ",")
+    # Espace fine insécable (typographie FR) en mode Unicode ; espace normale en
+    # repli Helvetica (latin-1) qui ne sait pas afficher U+202F.
+    thin = " " if symbol == "€" else " "
+    s = f"{abs(int(round(cents))) / 100:,.2f}".replace(",", thin).replace(".", ",")
     sign = "-" if cents < 0 else ""
-    return f"{sign}{s} {symbol}"
+    return f"{sign}{s}{thin}{symbol}"
+
+
+def _fmt_date(iso) -> str:
+    """ISO (YYYY-MM-DD) -> format français JJ/MM/AAAA."""
+    try:
+        return date.fromisoformat(str(iso)[:10]).strftime("%d/%m/%Y")
+    except Exception:
+        return str(iso)
+
+
+def _fit(pdf, text: str, max_w: float) -> str:
+    """Tronque `text` avec une ellipse pour qu'il tienne dans `max_w` mm (police courante)."""
+    if pdf.get_string_width(text) <= max_w:
+        return text
+    ell = "..."
+    while text and pdf.get_string_width(text + ell) > max_w:
+        text = text[:-1]
+    return (text + ell) if text else ell
+
+
+def _assoc_name():
+    """Nom de l'association depuis la config (None si absent ou valeur par défaut)."""
+    try:
+        name = (load_config(str(_CONFIG_PATH)).entity.name or "").strip()
+        return name or None
+    except Exception:
+        return None
 
 
 def _new_pdf():
     """FPDF avec la police Unicode DejaVu si disponible (accents + €), sinon
-    repli sur Helvetica (latin-1, € remplacé par EUR)."""
+    repli sur Helvetica (latin-1, € remplacé par EUR). Pied de page : date de
+    génération + numérotation des pages."""
     from fpdf import FPDF
-    pdf = FPDF()
+
+    gen_label = "Généré le " + datetime.now().strftime("%d/%m/%Y")
+
+    class _ReportPDF(FPDF):
+        font_name = "Helvetica"
+
+        def footer(self):
+            self.set_y(-12)
+            try:
+                self.set_font(self.font_name, "", 7)
+            except Exception:
+                return
+            self.set_text_color(130, 130, 130)
+            self.cell(95, 5, gen_label, align="L")
+            self.cell(95, 5, f"Page {self.page_no()}/{{nb}}", align="R")
+            self.set_text_color(0, 0, 0)
+
+    pdf = _ReportPDF()
+    pdf.alias_nb_pages()
     font, symbol = "Helvetica", "EUR"
     try:
         if (FONT_DIR / "DejaVuSans.ttf").exists():
@@ -815,6 +898,7 @@ def _new_pdf():
             font, symbol = "DejaVu", "€"
     except Exception:
         font, symbol = "Helvetica", "EUR"
+    pdf.font_name = font
     return pdf, font, symbol
 
 
@@ -852,12 +936,16 @@ def get_compte_resultat_pdf(
         raise HTTPException(500, "fpdf2 non installé — impossible de générer le PDF")
 
     pdf.add_page()
+    assoc = _assoc_name()
+    if assoc:
+        pdf.set_font(font, "B", 11)
+        pdf.cell(0, 6, assoc, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font, "B", 16)
     pdf.cell(0, 12, "Compte de résultat", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font, "", 10)
     if entity_name:
         pdf.cell(0, 6, f"Club : {entity_name}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.cell(0, 6, f"Période : {start} au {end}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(0, 6, f"Période : {_fmt_date(start)} au {_fmt_date(end)}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 
     def _section(titre, postes, total, total_label, fill):
@@ -872,7 +960,7 @@ def get_compte_resultat_pdf(
             # Ligne du compte (poste), en gras.
             pdf.set_font(font, "B", 9)
             libelle = f"{poste['code']}  {poste['label']}"
-            pdf.cell(130, 6, libelle[:70], border=1)
+            pdf.cell(130, 6, _fit(pdf, libelle, 128), border=1)
             pdf.cell(50, 6, _fmt_eur(poste["montant"], eur), border=1, align="R",
                      new_x="LMARGIN", new_y="NEXT")
             # Détail des contributions par catégorie, sous le compte, en plus clair.
@@ -880,7 +968,7 @@ def get_compte_resultat_pdf(
             pdf.set_text_color(110, 110, 110)
             for cat in poste.get("categories", []):
                 nom = f"        {cat['category_name']}"
-                pdf.cell(130, 5, nom[:80], border="LR")
+                pdf.cell(130, 5, _fit(pdf, nom, 128), border="LR")
                 pdf.cell(50, 5, _fmt_eur(cat["montant"], eur), border="LR", align="R",
                          new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(0, 0, 0)
@@ -937,17 +1025,21 @@ def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int]
     passif = data["passif"]
 
     pdf.add_page()
+    assoc = _assoc_name()
+    if assoc:
+        pdf.set_font(font, "B", 11)
+        pdf.cell(0, 6, assoc, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font, "B", 16)
     pdf.cell(0, 12, "Bilan", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font, "", 10)
     if entity_name:
         pdf.cell(0, 6, f"Club : {entity_name}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.cell(0, 6, f"Arrêté au {data['arrete_le']}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(0, 6, f"Arrêté au {_fmt_date(data['arrete_le'])}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 
     def _line(libelle, montant, bold=False):
         pdf.set_font(font, "B" if bold else "", 10 if bold else 9)
-        pdf.cell(130, 7 if bold else 6, libelle[:70], border=1)
+        pdf.cell(130, 7 if bold else 6, _fit(pdf, libelle, 128), border=1)
         pdf.cell(50, 7 if bold else 6, _fmt_eur(montant, eur), border=1, align="R",
                  new_x="LMARGIN", new_y="NEXT")
 
@@ -957,7 +1049,7 @@ def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int]
         pdf.set_text_color(110, 110, 110)
         for r in rows:
             nom = f"        {r['category_name']}"
-            pdf.cell(130, 5, nom[:80], border="LR")
+            pdf.cell(130, 5, _fit(pdf, nom, 128), border="LR")
             pdf.cell(50, 5, _fmt_eur(r["montant"], eur), border="LR", align="R",
                      new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(0, 0, 0)

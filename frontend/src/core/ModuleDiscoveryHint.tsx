@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Sparkles, X, ArrowRight } from "lucide-react";
 import { api } from "../api";
 
@@ -47,19 +48,19 @@ export default function ModuleDiscoveryHint() {
             Tu n'as pas encore activé{" "}
             {inactiveModules.map((m, i) => (
               <span key={m.id}>
-                <a
-                  href={`/settings#module-${m.id}`}
+                <Link
+                  to={`/settings#module-${m.id}`}
                   className="text-white font-medium hover:text-[#F2C48D] underline decoration-[#F2C48D]/40 decoration-dotted underline-offset-2"
                 >
                   {m.name}
-                </a>
+                </Link>
                 {i < inactiveModules.length - 2 && ", "}
                 {i === inactiveModules.length - 2 && " et "}
               </span>
             ))}
-            . Va dans <a href="/settings" className="text-[#F2C48D] hover:underline inline-flex items-center gap-0.5">
+            . Va dans <Link to="/settings" className="text-[#F2C48D] hover:underline inline-flex items-center gap-0.5">
               Paramètres <ArrowRight size={11} />
-            </a> pour voir ce qu'ils font.
+            </Link> pour voir ce qu'ils font.
           </p>
         </div>
       </div>

@@ -1,5 +1,7 @@
 """Categories CRUD API."""
 
+import sqlite3
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -85,6 +87,8 @@ def get_tree():
 def create_category(data: CategoryIn):
     conn = get_conn()
     try:
+        # Note : un parent_id inexistant est toléré (la catégorie apparaît à la
+        # racine dans get_tree). On ne valide donc pas son existence ici.
         cur = conn.execute(
             "INSERT INTO categories (name, parent_id, color, icon, position) VALUES (?, ?, ?, ?, ?)",
             (data.name, data.parent_id, data.color, data.icon, data.position),
@@ -120,6 +124,18 @@ def update_category(cat_id: int, data: CategoryUpdate):
         current = row_to_dict(row)
         name = data.name if data.name is not None else current["name"]
         parent_id = data.parent_id if data.parent_id is not None else current["parent_id"]
+        # Détection de cycle quand on (re)définit le parent (un parent_id
+        # inexistant reste toléré : la catégorie sera traitée comme racine).
+        if data.parent_id is not None:
+            if data.parent_id == cat_id:
+                raise HTTPException(400, "Une catégorie ne peut pas être son propre parent")
+            ancestor, seen = data.parent_id, set()
+            while ancestor is not None and ancestor not in seen:
+                if ancestor == cat_id:
+                    raise HTTPException(400, "Cycle détecté dans la hiérarchie des catégories")
+                seen.add(ancestor)
+                r = conn.execute("SELECT parent_id FROM categories WHERE id = ?", (ancestor,)).fetchone()
+                ancestor = r["parent_id"] if r else None
         color = data.color if data.color is not None else current["color"]
         icon = data.icon if data.icon is not None else current["icon"]
         position = data.position if data.position is not None else current["position"]
@@ -142,6 +158,20 @@ def delete_category(cat_id: int):
         row = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Category not found")
+        # Cascade manuelle (PRAGMA foreign_keys OFF) pour éviter les références
+        # orphelines : enfants rattachés à la racine, transactions dé-catégorisées,
+        # lignes des modules optionnels nettoyées (ignorées si le module est absent).
+        conn.execute("UPDATE categories SET parent_id = NULL WHERE parent_id = ?", (cat_id,))
+        conn.execute("UPDATE transactions SET category_id = NULL WHERE category_id = ?", (cat_id,))
+        for stmt in (
+            "DELETE FROM budget_allocations WHERE category_id = ?",
+            "DELETE FROM category_account_map WHERE category_id = ?",
+            "UPDATE report_accruals SET category_id = NULL WHERE category_id = ?",
+        ):
+            try:
+                conn.execute(stmt, (cat_id,))
+            except sqlite3.OperationalError:
+                pass
         conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
         conn.commit()
         return {"deleted": cat_id}

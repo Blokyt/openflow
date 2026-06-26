@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
 import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
-import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
+import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 import ConfirmDialog from "../../core/ConfirmDialog";
 
 /** Retourne la date locale du jour au format YYYY-MM-DD. */
@@ -160,7 +160,7 @@ function EntityModal({
       <div className="bg-[#111] border border-[#222] rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-base font-semibold text-white">
-            {isEdit ? "Modifier" : "Nouvelle"} entité {type === "internal" ? "interne" : "externe"}
+            {isEdit ? "Modifier l'entité" : "Nouvelle entité"} {type === "internal" ? "interne" : "externe"}
           </h2>
           <button onClick={onClose} className="text-[#666] hover:text-white">
             <X size={18} />
@@ -169,7 +169,7 @@ function EntityModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wider">Nom *</label>
+            <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Nom *</label>
             <input
               type="text"
               value={name}
@@ -182,7 +182,7 @@ function EntityModal({
           </div>
 
           <div>
-            <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wider">Description</label>
+            <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Description</label>
             <input
               type="text"
               value={description}
@@ -194,7 +194,7 @@ function EntityModal({
 
           {type === "internal" && parentChoices.length > 0 && (
             <div>
-              <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wider">Entité parente</label>
+              <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Entité parente</label>
               <select
                 value={parentId}
                 onChange={(e) => setParentId(e.target.value !== "" ? parseInt(e.target.value, 10) : "")}
@@ -209,7 +209,7 @@ function EntityModal({
           )}
 
           <div>
-            <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wider">Couleur</label>
+            <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Couleur</label>
             <div className="flex items-center gap-3">
               <input
                 type="color"
@@ -413,12 +413,12 @@ function EntityBalancePanel({
               {isAggregate ? (
                 balance.reference_date && (
                   <p className="text-xs text-[#555] mt-1">
-                    Solde agrégé {balance.reference_date} : {formatEuros(balance.reference_amount)} (bancaire)
+                    Réf. {formatDate(balance.reference_date)} : {formatEuros(balance.reference_amount)} (bancaire)
                   </p>
                 )
               ) : balance.reference_date ? (
                 <p className="text-xs text-[#555] mt-1">
-                  Réf. {balance.reference_date} : {formatEuros(balance.reference_amount)}
+                  Réf. {formatDate(balance.reference_date)} : {formatEuros(balance.reference_amount)}
                 </p>
               ) : null}
 
@@ -605,11 +605,11 @@ export default function EntityTree() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <GitBranch size={22} className="text-[#F2C48D]" strokeWidth={1.5} />
-          <h1 className="text-2xl font-bold text-white">Entités</h1>
+          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Entités</h1>
         </div>
         <p className="text-sm text-[#B0B0B0] leading-relaxed">
           Les entités représentent <span className="text-white font-medium">qui gère le budget</span> :
-          ta structure (BDA) et ses <em>sous-clubs, pôles, sections</em> — ainsi que les{" "}
+          ta structure et ses <em>sous-clubs, pôles, sections</em>, ainsi que les{" "}
           <em>tiers externes</em> (banque, fournisseurs).
         </p>
         <p className="text-xs text-[#666] mt-1 leading-relaxed">
@@ -653,7 +653,7 @@ export default function EntityTree() {
             <div className="p-2">
               {entities.length === 0 ? (
                 <div className="text-center py-8 text-sm text-[#555]">
-                  Aucune entité interne. Créez-en une pour commencer.
+                  Aucune entité interne. Crée-en une pour commencer.
                 </div>
               ) : (
                 entities.map((e) => (
@@ -742,7 +742,7 @@ export default function EntityTree() {
             <div className="bg-[#0d0d0d] border border-[#1a1a1a] rounded-2xl p-5 text-center">
               <GitBranch size={24} className="text-[#333] mx-auto mb-3" strokeWidth={1.5} />
               <p className="text-sm text-[#555]">
-                Cliquez sur une entité pour voir son solde
+                Clique sur une entité pour voir son solde
               </p>
             </div>
           )}

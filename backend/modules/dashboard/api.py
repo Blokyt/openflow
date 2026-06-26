@@ -1,6 +1,7 @@
 """Dashboard API module for OpenFlow."""
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -164,7 +165,7 @@ def get_summary(
             total_income = conn.execute(
                 f"""SELECT COALESCE(SUM(t.amount), 0) FROM transactions t
                    WHERE t.to_entity_id   IN (SELECT id FROM entities WHERE type='internal')
-                     AND t.from_entity_id NOT IN (SELECT id FROM entities WHERE type='internal')
+                     AND (t.from_entity_id IS NULL OR t.from_entity_id NOT IN (SELECT id FROM entities WHERE type='internal'))
                      {period_and}""",
                 tuple(pp),
             ).fetchone()[0]
@@ -172,7 +173,7 @@ def get_summary(
             total_expenses = conn.execute(
                 f"""SELECT COALESCE(SUM(t.amount), 0) FROM transactions t
                    WHERE t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')
-                     AND t.to_entity_id   NOT IN (SELECT id FROM entities WHERE type='internal')
+                     AND (t.to_entity_id IS NULL OR t.to_entity_id NOT IN (SELECT id FROM entities WHERE type='internal'))
                      {period_and}""",
                 tuple(pp),
             ).fetchone()[0]
@@ -238,10 +239,10 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
                 """SELECT substr(date,1,7) AS month,
                           COALESCE(SUM(CASE
                               WHEN t.to_entity_id   IN (SELECT id FROM entities WHERE type='internal')
-                               AND t.from_entity_id NOT IN (SELECT id FROM entities WHERE type='internal')
+                               AND (t.from_entity_id IS NULL OR t.from_entity_id NOT IN (SELECT id FROM entities WHERE type='internal'))
                               THEN t.amount
                               WHEN t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')
-                               AND t.to_entity_id   NOT IN (SELECT id FROM entities WHERE type='internal')
+                               AND (t.to_entity_id IS NULL OR t.to_entity_id NOT IN (SELECT id FROM entities WHERE type='internal'))
                               THEN -t.amount
                               ELSE 0
                           END), 0) AS net
@@ -249,16 +250,30 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
                    GROUP BY month ORDER BY month"""
             ).fetchall()
 
-        nets = [(r["month"], r["net"] or 0.0) for r in net_rows]
-        # Build cumulative-at-end-of-month series by forward sum, anchored so
-        # that the last month equals current_balance.
+        nets_by_month = {r["month"]: int(r["net"] or 0) for r in net_rows}
+        # Generer la liste continue de tous les mois calendaires, du premier mois
+        # avec activite jusqu'au mois courant, pour ne pas laisser de trous (un
+        # mois sans transaction = solde stable, pas un point manquant).
+        today = date.today()
+        if nets_by_month:
+            first = min(nets_by_month)
+            y, m = int(first[:4]), int(first[5:7])
+        else:
+            y, m = today.year, today.month
+        all_months = []
+        while (y, m) <= (today.year, today.month):
+            all_months.append(f"{y:04d}-{m:02d}")
+            m += 1
+            if m > 12:
+                m, y = 1, y + 1
+        # Somme cumulative ancree pour que le dernier mois = solde courant.
+        running = 0
         forward = []
-        running = 0.0
-        for m, n in nets:
-            running += n
-            forward.append((m, running))
-        offset = current_balance - (forward[-1][1] if forward else 0.0)
-        series = [{"month": m, "balance": round(v + offset, 2)} for m, v in forward]
+        for mth in all_months:
+            running += nets_by_month.get(mth, 0)
+            forward.append((mth, running))
+        offset = current_balance - (forward[-1][1] if forward else 0)
+        series = [{"month": mth, "balance": int(round(v + offset))} for mth, v in forward]
         return series[-months:]
     finally:
         conn.close()

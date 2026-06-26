@@ -17,18 +17,35 @@ function Spinner() {
   );
 }
 
+function ErrorScreen({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-black gap-4 p-6 text-center">
+      <p className="text-[#FF5252] font-semibold">Impossible de charger l'application</p>
+      <p className="text-sm text-[#B0B0B0] max-w-md">{message}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+      >
+        Réessayer
+      </button>
+    </div>
+  );
+}
+
 function AppContent() {
   const [activeModules, setActiveModules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getModules()
       .then(setActiveModules)
-      .catch(console.error)
+      .catch((e) => setError(e?.message || "Erreur réseau au chargement des modules."))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spinner />;
+  if (error) return <ErrorScreen message={error} />;
 
   const activeModuleIds = activeModules.map((m: any) => m.id);
 

@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -24,6 +24,15 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+
   if (!open) return null;
   return (
     <div
@@ -31,14 +40,18 @@ export default function ConfirmDialog({
       onClick={onCancel}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
         className="w-full max-w-sm bg-[#111] border border-[#222] rounded-2xl p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-semibold text-white mb-2">{title}</h3>
+        <h3 id="confirm-dialog-title" className="text-base font-semibold text-white mb-2">{title}</h3>
         {message && <div className="text-sm text-[#B0B0B0] mb-5">{message}</div>}
         <div className="flex justify-end gap-3">
           <button
             type="button"
+            autoFocus
             onClick={onCancel}
             className="px-4 py-2 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
           >

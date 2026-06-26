@@ -282,7 +282,7 @@ export default function BalanceRefsSection() {
                     <span className="text-xs text-[#555] flex-shrink-0">€</span>
                   </div>
                   {r.mode === "aggregate" && (
-                    <span className="text-[10px] text-[#F2C48D]/70 leading-tight">solde agrégé bancaire</span>
+                    <span className="text-xs text-[#F2C48D]/70 leading-tight">solde agrégé bancaire</span>
                   )}
                   {hint && (
                     <span className="text-[10px] text-[#FF5252]/80 leading-tight">

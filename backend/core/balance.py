@@ -32,6 +32,10 @@ def compute_legacy_balance(conn: sqlite3.Connection, config_path: str) -> dict:
         reference_amount = 0.0
         reference_date = None
 
+    # config.balance.amount est stocke en EUROS ; tout le reste (transactions,
+    # soldes) est en centimes entiers. On normalise en centimes avant addition.
+    reference_cents = int(round((reference_amount or 0.0) * 100))
+
     internal = [r[0] for r in conn.execute(
         "SELECT id FROM entities WHERE type = 'internal'"
     ).fetchall()]
@@ -40,14 +44,16 @@ def compute_legacy_balance(conn: sqlite3.Connection, config_path: str) -> dict:
         ph = ",".join("?" * len(internal))
         date_clause = " AND date >= ?" if reference_date else ""
         params = list(internal) + list(internal) + ([reference_date] if reference_date else [])
+        # NULL-safe : `NULL NOT IN (...)` vaut NULL (jamais vrai). Une transaction
+        # héritée avec from/to NULL serait sinon exclue silencieusement.
         incoming = conn.execute(
             f"SELECT COALESCE(SUM(amount), 0) FROM transactions "
-            f"WHERE to_entity_id IN ({ph}) AND from_entity_id NOT IN ({ph}){date_clause}",
+            f"WHERE to_entity_id IN ({ph}) AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph})){date_clause}",
             params,
         ).fetchone()[0]
         outgoing = conn.execute(
             f"SELECT COALESCE(SUM(amount), 0) FROM transactions "
-            f"WHERE from_entity_id IN ({ph}) AND to_entity_id NOT IN ({ph}){date_clause}",
+            f"WHERE from_entity_id IN ({ph}) AND (to_entity_id IS NULL OR to_entity_id NOT IN ({ph})){date_clause}",
             params,
         ).fetchone()[0]
         total = incoming - outgoing
@@ -62,8 +68,8 @@ def compute_legacy_balance(conn: sqlite3.Connection, config_path: str) -> dict:
         ).fetchone()[0]
 
     return {
-        "balance": reference_amount + total,
-        "reference_amount": reference_amount,
+        "balance": reference_cents + total,
+        "reference_amount": reference_cents,
         "reference_date": reference_date,
         "transactions_sum": total,
     }
@@ -123,10 +129,10 @@ def _compute_aggregate_consolidated(
     subtree = _subtree_ids(conn, entity_id)
     placeholders = ",".join("?" * len(subtree))
 
-    # Entrant : to dans le sous-arbre, from hors du sous-arbre.
+    # Entrant : to dans le sous-arbre, from hors du sous-arbre (NULL-safe).
     conds_in = [
         f"to_entity_id IN ({placeholders})",
-        f"from_entity_id NOT IN ({placeholders})",
+        f"(from_entity_id IS NULL OR from_entity_id NOT IN ({placeholders}))",
     ]
     params_in = list(subtree) + list(subtree)
     if reference_date:
@@ -140,10 +146,10 @@ def _compute_aggregate_consolidated(
         params_in,
     ).fetchone()[0]
 
-    # Sortant : from dans le sous-arbre, to hors du sous-arbre.
+    # Sortant : from dans le sous-arbre, to hors du sous-arbre (NULL-safe).
     conds_out = [
         f"from_entity_id IN ({placeholders})",
-        f"to_entity_id NOT IN ({placeholders})",
+        f"(to_entity_id IS NULL OR to_entity_id NOT IN ({placeholders}))",
     ]
     params_out = list(subtree) + list(subtree)
     if reference_date:
@@ -284,7 +290,7 @@ def compute_entity_balance_for_period(
     entity_id: int,
     start_date: str,
     end_date: str,
-    opening: float = 0.0,
+    opening: int = 0,
 ) -> dict:
     """Flux réalisé et solde de clôture d'une entité sur un intervalle de dates.
 

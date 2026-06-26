@@ -106,11 +106,11 @@ Toujours lancer `check.py` apres modification d'un manifest.
 
 Pour creer un module : `python tools/create_module.py <id> --name "..." --description "..."`
 
-## 11 modules disponibles
+## 13 modules disponibles
 
 **Noyau (7) :** transactions, categories, dashboard, entities, system, attachments, backup
 
-**Metier (4) :** reimbursements, budget, tiers, reports
+**Metier (6) :** reimbursements, budget, tiers, reports, helloasso, direns
 
 ## Testing
 

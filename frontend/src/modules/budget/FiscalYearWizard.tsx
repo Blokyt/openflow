@@ -178,7 +178,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
                 </p>
               )}
               <p className="text-sm text-[#666]">
-                Tu pourras affiner les allocations à tout moment depuis l'onglet Allocation.
+                Tu pourras affiner les allocations à tout moment depuis l'onglet Catégories.
               </p>
             </div>
           )}

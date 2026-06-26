@@ -6,37 +6,42 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
 
-# Tables to export (order matters for restore — parents before children)
-EXPORT_TABLES = [
-    "entities",
-    "entity_balance_refs",
-    "categories",
-    "contacts",
-    "divisions",
-    "transactions",
-    "budgets",
-    "recurring_transactions",
-    "reimbursements",
-    "attachments",
-    "alert_rules",
-    "tax_receipts",
-    "accounts",
-    "transfers",
-]
+# Tables système (état des modules/config/dashboard, dont le suivi des migrations).
+SYSTEM_TABLES = ("_dashboard", "_config", "_modules")
+
+# Limite de taille d'un import (anti-OOM).
+MAX_IMPORT_BYTES = 200 * 1024 * 1024  # 200 Mo
 
 
 def _existing_tables(conn) -> set[str]:
     rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     return {r[0] for r in rows}
+
+
+def _data_tables(conn) -> list[str]:
+    """Toutes les tables de données utilisateur, découvertes dynamiquement.
+
+    On exclut les tables internes SQLite (`sqlite_%`) et les tables système
+    OpenFlow (`_%`). Cette découverte dynamique évite que le backup oublie des
+    tables ajoutées par de nouveaux modules (cause de pertes de données quand la
+    liste était figée). PRAGMA foreign_keys étant OFF, l'ordre n'importe pas.
+    """
+    rows = conn.execute(
+        r"SELECT name FROM sqlite_master WHERE type='table' "
+        r"AND name NOT LIKE 'sqlite\_%' ESCAPE '\' "
+        r"AND name NOT LIKE '\_%' ESCAPE '\' "
+        "ORDER BY name"
+    ).fetchall()
+    return [r[0] for r in rows]
 
 
 def _export_table(conn, table_name, existing: set[str]):
@@ -67,12 +72,12 @@ def export_backup():
         existing = _existing_tables(conn)
         data = {}
         counts = {}
-        for table in EXPORT_TABLES:
+        for table in _data_tables(conn):
             rows = _export_table(conn, table, existing)
             data[table] = rows
             if rows:
                 counts[table] = len(rows)
-        for sys_table in ("_dashboard", "_config", "_modules"):
+        for sys_table in SYSTEM_TABLES:
             data[sys_table] = _export_table(conn, sys_table, existing)
     finally:
         conn.close()
@@ -86,7 +91,7 @@ def export_backup():
 
     # Build metadata
     metadata = {
-        "exported_at": datetime.now().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "openflow_version": "1.0.0",
         "tables": counts,
         "total_records": sum(counts.values()),
@@ -114,13 +119,11 @@ def preview_backup():
     """Return metadata about what would be exported (for UI display)."""
     conn = get_conn()
     try:
-        existing = _existing_tables(conn)
         counts = {}
-        for table in EXPORT_TABLES:
-            if table in existing:
-                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                if count > 0:
-                    counts[table] = count
+        for table in _data_tables(conn):
+            count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            if count > 0:
+                counts[table] = count
     finally:
         conn.close()
 
@@ -134,6 +137,8 @@ def preview_backup():
 async def import_backup(file: UploadFile = File(...)):
     """Import a ZIP backup, replacing all existing data."""
     content = await file.read()
+    if len(content) > MAX_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail="Fichier trop volumineux (limite 200 Mo)")
 
     # Validate ZIP
     try:
@@ -168,9 +173,9 @@ async def import_backup(file: UploadFile = File(...)):
     conn = get_conn()
     try:
         existing = _existing_tables(conn)
-        for table in EXPORT_TABLES:
+        for table in _data_tables(conn):
             _restore_table(conn, table, data.get(table, []), existing)
-        for sys_table in ("_dashboard", "_config", "_modules"):
+        for sys_table in SYSTEM_TABLES:
             _restore_table(conn, sys_table, data.get(sys_table, []), existing)
         conn.commit()
     except Exception as e:
@@ -183,7 +188,7 @@ async def import_backup(file: UploadFile = File(...)):
     finally:
         conn.close()
 
-    imported_counts = {t: len(rows) for t, rows in data.items() if rows and t in EXPORT_TABLES}
+    imported_counts = {t: len(rows) for t, rows in data.items() if rows and not t.startswith("_")}
 
     return {
         "success": True,

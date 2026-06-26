@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
-import { eur } from "../utils/format";
+import { formatEuros, eurosToCents, centsToEuros } from "../utils/format";
 import BalanceRefsSection from "./BalanceRefsSection";
 
 // Category labels — modules are classified dynamically via manifest.category.
@@ -143,12 +144,14 @@ export default function Settings() {
       setRootEntityId(root.id);
       try {
         const ref = await api.getBalanceRef(root.id);
+        // reference_amount est deja en centimes (table entity_balance_refs)
         setBalanceRef({ date: ref.reference_date || "2025-01-01", amount: ref.reference_amount ?? 0 });
       } catch {
-        setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: cfg.balance.amount ?? 0 });
+        // config.balance.amount est en euros : on normalise l'etat en centimes
+        setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: Math.round((cfg.balance.amount ?? 0) * 100) });
       }
     } else {
-      setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: cfg.balance.amount ?? 0 });
+      setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: Math.round((cfg.balance.amount ?? 0) * 100) });
     }
 
     const manifestMap = new Map(discoveredMods.map((m: ModuleManifest) => [m.id, m]));
@@ -199,15 +202,16 @@ export default function Settings() {
     if (rootEntityId) {
       const payload: any = {
         reference_date: balanceRef.date,
-        reference_amount: balanceRef.amount,
+        reference_amount: balanceRef.amount, // deja en centimes
       };
-      if (field === "amount") payload.reference_amount = parseFloat(value);
+      // value est saisi en euros : on reconvertit en centimes pour l'API
+      if (field === "amount") payload.reference_amount = eurosToCents(value);
       if (field === "date") payload.reference_date = value;
       await api.updateBalanceRef(rootEntityId, payload);
     } else {
-      // Fallback to legacy config
+      // Fallback to legacy config : le config stocke des euros
       const payload: any = {};
-      if (field === "amount") payload.amount = parseFloat(value);
+      if (field === "amount") payload.amount = centsToEuros(eurosToCents(value));
       else payload[field] = value;
       await api.updateBalance(payload);
     }
@@ -295,9 +299,9 @@ export default function Settings() {
           )}
 
           {actionPath && (
-            <a href={actionPath} className="inline-flex items-center gap-1 text-xs text-[#F2C48D] hover:underline">
+            <Link to={actionPath} className="inline-flex items-center gap-1 text-xs text-[#F2C48D] hover:underline">
               Voir en action <ArrowRight size={11} />
-            </a>
+            </Link>
           )}
         </div>
 
@@ -363,8 +367,8 @@ export default function Settings() {
             <div className="border-t border-[#1a1a1a] pt-4">
               <EditableField
                 label="Solde de référence"
-                value={String(balanceRef.amount)}
-                displayValue={eur.format(balanceRef.amount)}
+                value={String(centsToEuros(balanceRef.amount))}
+                displayValue={formatEuros(balanceRef.amount)}
                 onSave={(v) => updateBalanceRef("amount", v)}
                 type="number"
               />

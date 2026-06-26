@@ -31,7 +31,7 @@ export default function BudgetManager() {
           <select
             value={selectedYear?.id ?? ""}
             onChange={(e) => setSelectedYearId(parseInt(e.target.value, 10))}
-            className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white"
+            className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
           >
             {years.map((y) => (
               <option key={y.id} value={y.id}>

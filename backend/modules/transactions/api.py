@@ -392,6 +392,28 @@ def delete_transaction(tx_id: int, force: bool = False):
             conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
         except sqlite3.OperationalError:
             pass  # module reimbursements absent : table inexistante
+        # Justificatifs liés : fichiers sur disque + lignes (la cascade FK déclarée
+        # n'est jamais exécutée car PRAGMA foreign_keys est OFF).
+        try:
+            from pathlib import Path as _Path
+            _att_dir = _Path(__file__).parent.parent.parent.parent / "data" / "attachments"
+            for att in conn.execute(
+                "SELECT filename FROM attachments WHERE transaction_id = ?", (tx_id,)
+            ).fetchall():
+                fp = _att_dir / att["filename"]
+                if fp.exists():
+                    try:
+                        fp.unlink()
+                    except OSError:
+                        pass
+            conn.execute("DELETE FROM attachments WHERE transaction_id = ?", (tx_id,))
+        except sqlite3.OperationalError:
+            pass  # module attachments absent
+        # Liens HelloAsso : évite des lignes orphelines après suppression.
+        try:
+            conn.execute("DELETE FROM helloasso_campaign_transactions WHERE transaction_id = ?", (tx_id,))
+        except sqlite3.OperationalError:
+            pass  # module helloasso absent
         conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         conn.commit()
         return {"deleted": tx_id}

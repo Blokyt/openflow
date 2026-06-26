@@ -1,4 +1,5 @@
 """Budget & Exercices API module for OpenFlow."""
+import sqlite3
 from datetime import datetime, timezone, date as _date, timedelta as _timedelta
 from typing import Optional, Literal
 
@@ -238,6 +239,22 @@ def delete_fiscal_year(fy_id: int):
             raise HTTPException(404, f"Exercice {fy_id} introuvable")
         conn.execute("DELETE FROM budget_allocations WHERE fiscal_year_id = ?", (fy_id,))
         conn.execute("DELETE FROM fiscal_year_opening_balances WHERE fiscal_year_id = ?", (fy_id,))
+        # Ne pas laisser un exercice suivant pointer vers un exercice supprimé.
+        conn.execute(
+            "UPDATE fiscal_years SET previous_fiscal_year_id = NULL WHERE previous_fiscal_year_id = ?",
+            (fy_id,),
+        )
+        # Cascade vers les modules optionnels (ignorée si le module est absent).
+        for stmt in (
+            "DELETE FROM helloasso_campaign_transactions WHERE campaign_id IN "
+            "(SELECT id FROM helloasso_campaigns WHERE fiscal_year_id = ?)",
+            "DELETE FROM helloasso_campaigns WHERE fiscal_year_id = ?",
+            "DELETE FROM report_accruals WHERE fiscal_year_id = ?",
+        ):
+            try:
+                conn.execute(stmt, (fy_id,))
+            except sqlite3.OperationalError:
+                pass
         conn.execute("DELETE FROM fiscal_years WHERE id = ?", (fy_id,))
         conn.commit()
         return {"deleted": fy_id}
@@ -313,6 +330,8 @@ def list_allocations(fy_id: int):
 def create_allocation(fy_id: int, body: AllocationCreate):
     conn = get_conn()
     try:
+        if body.amount <= 0:
+            raise HTTPException(400, "Le montant budgété doit être strictement positif (en centimes).")
         if conn.execute("SELECT id FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone() is None:
             raise HTTPException(404, f"Exercice {fy_id} introuvable")
         if conn.execute("SELECT id FROM entities WHERE id = ?", (body.entity_id,)).fetchone() is None:
@@ -623,7 +642,8 @@ def get_budget_view(fiscal_year_id: int):
             ).fetchone()
             if ob is not None:
                 return ob["amount"]
-            return round(compute_entity_balance(conn, eid, as_of_date=as_of)["balance"], 2)
+            # Solde en centimes entiers : pas de round(..., 2) qui le passerait en float.
+            return int(compute_entity_balance(conn, eid, as_of_date=as_of)["balance"])
 
         def effective_alloc(allocs, direction):
             glob = sum(a["amount"] for a in allocs if a["direction"] == direction and a["category_id"] is None)
@@ -863,7 +883,9 @@ def get_budget_category_view(fiscal_year_id: int):
             while queue:
                 parent = queue.pop()
                 for c in cat_by_id.values():
-                    if c["parent_id"] == parent:
+                    # `not in result` : garde anti-cycle (évite une boucle infinie
+                    # si des données héritées contiennent un cycle parent_id).
+                    if c["parent_id"] == parent and c["id"] not in result:
                         result.add(c["id"])
                         queue.append(c["id"])
             return list(result)
@@ -884,8 +906,8 @@ def get_budget_category_view(fiscal_year_id: int):
             ph_c = ",".join("?" * len(cat_ids))
             row = conn.execute(
                 f"""SELECT COALESCE(SUM(CASE
-                      WHEN to_entity_id IN ({ph_e}) AND from_entity_id NOT IN ({ph_e}) THEN amount
-                      WHEN from_entity_id IN ({ph_e}) AND to_entity_id NOT IN ({ph_e}) THEN -amount
+                      WHEN to_entity_id IN ({ph_e}) AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph_e})) THEN amount
+                      WHEN from_entity_id IN ({ph_e}) AND (to_entity_id IS NULL OR to_entity_id NOT IN ({ph_e})) THEN -amount
                       ELSE 0 END), 0) AS net
                     FROM transactions
                     WHERE date BETWEEN ? AND ? AND category_id IN ({ph_c})""",
@@ -927,8 +949,8 @@ def get_budget_category_view(fiscal_year_id: int):
             ph_e = ",".join("?" * len(internal_ids))
             row = conn.execute(
                 f"""SELECT COALESCE(SUM(CASE
-                      WHEN to_entity_id IN ({ph_e}) AND from_entity_id NOT IN ({ph_e}) THEN amount
-                      WHEN from_entity_id IN ({ph_e}) AND to_entity_id NOT IN ({ph_e}) THEN -amount
+                      WHEN to_entity_id IN ({ph_e}) AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph_e})) THEN amount
+                      WHEN from_entity_id IN ({ph_e}) AND (to_entity_id IS NULL OR to_entity_id NOT IN ({ph_e})) THEN -amount
                       ELSE 0 END), 0) AS net
                     FROM transactions
                     WHERE date BETWEEN ? AND ? AND category_id IS NULL""",

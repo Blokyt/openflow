@@ -31,13 +31,15 @@ export default function BudgetOverview() {
   }
   if (!view) return null;
 
-  const allocated = view.totals.allocated as number;
-  const realized = Math.abs(view.totals.realized as number);
+  // Suivi de consommation = dépenses réalisées vs budget dépenses alloué
+  // (et non le net recettes - dépenses, qui faussait le taux et les « dépassements »).
+  const allocated = view.totals.allocated_expense as number;
+  const realized = view.totals.realized_expense as number;
   const pct = allocated > 0 ? (realized / allocated) * 100 : 0;
   const barColor = budgetColor(pct);
 
   const overspending = view.entities
-    .filter((e: any) => e.allocated_total > 0 && Math.abs(e.realized_total) / e.allocated_total >= 0.95)
+    .filter((e: any) => e.allocated_expense > 0 && e.realized_expense / e.allocated_expense >= 0.95)
     .slice(0, 3);
 
   return (
@@ -54,7 +56,11 @@ export default function BudgetOverview() {
       <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden mb-3">
         <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }} />
       </div>
-      <p className="text-xs text-[#666] mb-3">Reste {formatEuros(allocated - realized)}</p>
+      {allocated - realized < 0 ? (
+        <p className="text-xs text-[#FF5252] mb-3">Dépassement {formatEuros(realized - allocated)}</p>
+      ) : (
+        <p className="text-xs text-[#666] mb-3">Reste {formatEuros(allocated - realized)}</p>
+      )}
       {overspending.length > 0 && (
         <div className="mt-2 pt-3 border-t border-[#1a1a1a]">
           <p className="text-xs text-[#666] uppercase tracking-wider mb-1.5">Top dépassements</p>
@@ -63,7 +69,7 @@ export default function BudgetOverview() {
               <div key={e.entity_id} className="flex items-center justify-between text-xs">
                 <span className="text-white">{e.entity_name}</span>
                 <span className="text-[#FF5252] font-medium">
-                  {((Math.abs(e.realized_total) / e.allocated_total) * 100).toFixed(0)} %
+                  {((e.realized_expense / e.allocated_expense) * 100).toFixed(0)} %
                 </span>
               </div>
             ))}

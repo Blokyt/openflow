@@ -169,8 +169,8 @@ def merge_contacts(source_id: int, target_id: int):
                     f"UPDATE {table} SET contact_id = ? WHERE contact_id = ?",
                     (target_id, source_id),
                 )
-            except Exception:
-                pass
+            except sqlite3.OperationalError:
+                pass  # table/colonne absente (module non installé) — pas une vraie erreur
 
         conn.execute("DELETE FROM contacts WHERE id = ?", (source_id,))
         conn.commit()
@@ -186,6 +186,13 @@ def delete_contact(contact_id: int):
         existing = conn.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,)).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Contact {contact_id} not found")
+        # Dé-référencer le contact (PRAGMA foreign_keys OFF) pour ne pas laisser
+        # de FK orphelines dans les transactions / remboursements.
+        for table in ("transactions", "reimbursements"):
+            try:
+                conn.execute(f"UPDATE {table} SET contact_id = NULL WHERE contact_id = ?", (contact_id,))
+            except sqlite3.OperationalError:
+                pass
         conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
         conn.commit()
         return {"deleted": contact_id}

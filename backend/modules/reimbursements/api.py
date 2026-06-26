@@ -91,6 +91,8 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
             400,
             "reimbursement_transaction_id ne peut pas être fourni à la création.",
         )
+    if reimbursement.amount <= 0:
+        raise HTTPException(400, "Le montant doit être strictement positif (en centimes).")
 
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
@@ -106,17 +108,21 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
                     f"La transaction {reimbursement.transaction_id} n'existe pas.",
                 )
 
-        # Auto-resolve person_name depuis contact_id
+        # Validation contact + auto-resolve person_name depuis contact_id
         person_name = reimbursement.person_name
         contact_id = reimbursement.contact_id
-        if contact_id and not person_name:
+        if contact_id is not None:
             contact = conn.execute(
                 "SELECT name FROM contacts WHERE id = ?", (contact_id,)
             ).fetchone()
-            if contact:
+            if contact is None:
+                raise HTTPException(400, f"Le contact {contact_id} n'existe pas.")
+            if not person_name:
                 person_name = contact[0]
 
-        # Déduplication : même contact_id + même amount + créé aujourd'hui + statut != rejected
+        # Déduplication : même contact_id + même amount + créé aujourd'hui + statut != rejected.
+        # (Sans contact_id, pas de déduplication : comportement volontaire — un
+        # remboursement saisi au nom libre peut légitimement être répété.)
         if contact_id is not None and not reimbursement.force:
             today = now[:10]  # YYYY-MM-DD
             existing_dup = conn.execute(

@@ -35,11 +35,14 @@ class HelloAssoClient:
     def _get_token(self) -> str:
         if self._token and time.monotonic() < self._token_expiry - 60:
             return self._token
-        resp = self._http.post(TOKEN_URL, data={
-            "grant_type": "client_credentials",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-        })
+        try:
+            resp = self._http.post(TOKEN_URL, data={
+                "grant_type": "client_credentials",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+            })
+        except httpx.RequestError as e:
+            raise HelloAssoError(f"Connexion à HelloAsso impossible : {e}")
         if resp.status_code != 200:
             raise HelloAssoError(f"Authentification HelloAsso échouée ({resp.status_code})")
         data = resp.json()
@@ -52,8 +55,11 @@ class HelloAssoClient:
 
     def _get(self, path: str, params: dict) -> dict:
         token = self._get_token()
-        resp = self._http.get(f"{API_BASE}{path}", params=params,
-                              headers={"Authorization": f"Bearer {token}"})
+        try:
+            resp = self._http.get(f"{API_BASE}{path}", params=params,
+                                  headers={"Authorization": f"Bearer {token}"})
+        except httpx.RequestError as e:
+            raise HelloAssoError(f"Connexion à HelloAsso impossible : {e}")
         if resp.status_code == 403:
             raise HelloAssoError("Accès refusé (403) : vérifie les droits de ta clé API HelloAsso")
         if resp.status_code != 200:

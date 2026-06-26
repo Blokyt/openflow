@@ -145,6 +145,7 @@ export default function CategoryManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
+  const [savingCat, setSavingCat] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   const [newName, setNewName] = useState("");
@@ -186,12 +187,16 @@ export default function CategoryManager() {
   }
 
   async function handleUpdate(id: number, name: string, parentId?: number) {
+    if (savingCat) return; // anti double-soumission
+    setSavingCat(true);
     try {
       await api.updateCategory(id, { name, parent_id: parentId });
       setEditingCat(null);
       fetchCategories();
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      setSavingCat(false);
     }
   }
 

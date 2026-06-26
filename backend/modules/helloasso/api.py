@@ -1,6 +1,7 @@
+import sqlite3
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.core.database import get_conn, row_to_dict
@@ -174,6 +175,14 @@ def sync(fiscal_year_id: int):
 def list_campaigns(fiscal_year_id: int):
     conn = get_conn()
     try:
+        try:
+            fy_exists = conn.execute(
+                "SELECT 1 FROM fiscal_years WHERE id = ?", (fiscal_year_id,)
+            ).fetchone() is not None
+        except sqlite3.OperationalError:
+            fy_exists = True  # module budget absent : pas de validation possible
+        if not fy_exists:
+            raise HTTPException(status_code=404, detail=f"Exercice fiscal {fiscal_year_id} introuvable")
         campaigns = conn.execute(
             "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? ORDER BY title",
             (fiscal_year_id,),
@@ -254,10 +263,14 @@ def add_campaign_link(campaign_id: int, payload: LinkPayload):
             if existing["campaign_id"] == campaign_id:
                 raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à cette campagne")
             raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à une autre campagne")
-        conn.execute(
-            "INSERT INTO helloasso_campaign_transactions (campaign_id, transaction_id, created_at) VALUES (?, ?, ?)",
-            (campaign_id, payload.transaction_id, _now()),
-        )
+        try:
+            conn.execute(
+                "INSERT INTO helloasso_campaign_transactions (campaign_id, transaction_id, created_at) VALUES (?, ?, ?)",
+                (campaign_id, payload.transaction_id, _now()),
+            )
+        except sqlite3.IntegrityError:
+            # Course entre deux requêtes simultanées : la contrainte UNIQUE a gagné.
+            raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à une campagne")
         conn.commit()
         return _links_payload(conn, campaign_id, camp)
     finally:
@@ -283,7 +296,7 @@ def remove_campaign_link(campaign_id: int, transaction_id: int):
 
 
 @router.get("/campaigns/{campaign_id}/suggestions")
-def campaign_suggestions(campaign_id: int, limit: int = 20):
+def campaign_suggestions(campaign_id: int, limit: int = Query(default=20, ge=1, le=200)):
     """Propose les recettes du mandat (encaissements : entité externe -> interne)
     non encore liées à une campagne, triées « la plus proche inférieurement » du
     montant restant à couvrir."""
@@ -309,7 +322,7 @@ def campaign_suggestions(campaign_id: int, limit: int = 20):
                     LEFT JOIN entities te ON te.id = t.to_entity_id
                     WHERE t.date BETWEEN ? AND ?
                       AND t.to_entity_id IN ({ph})
-                      AND t.from_entity_id NOT IN ({ph})
+                      AND (t.from_entity_id IS NULL OR t.from_entity_id NOT IN ({ph}))
                       AND t.id NOT IN (SELECT transaction_id FROM helloasso_campaign_transactions)
                     ORDER BY (t.amount > ?) ASC, ABS(t.amount - ?) ASC, t.date DESC
                     LIMIT ?""",

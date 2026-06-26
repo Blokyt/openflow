@@ -138,9 +138,6 @@ export const api = {
   getConsolidatedBalance: (id: number) => request<any>(`/entities/${id}/consolidated`),
   getBalanceRef: (id: number) => request<any>(`/entities/${id}/balance-ref`),
   updateBalanceRef: (id: number, ref: any) => request<any>(`/entities/${id}/balance-ref`, { method: "PUT", body: JSON.stringify(ref) }),
-  getWidgets: () => request<any[]>("/dashboard/widgets"),
-  getLayout: () => request<any[]>("/dashboard/layout"),
-  saveLayout: (layout: any[]) => request<any>("/dashboard/layout", { method: "PUT", body: JSON.stringify(layout) }),
   // Tiers / Contacts
   getTiers: (params?: Record<string, string | number>) => {
     const q = params ? "?" + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : "";

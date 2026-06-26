@@ -54,7 +54,7 @@ export default function HelloAssoPage() {
   const [linking, setLinking] = useState<Campaign | null>(null);
 
   const load = useCallback(async () => {
-    if (!selectedYear) return;
+    if (!selectedYear) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
@@ -95,6 +95,15 @@ export default function HelloAssoPage() {
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
         </div>
+      </div>
+    );
+  }
+
+  if (!selectedYear) {
+    return (
+      <div className="p-8">
+        <h1 className="text-3xl font-bold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>HelloAsso</h1>
+        <p className="text-sm text-[#666]">Sélectionne ou crée un exercice fiscal pour suivre tes campagnes.</p>
       </div>
     );
   }

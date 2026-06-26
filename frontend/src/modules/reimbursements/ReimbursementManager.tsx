@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, CheckCircle2, Clock, RotateCcw } from "lucide-react";
 import { api } from "../../api";
 import EmptyState from "../../core/EmptyState";
-import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
+import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 
 const BASE_URL = "/api";
 
@@ -87,13 +87,18 @@ export default function ReimbursementManager() {
   const [editing, setEditing] = useState<Reimbursement | null>(null);
   const [form, setForm] = useState<ReimbForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [txOptions, setTxOptions] = useState<TxOption[]>([]);
+  const [orgName, setOrgName] = useState("l'association");
 
   useEffect(() => {
     api.getTransactions().then((r) =>
       setTxOptions(r.items.map((t: any) => ({ id: t.id, label: t.label, date: t.date, amount: t.amount })))
     ).catch(() => {});
+    api.getConfig().then((cfg: any) => {
+      if (cfg?.entity?.name) setOrgName(cfg.entity.name);
+    }).catch(() => {});
   }, []);
 
   const fetchAll = useCallback(async () => {
@@ -173,6 +178,8 @@ export default function ReimbursementManager() {
   }
 
   async function toggleReimbursed(r: Reimbursement) {
+    if (togglingId === r.id) return; // anti double-clic
+    setTogglingId(r.id);
     const today = new Date().toISOString().slice(0, 10);
     try {
       const newStatus = r.status === "pending" ? "reimbursed" : "pending";
@@ -183,9 +190,11 @@ export default function ReimbursementManager() {
           reimbursed_date: newStatus === "reimbursed" ? today : null,
         }),
       });
-      fetchAll();
+      await fetchAll();
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -210,7 +219,7 @@ export default function ReimbursementManager() {
           onClick={openCreate}
           className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
         >
-          <Plus size={15} /> Ajouter
+          <Plus size={15} /> Nouveau remboursement
         </button>
       </div>
 
@@ -240,7 +249,7 @@ export default function ReimbursementManager() {
 
       {summary.length > 0 && (
         <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-white mb-3">Ce que le BDA doit rembourser</h2>
+          <h2 className="text-sm font-semibold text-white mb-3">Ce que {orgName} doit rembourser</h2>
           <div className="space-y-2">
             {summary.map((s) => (
               <div key={s.person_name} className="flex items-center justify-between py-1.5">
@@ -285,7 +294,7 @@ export default function ReimbursementManager() {
               />
             </div>
             <div>
-              <label className={labelClass}>Montant (EUR)</label>
+              <label className={labelClass}>Montant (€)</label>
               <input
                 type="number"
                 step="0.01"
@@ -327,7 +336,7 @@ export default function ReimbursementManager() {
                 <option value="">— Aucune —</option>
                 {txOptions.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.label} — {t.date} — {formatEuros(t.amount)}
+                    {t.label} · {formatDate(t.date)} · {formatEuros(t.amount)}
                   </option>
                 ))}
               </select>
@@ -339,7 +348,7 @@ export default function ReimbursementManager() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className={inputClass}
                 rows={2}
-                placeholder="(optionnel)"
+                placeholder="Optionnel"
               />
             </div>
             <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
@@ -411,7 +420,7 @@ export default function ReimbursementManager() {
                       <div>
                         <span className="text-white text-sm">{r.transaction_label || `#${r.transaction_id}`}</span>
                         {r.transaction_date && (
-                          <span className="text-[#555] text-xs ml-2">{r.transaction_date}</span>
+                          <span className="text-[#555] text-xs ml-2">{formatDate(r.transaction_date)}</span>
                         )}
                       </div>
                     ) : (
@@ -432,7 +441,8 @@ export default function ReimbursementManager() {
                       <span className="inline-flex items-center gap-1">
                         <button
                           onClick={() => toggleReimbursed(r)}
-                          className="p-1.5 text-[#666] hover:text-emerald-400 rounded-lg hover:bg-[#222] transition-colors"
+                          disabled={togglingId === r.id}
+                          className="p-1.5 text-[#666] hover:text-emerald-400 rounded-lg hover:bg-[#222] transition-colors disabled:opacity-50"
                           title={r.status === "pending" ? "Marquer remboursé" : "Remettre en attente"}
                         >
                           <CheckCircle2 size={14} strokeWidth={1.5} />

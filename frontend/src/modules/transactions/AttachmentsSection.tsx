@@ -43,7 +43,7 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
         className="bg-[#111] border border-[#222] rounded-2xl flex flex-col w-[90vw] h-[90vh] max-w-4xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* En-tete */}
+        {/* En-tête */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#222] flex-shrink-0">
           <span className="text-sm font-semibold text-white truncate max-w-[70%]">{item.original_name}</span>
           <div className="flex items-center gap-2 flex-shrink-0">
