@@ -447,6 +447,10 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
     last_cl = get_column_letter(last_club_col)
     total_cl = get_column_letter(total_col)
 
+    # Valeurs calculées des cellules-formules, à injecter en cache dans le .xlsx final
+    # (sinon les totaux s'affichent vides tant que le lecteur ne recalcule pas). {coord: valeur}.
+    cache: dict = {}
+
     # ── Écriture des lignes catégories (hiérarchie) ──
     for k, row in enumerate(expense_rows):
         r = EXP_FIRST + k
@@ -460,14 +464,22 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
             for idx, val in row["euros"].items():
                 ws.cell(row=r, column=2 + idx).value = val
             ws.cell(row=r, column=total_col).value = f"=SUM({first_cl}{r}:{last_cl}{r})"
+            cache[f"{total_cl}{r}"] = round(sum(row["euros"].values()), 2)  # somme horizontale
 
-    # ── Ligne TOTAL dépenses ──
+    # ── Ligne TOTAL dépenses ── (sommes verticales par club + total général)
     ws.cell(row=total_row, column=1).value = total_label
+    col_totals = {
+        i: sum(row["euros"].get(i, 0) for row in expense_rows if not row["header"])
+        for i in range(n)
+    }
+    grand_total = round(sum(col_totals.values()), 2)
     if e > 0:
         for i in range(n):
             cl = get_column_letter(2 + i)
             ws.cell(row=total_row, column=2 + i).value = f"=SUM({cl}{EXP_FIRST}:{cl}{total_row - 1})"
+            cache[f"{cl}{total_row}"] = round(col_totals[i], 2)
         ws.cell(row=total_row, column=total_col).value = f"=SUM({first_cl}{total_row}:{last_cl}{total_row})"
+        cache[f"{total_cl}{total_row}"] = grand_total
     else:
         ws.cell(row=total_row, column=total_col).value = 0
 
@@ -483,10 +495,13 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
         ws.cell(row=fin_total, column=2).value = (
             f"=SUM(B{fin_first}:B{fin_first + i_count - 1})" if i_count > 0 else 0
         )
+        if i_count > 0:
+            cache[f"B{fin_total}"] = round(sum(val for _, val in income_rows), 2)
         ws.cell(row=dep_total, column=1).value = (
             f"TOTAL DEPENSES REELLES {year_label} (cf tableau ci-dessus)".replace("  ", " ")
         )
         ws.cell(row=dep_total, column=2).value = f"={total_cl}{total_row}"
+        cache[f"B{dep_total}"] = grand_total
         # Solde bancaire à la passation : valeur saisie si disponible, sinon placeholder.
         ws.cell(row=solde_pass, column=2).value = opening if opening is not None else PLACEHOLDER
         # Solde trésorerie (à date) : estimation à partir des données de l'app.
@@ -495,6 +510,60 @@ def _fill_sheet(ws, clubs, last_club_col, total_col, expense_rows, income_rows,
         # Solde compte bancaire (à date) : non déductible (l'app ne distingue pas encore
         # compte courant / Livret A / caisse physique) -> placeholder.
         ws.cell(row=solde_date, column=2).value = PLACEHOLDER
+
+    return cache
+
+
+def _patch_sheet_xml(xml_bytes: bytes, cache: dict) -> bytes:
+    """Insère la valeur calculée `<v>` dans chaque cellule-formule listée dans `cache`
+    ({coord: valeur}), sans toucher au reste du XML (pas de re-sérialisation globale, donc
+    aucun risque de mélanger les préfixes de namespaces OOXML)."""
+    import re
+
+    text = xml_bytes.decode("utf-8")
+    for coord, val in cache.items():
+        num = repr(round(val, 2))
+        cell_re = re.compile(
+            r'(<c\b[^>]*\br="' + re.escape(coord) + r'"[^>]*>)(.*?)(</c>)', re.DOTALL)
+
+        def repl(m, num=num):
+            head, body, tail = m.group(1), m.group(2), m.group(3)
+            if "<f" not in body:  # uniquement les cellules à formule
+                return m.group(0)
+            if re.search(r"<v\s*/?>", body):
+                # openpyxl écrit un <v></v> VIDE après la formule : on le remplit.
+                body = re.sub(r"<v\s*/>|<v>.*?</v>", f"<v>{num}</v>", body, count=1, flags=re.DOTALL)
+            else:
+                body = f"{body}<v>{num}</v>"
+            return f"{head}{body}{tail}"
+
+        text = cell_re.sub(repl, text, count=1)
+    return text.encode("utf-8")
+
+
+def _inject_cached_values(xlsx_bytes: bytes, caches: dict) -> bytes:
+    """Réécrit le paquet .xlsx en stockant, à côté de chaque formule de total, sa VALEUR
+    calculée (cache `<v>`). Les totaux s'affichent alors dans tout lecteur sans recalcul, tout
+    en restant des formules `=SUM(...)` éditables. `caches = {sheet_index: {coord: valeur}}` ;
+    l'ordre des feuilles dans le zip (sheet1.xml, sheet2.xml…) suit `wb.worksheets`."""
+    import zipfile
+
+    prefix, suffix = "xl/worksheets/sheet", ".xml"
+    src = zipfile.ZipFile(io.BytesIO(xlsx_bytes))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            data = src.read(item.filename)
+            name = item.filename
+            if name.startswith(prefix) and name.endswith(suffix):
+                try:
+                    idx = int(name[len(prefix):-len(suffix)]) - 1
+                except ValueError:
+                    idx = None
+                if idx is not None and caches.get(idx):
+                    data = _patch_sheet_xml(data, caches[idx])
+            dst.writestr(item, data)
+    return out.getvalue()
 
 
 def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: str) -> bytes:
@@ -509,6 +578,7 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     # même (club, catégorie). Une recette part en financement (jamais déduite) si sa catégorie
     # est une ressource du plan comptable (subvention/cotisation/don) OU si elle dépasse la
     # dépense (net négatif) : aucune dépense n'apparaît jamais en négatif.
+    caches: dict = {}
     ws1 = wb.worksheets[0]
     fin_ids = _financement_category_ids(conn)
     exp_amounts = _get_realized_amounts(conn, bilan_fy["start"], bilan_fy["end"], all_ids, "expense")
@@ -518,7 +588,7 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     clubs1 = _active_clubs(all_clubs, net_amounts)
     last1, total1 = _layout(ws1, len(clubs1))
     bilan_year = _year_label(bilan_fy["start"], bilan_fy["end"])
-    _fill_sheet(
+    caches[0] = _fill_sheet(
         ws1, clubs1, last1, total1,
         _category_rows(conn, net_amounts, clubs1),
         _financement_rows(conn, financement, recettes_propres),
@@ -545,7 +615,7 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
         clubs2 = _active_clubs(all_clubs, bnet_amounts)
         last2, total2 = _layout(ws2, len(clubs2))
         budget_year = _year_label(budget_fy["start"], budget_fy["end"])
-        _fill_sheet(
+        caches[1] = _fill_sheet(
             ws2, clubs2, last2, total2,
             _category_rows(conn, bnet_amounts, clubs2), [],
             with_financing=False, total_label="TOTAL DEPENSES PREVISONNELLES (E)",
@@ -560,8 +630,7 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
 
     buf = io.BytesIO()
     wb.save(buf)
-    buf.seek(0)
-    return buf.read()
+    return _inject_cached_values(buf.getvalue(), caches)
 
 
 # ───────────────────────── Endpoint ────────────────────────────────────────

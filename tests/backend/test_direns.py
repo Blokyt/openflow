@@ -415,6 +415,56 @@ def test_mapped_resource_keeps_its_name_in_financing(client):
     assert _row_with_label(ws, "Recettes propres") is None
 
 
+def test_totals_are_formulas_with_cached_values(client):
+    """Les totaux restent des FORMULES (=SUM...) ET portent leur valeur calculée en cache,
+    pour s'afficher dans tout lecteur sans recalcul (avant : <v> vide -> cellules vides)."""
+    ext = _external(client)
+    a = _internal(client, "Alpha")
+    b = _internal(client, "Beta")
+    nour = _cat(client, "Nourriture")
+    mat = _cat(client, "Materiel")
+    subv = _cat(client, "Subventions")
+    fy = _fy(client)
+
+    def tx(frm, to, amount, cat):
+        client.post("/api/transactions/", json={
+            "date": "2025-10-01", "label": "x", "amount": amount,
+            "from_entity_id": frm, "to_entity_id": to, "category_id": cat,
+        })
+    tx(a["id"], ext["id"], 10000, nour["id"])   # Alpha nourriture 100 €
+    tx(b["id"], ext["id"], 5000, nour["id"])    # Beta nourriture 50 €
+    tx(a["id"], ext["id"], 3000, mat["id"])     # Alpha matériel 30 €
+    tx(ext["id"], a["id"], 20000, subv["id"])   # subvention 200 € -> Alpha
+
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    fsheet = load_workbook(io.BytesIO(r.content)).worksheets[0]                 # formules
+    vsheet = load_workbook(io.BytesIO(r.content), data_only=True).worksheets[0]  # valeurs en cache
+
+    cols = {fsheet.cell(row=5, column=c).value: c for c in range(2, 7)
+            if fsheet.cell(row=5, column=c).value}
+    ca, cb = cols["Alpha"], cols["Beta"]
+
+    # Somme horizontale (colonne TOTAL) d'une ligne catégorie = 100 + 50.
+    rn = _row_with_label(fsheet, "Nourriture")
+    assert str(fsheet.cell(row=rn, column=6).value).startswith("=SUM")
+    assert vsheet.cell(row=rn, column=6).value == 150.0
+
+    # Ligne TOTAL : sommes verticales par club + total général.
+    rt = _row_with_label(fsheet, "TOTAL DEPENSES REELLES")
+    assert str(fsheet.cell(row=rt, column=6).value).startswith("=SUM")
+    assert vsheet.cell(row=rt, column=ca).value == 130.0   # Alpha 100 + 30
+    assert vsheet.cell(row=rt, column=cb).value == 50.0    # Beta 50
+    assert vsheet.cell(row=rt, column=6).value == 180.0    # total général
+
+    # Total financement + rappel de la dépense réelle en bas (formule + valeur).
+    rf = _row_with_label(fsheet, "TOTAL FINANCEMENT RECU 2025-2026")
+    assert str(fsheet.cell(row=rf, column=2).value).startswith("=SUM")
+    assert vsheet.cell(row=rf, column=2).value == 200.0
+    rr = _row_with_label(fsheet, "TOTAL DEPENSES REELLES 2025-2026 (cf tableau ci-dessus)")
+    assert str(fsheet.cell(row=rr, column=2).value).startswith("=")
+    assert vsheet.cell(row=rr, column=2).value == 180.0
+
+
 def test_many_categories_expand_rows(client):
     """Plus de 26 catégories : le bloc s'agrandit, toutes les lignes présentes."""
     ext = _external(client)
