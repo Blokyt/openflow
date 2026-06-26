@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, type ReactElement } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
 import { Category } from "../../../types";
-import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME } from "../../../utils/format";
+import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME, COLOR_BUDGET_SEEDED, COLOR_BUDGET_MODIFIED } from "../../../utils/format";
 import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 
 interface Props { year: FiscalYear | null }
@@ -249,9 +249,9 @@ export default function OverviewTab({ year }: Props) {
           <thead>
             <tr className="border-b border-[#1a1a1a]">
               <Th align="left">Entité / Catégorie</Th>
-              <Th color={EXPENSE}>Budget Dépenses</Th>
+              <Th>Budget Dépenses</Th>
               <Th color={EXPENSE}>Réalisé Dépenses</Th>
-              <Th color={INCOME}>Budget Recettes</Th>
+              <Th>Budget Recettes</Th>
               <Th color={INCOME}>Réalisé Recettes</Th>
               <Th>Solde</Th>
               {showN1Cols && (
@@ -273,9 +273,9 @@ export default function OverviewTab({ year }: Props) {
           <tfoot>
             <tr className="border-t-2 border-[#222] bg-[#0a0a0a]">
               <td className="px-3 py-3 font-semibold text-white">Total</td>
-              <td className="px-3 py-3 text-right font-semibold" style={{ color: EXPENSE }}>{formatEuros(t.allocated_expense)}</td>
+              <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(t.allocated_expense)}</td>
               <td className="px-3 py-3 text-right font-semibold" style={{ color: EXPENSE }}>{formatEuros(t.realized_expense)}</td>
-              <td className="px-3 py-3 text-right font-semibold" style={{ color: INCOME }}>{formatEuros(t.allocated_income)}</td>
+              <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(t.allocated_income)}</td>
               <td className="px-3 py-3 text-right font-semibold" style={{ color: INCOME }}>{formatEuros(t.realized_income)}</td>
               <td className={`px-3 py-3 text-right font-bold ${t.realized_net >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>{formatEuros(t.realized_net)}</td>
               {showN1Cols && (
@@ -288,6 +288,25 @@ export default function OverviewTab({ year }: Props) {
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#666]">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_BUDGET_SEEDED }} />
+          Budget hérité du mandat précédent
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_BUDGET_MODIFIED }} />
+          Budget modifié ce mandat
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_EXPENSE }} />
+          Dépense réelle
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: COLOR_INCOME }} />
+          Recette réelle
+        </span>
       </div>
     </div>
   );
@@ -392,7 +411,9 @@ function EditableBudget({
 }: { year: FiscalYear; node: any; cat: any; direction: "expense" | "income"; onSaved: () => void }) {
   const allocId: number | null = direction === "expense" ? cat.allocation_id_expense : cat.allocation_id_income;
   const value: number = direction === "expense" ? cat.allocated_expense : cat.allocated_income;
-  const color = direction === "expense" ? EXPENSE : INCOME;
+  const origin: string | null = direction === "expense" ? cat.origin_expense : cat.origin_income;
+  // Budget : doré s'il a été saisi/modifié ce mandat, gris tant qu'il est un placeholder hérité.
+  const color = origin === "manual" ? COLOR_BUDGET_MODIFIED : COLOR_BUDGET_SEEDED;
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState("");
   const [busy, setBusy] = useState(false);

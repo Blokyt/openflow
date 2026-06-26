@@ -676,3 +676,74 @@ def test_seed_from_realized_no_previous_returns_400(client):
     r = client.post(f"/api/budget/fiscal-years/{fy['id']}/seed-from-realized")
     assert r.status_code == 400
     assert "précédent" in r.json()["detail"].lower()
+
+
+# ─── Origine des allocations (couleur gris « hérité » vs doré « modifié ») ────
+
+def test_create_allocation_default_origin_manual(client):
+    """Une allocation saisie via l'UI est 'manual' par défaut (affichée en doré)."""
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c = client.post("/api/categories/", json={"name": "Nourriture"}).json()
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                    json={"entity_id": e["id"], "category_id": c["id"], "amount": 10000, "direction": "expense"})
+    assert r.status_code == 201, r.text
+    assert r.json()["origin"] == "manual"
+
+
+def test_create_allocation_seeded_origin_preserved(client):
+    """La copie d'exercice passe origin='seeded' : l'allocation reste un placeholder gris."""
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c = client.post("/api/categories/", json={"name": "Nourriture"}).json()
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                    json={"entity_id": e["id"], "category_id": c["id"], "amount": 10000,
+                          "direction": "expense", "origin": "seeded"})
+    assert r.status_code == 201, r.text
+    assert r.json()["origin"] == "seeded"
+
+
+def test_view_exposes_origin_on_leaf(client):
+    """La vue remonte origin_expense / origin_income sur les feuilles pour la couleur."""
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c = client.post("/api/categories/", json={"name": "Nourriture"}).json()
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": e["id"], "category_id": c["id"], "amount": 10000, "direction": "expense"})
+    data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    club = _find_entity(data, e["id"])
+    node = next(n for n in club["categories"] if n["category_id"] == c["id"])
+    assert node["origin_expense"] == "manual"
+    assert node["origin_income"] is None
+
+
+def test_update_allocation_amount_flips_origin_to_manual(client_and_db):
+    """Modifier le montant d'un placeholder hérité le valide -> origin passe en 'manual'."""
+    client, db_path = client_and_db
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    c = client.post("/api/categories/", json={"name": "Nourriture"}).json()
+    alloc = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                        json={"entity_id": e["id"], "category_id": c["id"], "amount": 10000,
+                              "direction": "expense", "origin": "seeded"}).json()
+    assert alloc["origin"] == "seeded"
+    r = client.put(f"/api/budget/allocations/{alloc['id']}", json={"amount": 12000})
+    assert r.status_code == 200, r.text
+    assert r.json()["origin"] == "manual"
+
+
+def test_seed_from_realized_marks_seeded(client):
+    """Le pré-remplissage depuis le réel N-1 crée des placeholders 'seeded' (gris)."""
+    fy_prev = _make_fy(client, "2024-2025", "2024-09-01")
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    c = client.post("/api/categories/", json={"name": "Nourriture"}).json()
+    client.post("/api/transactions/", json={"date": "2024-10-15", "label": "dep", "amount": 10000,
+                                             "from_entity_id": e["id"], "to_entity_id": ext["id"], "category_id": c["id"]})
+    _close_fy(client, fy_prev["id"], "2025-08-31")
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+    r = client.post(f"/api/budget/fiscal-years/{fy['id']}/seed-from-realized")
+    assert r.status_code == 200, r.text
+    allocs = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    assert allocs, "le seed doit créer des allocations"
+    assert all(a["origin"] == "seeded" for a in allocs)

@@ -241,6 +241,83 @@ def test_bank_balance_non_derivable_is_placeholder(client):
     assert ws.cell(row=row, column=2).value == "à compléter"
 
 
+# ─── Dépense nette (recettes propres déduites) + subventions ────────────────
+
+def test_associated_income_deducted_from_expense(client):
+    """Une recette propre (billetterie) réduit la dépense de la même catégorie/club."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    cat = _cat(client, "Soirée")
+    fy = _fy(client)
+    # Dépense 800 €
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Coûts soirée", "amount": 80000,
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
+    })
+    # Recette propre (billetterie) 600 € -> dépense nette = 200 €
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Billetterie", "amount": 60000,
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "Soirée")
+    assert row is not None
+    assert ws.cell(row=row, column=2).value == 200.0
+    # Aucune subvention -> total financement nul.
+    fin = _row_with_label(ws, "TOTAL FINANCEMENT RECU 2025-2026")
+    assert fin is not None
+    assert ws.cell(row=fin, column=2).value in (0, None)
+
+
+def test_subvention_stays_in_financing_not_deducted(client):
+    """Une subvention (catégorie reconnue) reste en financement et n'est PAS déduite."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    dep = _cat(client, "Nourriture")
+    subv = _cat(client, "Subvention DirENS")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Repas", "amount": 50000,  # 500 € dépense
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": dep["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Subvention", "amount": 30000,  # 300 € subvention
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": subv["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    # La dépense reste à 500 € (subvention non déduite).
+    drow = _row_with_label(ws, "Nourriture")
+    assert drow is not None
+    assert ws.cell(row=drow, column=2).value == 500.0
+    # La subvention apparaît en financement à 300 €.
+    srow = _row_with_label(ws, "Subvention DirENS")
+    assert srow is not None
+    assert ws.cell(row=srow, column=2).value == 300.0
+
+
+def test_net_negative_category_shown_negative(client):
+    """Catégorie bénéficiaire (recette propre > dépense) -> dépense nette négative."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    cat = _cat(client, "Gala")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Coûts", "amount": 30000,  # 300 €
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Entrées", "amount": 50000,  # 500 € billetterie
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "Gala")
+    assert row is not None
+    assert ws.cell(row=row, column=2).value == -200.0
+
+
 def test_many_categories_expand_rows(client):
     """Plus de 26 catégories : le bloc s'agrandit, toutes les lignes présentes."""
     ext = _external(client)

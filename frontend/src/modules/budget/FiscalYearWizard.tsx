@@ -59,6 +59,8 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
               direction: a.direction,
               amount: a.amount,
               notes: a.notes,
+              // Copie d'un exercice précédent = placeholder hérité (gris tant que non modifié).
+              origin: "seeded",
             })
           )
         );

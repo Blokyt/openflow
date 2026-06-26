@@ -60,6 +60,9 @@ class AllocationCreate(BaseModel):
     direction: Literal["expense", "income"] = "expense"
     amount: int  # centimes entiers (cohérent avec le stockage budget_allocations)
     notes: str = ""
+    # 'manual' = saisie utilisateur (affichée en doré) ; 'seeded' = pré-remplie depuis
+    # un exercice précédent (copie), affichée en gris tant qu'elle n'a pas été modifiée.
+    origin: Literal["manual", "seeded"] = "manual"
 
 
 class AllocationUpdate(BaseModel):
@@ -354,9 +357,9 @@ def create_allocation(fy_id: int, body: AllocationCreate):
         now = _now()
         cur = conn.execute(
             """INSERT INTO budget_allocations
-               (fiscal_year_id, entity_id, category_id, direction, amount, notes, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (fy_id, body.entity_id, body.category_id, body.direction, body.amount, body.notes, now, now),
+               (fiscal_year_id, entity_id, category_id, direction, amount, notes, origin, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (fy_id, body.entity_id, body.category_id, body.direction, body.amount, body.notes, body.origin, now, now),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (new_id,)).fetchone()
@@ -378,6 +381,9 @@ def update_allocation(alloc_id: int, body: AllocationUpdate):
         updates = body.model_dump(exclude_unset=True)
         if not updates:
             return old_data
+        # Modifier le montant d'une allocation = la valider ce mandat -> passe en 'manual' (doré).
+        if "amount" in updates:
+            updates["origin"] = "manual"
         now = _now()
         set_clause = ", ".join(f"{k} = ?" for k in updates) + ", updated_at = ?"
         conn.execute(f"UPDATE budget_allocations SET {set_clause} WHERE id = ?",
@@ -450,8 +456,8 @@ def seed_budget_from_realized(fy_id: int):
                     continue
                 conn.execute(
                     """INSERT INTO budget_allocations
-                       (fiscal_year_id, entity_id, category_id, direction, amount, notes, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (fiscal_year_id, entity_id, category_id, direction, amount, notes, origin, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, 'seeded', ?, ?)""",
                     (fy_id, entity_id, category_id, direction, amount, "", now, now),
                 )
                 existing.add((entity_id, category_id, direction))
@@ -617,7 +623,7 @@ def get_budget_view(fiscal_year_id: int):
         # Allocations groupées par entité.
         allocs_by_entity: dict = {}
         for a in conn.execute(
-            """SELECT a.id, a.entity_id, a.category_id, a.direction, a.amount, c.name AS category_name
+            """SELECT a.id, a.entity_id, a.category_id, a.direction, a.amount, a.origin, c.name AS category_name
                FROM budget_allocations a
                LEFT JOIN categories c ON a.category_id = c.id
                WHERE a.fiscal_year_id = ?""",
@@ -673,6 +679,8 @@ def get_budget_view(fiscal_year_id: int):
                     "name": name,
                     "allocation_id_expense": exp["id"] if exp else None,
                     "allocation_id_income": inc["id"] if inc else None,
+                    "origin_expense": exp["origin"] if exp else None,
+                    "origin_income": inc["origin"] if inc else None,
                     "allocated_expense": exp["amount"] if exp else 0,
                     "allocated_income": inc["amount"] if inc else 0,
                     "realized_expense": sn["expense"],
@@ -694,6 +702,8 @@ def get_budget_view(fiscal_year_id: int):
                         "name": cat_meta.get(cid, {}).get("name") or "— Catégorie supprimée —",
                         "allocation_id_expense": None,
                         "allocation_id_income": None,
+                        "origin_expense": None,
+                        "origin_income": None,
                         "allocated_expense": 0,
                         "allocated_income": 0,
                         "realized_expense": 0,
@@ -735,6 +745,9 @@ def get_budget_view(fiscal_year_id: int):
                     "allocation_id": o["allocation_id_expense"] or o["allocation_id_income"],
                     "allocation_id_expense": o["allocation_id_expense"],
                     "allocation_id_income": o["allocation_id_income"],
+                    # Origine du budget (feuilles uniquement) : 'seeded' -> gris, 'manual' -> doré.
+                    "origin_expense": o["origin_expense"],
+                    "origin_income": o["origin_income"],
                     "allocated": a_exp,            # legacy (dépense)
                     "allocated_expense": a_exp,
                     "allocated_income": a_inc,

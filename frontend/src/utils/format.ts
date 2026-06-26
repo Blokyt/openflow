@@ -20,6 +20,11 @@ export function centsToEuros(cents: number | null | undefined): number {
 export const COLOR_EXPENSE = "#FF5252";
 export const COLOR_INCOME = "#00C853";
 
+/** Couleurs du budget prévisionnel : gris tant qu'il est un placeholder hérité du mandat
+ *  précédent, doré dès qu'il a été saisi/modifié ce mandat. Seul le réel reste rouge/vert. */
+export const COLOR_BUDGET_SEEDED = "#777";
+export const COLOR_BUDGET_MODIFIED = "#F2C48D";
+
 /** Formate une date ISO (YYYY-MM-DD) au format français DD/MM/YYYY. Renvoie "—" si absente. */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";

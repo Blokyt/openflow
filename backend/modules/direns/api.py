@@ -55,6 +55,9 @@ SOLDE_TRES = 41        # SOLDE TRESORERIE (A date)
 SOLDE_DATE = 42        # SOLDE COMPTE BANCAIRE (A date)
 LABEL_NONE = "Non catégorisé"
 PLACEHOLDER = "à compléter"   # cellules non déductibles des données (à saisir à la main)
+# Repli pour classer une catégorie de recette en subvention quand elle n'est pas
+# explicitement mappée dans le plan comptable du module reports (compte 74).
+SUBVENTION_KEYWORDS = ("subvention", "subv")
 HEADER_TPL_ROW = 7     # ligne modèle « ACHAT » (en-tête gras)
 DATA_TPL_ROW = 8       # ligne modèle de saisie (normale)
 
@@ -100,6 +103,49 @@ def _categories(conn) -> dict:
     return {r["id"]: dict(r) for r in conn.execute(
         "SELECT id, name, parent_id FROM categories"
     ).fetchall()}
+
+
+def _subvention_category_ids(conn) -> set:
+    """Catégories considérées comme subventions : elles RESTENT en financement et ne sont
+    JAMAIS déduites des dépenses (contrairement à la billetterie/ventes).
+
+    Source de vérité : le plan comptable du module reports (compte 74 « Subventions »),
+    via `category_account_map`. Repli par mot-clé du nom pour les catégories non mappées.
+    Renvoie un set vide si le module reports n'est pas installé (les tables manquent) :
+    dans ce cas tout repose sur le repli mot-clé.
+    """
+    subv: set = set()
+    mapped: set = set()
+    try:
+        for r in conn.execute(
+            """SELECT m.category_id AS cid
+               FROM category_account_map m
+               JOIN report_accounts a ON a.id = m.account_id
+               WHERE a.code = '74'"""
+        ).fetchall():
+            subv.add(r["cid"])
+        mapped = {r["category_id"] for r in conn.execute(
+            "SELECT category_id FROM category_account_map"
+        ).fetchall()}
+    except sqlite3.OperationalError:
+        subv, mapped = set(), set()
+    # Repli mot-clé : uniquement pour les catégories non explicitement mappées (le mapping
+    # comptable, s'il existe, fait foi et peut volontairement exclure une catégorie « subv »).
+    for cid, c in _categories(conn).items():
+        if cid in mapped:
+            continue
+        name = (c.get("name") or "").lower()
+        if any(k in name for k in SUBVENTION_KEYWORDS):
+            subv.add(cid)
+    return subv
+
+
+def _net_expenses(exp_amounts: dict, propre: dict) -> dict:
+    """Dépense nette par (club, catégorie) = dépense brute − recettes propres de la MÊME
+    (club, catégorie). Union des clés : une catégorie nette-négative (recette propre >
+    dépense, ex. événement bénéficiaire) apparaît en négatif et réduit le total."""
+    keys = set(exp_amounts) | set(propre)
+    return {k: exp_amounts.get(k, 0) - propre.get(k, 0) for k in keys}
 
 
 def _get_expenses(conn, start: str, end: str, club_ids: list) -> dict:
@@ -197,27 +243,69 @@ def _category_rows(conn, amounts: dict, clubs: list) -> list:
     return rows
 
 
-def _income_rows(conn, start: str, end: str, club_ids: list) -> list:
-    """Lignes de financement [(label, euros)] : recettes réelles par catégorie."""
+def _get_income_split(conn, start: str, end: str, club_ids: list, subv_ids: set) -> tuple:
+    """Sépare les recettes réelles entrantes en deux dicts :
+      - propre {(club_id, cat_id): cents} : recettes propres (billetterie, ventes…), À DÉDUIRE
+        des dépenses de la même (club, catégorie).
+      - subvention {cat_id: cents} : subventions, conservées telles quelles en financement.
+    Une recette sans catégorie est traitée comme propre (déduite du « Non catégorisé »).
+    """
     if not club_ids:
-        return []
+        return {}, {}
     ph = ",".join("?" * len(club_ids))
     rows = conn.execute(
-        f"""SELECT category_id AS cid, SUM(amount) AS total
+        f"""SELECT to_entity_id AS eid, category_id AS cid, SUM(amount) AS total
             FROM transactions
             WHERE date BETWEEN ? AND ?
               AND to_entity_id IN ({ph})
               AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph}))
-            GROUP BY category_id""",
+            GROUP BY to_entity_id, category_id""",
         [start, end] + club_ids + club_ids,
     ).fetchall()
-    names = _categories(conn)
-    out = []
+    return _partition_income(rows, subv_ids)
+
+
+def _get_budget_income_split(conn, fy_id: int, club_ids: list, subv_ids: set) -> tuple:
+    """Idem `_get_income_split` mais sur le prévisionnel (budget_allocations, sens 'income')."""
+    if not club_ids:
+        return {}, {}
+    ph = ",".join("?" * len(club_ids))
+    try:
+        rows = conn.execute(
+            f"""SELECT entity_id AS eid, category_id AS cid, SUM(amount) AS total
+                FROM budget_allocations
+                WHERE fiscal_year_id = ? AND direction = 'income' AND entity_id IN ({ph})
+                GROUP BY entity_id, category_id""",
+            [fy_id] + club_ids,
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}, {}
+    return _partition_income(rows, subv_ids)
+
+
+def _partition_income(rows, subv_ids: set) -> tuple:
+    """Répartit des lignes (eid, cid, total) entre recettes propres et subventions."""
+    propre: dict = {}
+    subvention: dict = {}
     for r in rows:
         if not r["total"]:
             continue
-        label = (names.get(r["cid"], {}).get("name") if r["cid"] is not None else None) or LABEL_NONE
-        out.append((label, round(r["total"] / 100, 2)))
+        if r["cid"] in subv_ids:
+            subvention[r["cid"]] = subvention.get(r["cid"], 0) + r["total"]
+        else:
+            propre[(r["eid"], r["cid"])] = propre.get((r["eid"], r["cid"]), 0) + r["total"]
+    return propre, subvention
+
+
+def _subvention_rows(conn, subvention: dict) -> list:
+    """Lignes de la section financement [(label, euros)] : uniquement les subventions."""
+    names = _categories(conn)
+    out = []
+    for cid, cents in subvention.items():
+        if not cents:
+            continue
+        label = (names.get(cid, {}).get("name") if cid is not None else None) or LABEL_NONE
+        out.append((label, round(cents / 100, 2)))
     out.sort(key=lambda x: (x[0] == LABEL_NONE, x[0].lower()))
     return out
 
@@ -418,15 +506,21 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     all_ids = [c["id"] for c in all_clubs]
 
     # ── Onglet 1 : bilan financier (réalisé) ──
+    # Dépense réelle = dépense brute − recettes propres (billetterie/ventes) de la même
+    # (club, catégorie). Les subventions (compte 74) ne sont PAS déduites : elles restent
+    # listées telles quelles dans la section financement.
     ws1 = wb.worksheets[0]
+    subv_ids = _subvention_category_ids(conn)
     exp_amounts = _get_expenses(conn, bilan_fy["start"], bilan_fy["end"], all_ids)
-    clubs1 = _active_clubs(all_clubs, exp_amounts)
+    propre, subvention = _get_income_split(conn, bilan_fy["start"], bilan_fy["end"], all_ids, subv_ids)
+    net_amounts = _net_expenses(exp_amounts, propre)
+    clubs1 = _active_clubs(all_clubs, net_amounts)
     last1, total1 = _layout(ws1, len(clubs1))
     bilan_year = _year_label(bilan_fy["start"], bilan_fy["end"])
     _fill_sheet(
         ws1, clubs1, last1, total1,
-        _category_rows(conn, exp_amounts, clubs1),
-        _income_rows(conn, bilan_fy["start"], bilan_fy["end"], all_ids),
+        _category_rows(conn, net_amounts, clubs1),
+        _subvention_rows(conn, subvention),
         with_financing=True, total_label="TOTAL DEPENSES REELLES", year_label=bilan_year,
         opening=_opening_explicit(conn, bilan_fy["id"], all_ids),
         current=_get_current_total(conn, all_ids),
@@ -439,15 +533,20 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
         pass
 
     # ── Onglet 2 : budget prévisionnel ──
+    # Même logique de dépense nette que le bilan (recettes propres prévues déduites des
+    # dépenses prévues). Le template du prévisionnel n'a pas de section financement
+    # (il s'arrête au TOTAL), donc les subventions prévues ne sont pas listées ici.
     if budget_fy:
         ws2 = wb.worksheets[1]
         bexp_amounts = _get_budget_expenses(conn, budget_fy["id"], all_ids)
-        clubs2 = _active_clubs(all_clubs, bexp_amounts)
+        bpropre, _bsubv = _get_budget_income_split(conn, budget_fy["id"], all_ids, subv_ids)
+        bnet_amounts = _net_expenses(bexp_amounts, bpropre)
+        clubs2 = _active_clubs(all_clubs, bnet_amounts)
         last2, total2 = _layout(ws2, len(clubs2))
         budget_year = _year_label(budget_fy["start"], budget_fy["end"])
         _fill_sheet(
             ws2, clubs2, last2, total2,
-            _category_rows(conn, bexp_amounts, clubs2), [],
+            _category_rows(conn, bnet_amounts, clubs2), [],
             with_financing=False, total_label="TOTAL DEPENSES PREVISONNELLES (E)",
             year_label=budget_year,
         )

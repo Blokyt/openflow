@@ -147,4 +147,15 @@ migrations = {
         "ALTER TABLE budget_allocations_v3 RENAME TO budget_allocations",
         "CREATE INDEX IF NOT EXISTS idx_alloc_direction ON budget_allocations(fiscal_year_id, entity_id, direction)",
     ],
+    "1.8.0": [
+        # Origine d'une allocation, pour la lisibilité du tableau budget :
+        #   'seeded' = héritée / pré-remplie (placeholder du mandat précédent) -> affichée en gris.
+        #   'manual' = saisie ou modifiée ce mandat (budget validé)             -> affichée en jaune doré.
+        # Le seed depuis le réel et la copie d'exercice écrivent 'seeded' ; toute création ou
+        # modification de montant via l'UI écrit 'manual'.
+        "ALTER TABLE budget_allocations ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'",
+        # Rétro-marque l'existant en 'seeded' : tout le budget actuel devient « placeholder à
+        # valider » au démarrage du système ; chaque case éditée repassera ensuite en doré.
+        "UPDATE budget_allocations SET origin = 'seeded'",
+    ],
 }
