@@ -362,12 +362,14 @@ def _row_with_label_after(ws, label, after_row, max_row=60):
     return None
 
 
-def test_net_negative_income_moves_to_financing(client):
-    """Catégorie bénéficiaire (recette > dépense) : la recette part en financement et la
-    dépense est affichée brute, jamais en négatif."""
+def test_net_negative_income_aggregated_as_recettes_propres(client):
+    """Catégorie d'activité bénéficiaire (recette > dépense) NON mappée comme ressource :
+    la dépense reste affichée brute (jamais en négatif), l'excédent part dans la ligne
+    agrégée « Recettes propres » et JAMAIS sous le nom de la catégorie (pas de fausse
+    subvention « Gala »/« Théâtre »…)."""
     ext = _external(client)
     club = _internal(client, "Club")
-    cat = _cat(client, "Gala")  # nom neutre, non mappé : seul le signe du net décide
+    cat = _cat(client, "Gala")  # nom neutre, non mappé : recette d'activité, pas une ressource
     fy = _fy(client)
     client.post("/api/transactions/", json={
         "date": "2025-10-01", "label": "Coûts", "amount": 30000,  # 300 €
@@ -379,15 +381,38 @@ def test_net_negative_income_moves_to_financing(client):
     })
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
     ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
-    # Dépense affichée brute (300 €), pas en négatif.
-    dep_row = _row_with_label(ws, "Gala")
-    assert dep_row is not None
-    assert ws.cell(row=dep_row, column=2).value == 300.0
-    # La recette (500 €) part en section financement (après le total des dépenses).
     total_row = _row_with_label(ws, "TOTAL DEPENSES REELLES")
-    fin_row = _row_with_label_after(ws, "Gala", total_row)
-    assert fin_row is not None
-    assert ws.cell(row=fin_row, column=2).value == 500.0
+    # Dépense affichée brute (300 €), pas en négatif, AVANT le total.
+    dep_row = _row_with_label(ws, "Gala")
+    assert dep_row is not None and dep_row < total_row
+    assert ws.cell(row=dep_row, column=2).value == 300.0
+    # « Gala » n'apparaît jamais comme un libellé de financement (après le total).
+    assert _row_with_label_after(ws, "Gala", total_row) is None
+    # L'excédent (500 €) figure sous la ligne agrégée « Recettes propres ».
+    rp_row = _row_with_label_after(ws, "Recettes propres", total_row)
+    assert rp_row is not None
+    assert ws.cell(row=rp_row, column=2).value == 500.0
+
+
+def test_mapped_resource_keeps_its_name_in_financing(client):
+    """Une vraie ressource mappée (compte 74) bénéficiaire garde son NOM en financement
+    (et n'est pas noyée dans « Recettes propres »)."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    subv = _cat(client, "Aide région")  # nom neutre : seul le mapping 74 la qualifie
+    _map_category_to_account(client, subv["id"], "74")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Subvention région", "amount": 40000,  # 400 €
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": subv["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    total_row = _row_with_label(ws, "TOTAL DEPENSES REELLES")
+    srow = _row_with_label_after(ws, "Aide région", total_row)
+    assert srow is not None
+    assert ws.cell(row=srow, column=2).value == 400.0
+    assert _row_with_label(ws, "Recettes propres") is None
 
 
 def test_many_categories_expand_rows(client):
