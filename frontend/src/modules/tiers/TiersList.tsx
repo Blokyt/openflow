@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users, GitMerge, AlertTriangle } from "lucide-react";
 import EmptyState from "../../core/EmptyState";
-import { formatEuros } from "../../utils/format";
+import { formatEuros, formatDate } from "../../utils/format";
 
 const BASE_URL = "/api";
 const PAGE_SIZE = 80;
@@ -233,7 +233,7 @@ export default function TiersList() {
           <p className="text-sm text-[#666] mt-1">Clients, fournisseurs, membres, sponsors.</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
-          <Plus size={15} /> Ajouter
+          <Plus size={15} /> Nouveau contact
         </button>
       </div>
 
@@ -311,7 +311,7 @@ export default function TiersList() {
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} rows={3} placeholder="(optionnel)" />
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} rows={3} placeholder="Optionnel" />
             </div>
             <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
               <button type="button" onClick={cancelForm} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
@@ -453,9 +453,9 @@ export default function TiersList() {
                     <div key={t.id} className="bg-[#111] border border-[#222] rounded-xl p-3 flex items-center justify-between">
                       <div>
                         <div className="text-sm text-white">{t.label || "—"}</div>
-                        <div className="text-xs text-[#666]">{t.date}</div>
+                        <div className="text-xs text-[#666]">{formatDate(t.date)}</div>
                       </div>
-                      <div className={`text-sm font-semibold ${t.amount >= 0 ? "text-emerald-400" : "text-[#FF5252]"}`}>
+                      <div className="text-sm font-semibold text-[#B0B0B0]">
                         {formatEuros(t.amount)}
                       </div>
                     </div>

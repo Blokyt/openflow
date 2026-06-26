@@ -386,7 +386,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
 
       {contacts.length > 0 && (
         <div>
-          <label className={labelClass}>Payeur (avance de frais)</label>
+          <label className={labelClass}>Avance de frais (payée par)</label>
           <select value={payerContactId} onChange={(e) => setPayerContactId(e.target.value)} className={inputClass}>
             <option value="">— Aucun remboursement —</option>
             {contacts.map((c) => (
@@ -405,7 +405,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          placeholder="Optionnel..."
+          placeholder="Optionnel"
           className={inputClass}
         />
       </div>

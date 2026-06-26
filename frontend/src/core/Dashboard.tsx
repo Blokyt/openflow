@@ -8,7 +8,7 @@ import { useFiscalYear } from "./FiscalYearContext";
 import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
 import OnboardingChecklist from "./OnboardingChecklist";
 import BudgetOverview from "../modules/budget/widgets/BudgetOverview";
-import { formatEuros, txTone } from "../utils/format";
+import { formatEuros, formatDate, txTone, COLOR_EXPENSE, COLOR_INCOME } from "../utils/format";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -128,7 +128,7 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
           />
           <YAxis
             ticks={ticks}
-            tickFormatter={(v: number) => (v / 100).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}
+            tickFormatter={(v: number) => `${(v / 100).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`}
             tick={{ fill: "#666", fontSize: 10 }}
             axisLine={false}
             tickLine={false}
@@ -194,7 +194,7 @@ function RecentTransactions({ txs }: { txs: RecentTx[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-white font-medium truncate">{t.label}</p>
                 <p className="text-xs text-[#666]">
-                  {t.date} · {t.from_entity_name || "—"} → {t.to_entity_name || "—"}
+                  {formatDate(t.date)} · {t.from_entity_name || "—"} → {t.to_entity_name || "—"}
                 </p>
               </div>
               {(() => {
@@ -282,7 +282,7 @@ export default function Dashboard() {
         {summary.reference_date && summary.reference_amount !== undefined && (
           <p className="mt-3 text-sm text-[#666]">
             Référence au{" "}
-            <span className="text-[#B0B0B0] font-medium">{summary.reference_date}</span>{" "}:{" "}
+            <span className="text-[#B0B0B0] font-medium">{formatDate(summary.reference_date)}</span>{" "}:{" "}
             <span className="text-[#B0B0B0] font-medium">{formatEuros(summary.reference_amount)}</span>
           </p>
         )}

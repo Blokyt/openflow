@@ -51,7 +51,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   categories: "/categories",
   entities: "/entities",
   budget: "/budget",
-  tiers: "/tiers",
+  tiers: "/contacts",
   reimbursements: "/reimbursements",
   reports: "/reports",
   backup: "/backup",
@@ -232,7 +232,7 @@ function FiscalYearSelector() {
 
 // ─── Nav item component ─────────────────────────────────────────────────────
 
-function NavItem({ to, label, icon: Icon, badge }: { to: string; label: string; icon: any; badge?: number }) {
+function NavItem({ to, label, icon: Icon, badge, badgeTitle }: { to: string; label: string; icon: any; badge?: number; badgeTitle?: string }) {
   return (
     <NavLink
       to={to}
@@ -252,7 +252,10 @@ function NavItem({ to, label, icon: Icon, badge }: { to: string; label: string; 
           <Icon size={17} strokeWidth={1.5} />
           <span className="flex-1">{label}</span>
           {badge !== undefined && badge > 0 && (
-            <span className="text-[10px] font-semibold text-black bg-[#F2C48D] rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+            <span
+              title={badgeTitle}
+              className="text-[10px] font-semibold text-black bg-[#F2C48D] rounded-full px-1.5 py-0.5 min-w-[18px] text-center"
+            >
               {badge}
             </span>
           )}
@@ -332,6 +335,10 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     badge:
       m.id === "reimbursements" ? pendingReimbursements :
       m.id === "budget" ? budgetBadge :
+      undefined,
+    badgeTitle:
+      m.id === "reimbursements" ? "Avances en attente de remboursement" :
+      m.id === "budget" ? "Entités ayant atteint 95 % de leur budget alloué" :
       undefined,
   }));
 

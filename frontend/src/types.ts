@@ -38,8 +38,10 @@ export interface Category {
   icon?: string;
   children?: Category[];
   tx_count?: number;
+  /** Total des transactions de la catégorie, en centimes entiers */
   tx_total?: number;
   descendant_tx_count?: number;
+  /** Total des transactions de la catégorie et de ses descendants, en centimes entiers */
   descendant_tx_total?: number;
 }
 

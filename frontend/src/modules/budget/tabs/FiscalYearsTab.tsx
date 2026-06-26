@@ -3,6 +3,7 @@ import { useFiscalYear, FiscalYear } from "../../../core/FiscalYearContext";
 import { api } from "../../../api";
 import FiscalYearWizard from "../FiscalYearWizard";
 import { Plus, Trash2 } from "lucide-react";
+import { formatDate } from "../../../utils/format";
 
 export default function FiscalYearsTab() {
   const { years, reload } = useFiscalYear();
@@ -42,15 +43,15 @@ export default function FiscalYearsTab() {
         <p className="text-sm text-[#B0B0B0]">
           {years.length} exercice(s).
           {hasOpenMandate
-            ? " Un mandat est en cours — clos-le avant d'en ouvrir un nouveau."
-            : " Aucun mandat ouvert."}
+            ? " Un exercice est en cours : clos-le avant d'en ouvrir un nouveau."
+            : " Aucun exercice ouvert."}
         </p>
         <button
           onClick={() => setShowWizard(true)}
           disabled={hasOpenMandate}
           className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <Plus size={14} /> Nouveau mandat
+          <Plus size={14} /> Nouvel exercice
         </button>
       </div>
 
@@ -93,8 +94,8 @@ export default function FiscalYearsTab() {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[#B0B0B0]">{y.start_date}</td>
-                  <td className="px-4 py-3 text-[#B0B0B0]">{y.end_date ?? "—"}</td>
+                  <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.start_date)}</td>
+                  <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.end_date)}</td>
                   <td className="px-4 py-3 text-right">
                     {y.end_date === null && closingId !== y.id && (
                       <button

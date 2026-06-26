@@ -16,6 +16,18 @@ export function centsToEuros(cents: number | null | undefined): number {
   return (cents ?? 0) / 100;
 }
 
+/** Couleurs sémantiques centralisées pour les montants. */
+export const COLOR_EXPENSE = "#FF5252";
+export const COLOR_INCOME = "#00C853";
+
+/** Formate une date ISO (YYYY-MM-DD) au format français DD/MM/YYYY. Renvoie "—" si absente. */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
+
 export function budgetColor(pct: number): string {
   if (pct < 70) return "#00C853";
   if (pct < 95) return "#F2C48D";
@@ -28,10 +40,10 @@ export function txTone(tx: {
   to_entity_type?: string;
 }): { color: string; sign: string } {
   if (tx.to_entity_type === "internal" && tx.from_entity_type === "external") {
-    return { color: "#00C853", sign: "+" };
+    return { color: COLOR_INCOME, sign: "+" };
   }
   if (tx.from_entity_type === "internal" && tx.to_entity_type === "external") {
-    return { color: "#FF5252", sign: "-" };
+    return { color: COLOR_EXPENSE, sign: "-" };
   }
   // virement interne ou type inconnu
   return { color: "#B0B0B0", sign: "" };
