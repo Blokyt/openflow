@@ -354,11 +354,20 @@ def test_activity_income_mapped_70_is_deducted(client):
     assert ws.cell(row=row, column=2).value == 200.0  # 500 - 300 net
 
 
-def test_net_negative_category_shown_negative(client):
-    """Catégorie bénéficiaire (recette propre > dépense) -> dépense nette négative."""
+def _row_with_label_after(ws, label, after_row, max_row=60):
+    """Numéro de ligne dont la colonne A vaut `label`, cherché APRÈS `after_row`."""
+    for r in range(after_row + 1, max_row + 1):
+        if ws.cell(row=r, column=1).value == label:
+            return r
+    return None
+
+
+def test_net_negative_income_moves_to_financing(client):
+    """Catégorie bénéficiaire (recette > dépense) : la recette part en financement et la
+    dépense est affichée brute, jamais en négatif."""
     ext = _external(client)
     club = _internal(client, "Club")
-    cat = _cat(client, "Gala")
+    cat = _cat(client, "Gala")  # nom neutre, non mappé : seul le signe du net décide
     fy = _fy(client)
     client.post("/api/transactions/", json={
         "date": "2025-10-01", "label": "Coûts", "amount": 30000,  # 300 €
@@ -370,9 +379,15 @@ def test_net_negative_category_shown_negative(client):
     })
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
     ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
-    row = _row_with_label(ws, "Gala")
-    assert row is not None
-    assert ws.cell(row=row, column=2).value == -200.0
+    # Dépense affichée brute (300 €), pas en négatif.
+    dep_row = _row_with_label(ws, "Gala")
+    assert dep_row is not None
+    assert ws.cell(row=dep_row, column=2).value == 300.0
+    # La recette (500 €) part en section financement (après le total des dépenses).
+    total_row = _row_with_label(ws, "TOTAL DEPENSES REELLES")
+    fin_row = _row_with_label_after(ws, "Gala", total_row)
+    assert fin_row is not None
+    assert ws.cell(row=fin_row, column=2).value == 500.0
 
 
 def test_many_categories_expand_rows(client):

@@ -2,7 +2,7 @@
   "id": "direns",
   "name": "DirENS",
   "description": "Export Excel pré-rempli au format DirENS (bilan financier réalisé + budget prévisionnel)",
-  "help": "Génère le fichier Excel officiel demandé par la DirENS à partir des données de l'app. Les deux premiers onglets (bilan financier et budget prévisionnel) sont remplis automatiquement : un club par colonne, les dépenses ventilées par catégorie et affichées en NET (déduites des recettes d'activité directement associées, comme la billetterie ou les ventes : compte 70 du module Rapports). Les autres produits (subventions, cotisations, dons, autres produits) restent listés dans la section financement, jamais déduits. Le 3e onglet (demande de subventions) reste vierge.",
+  "help": "Génère le fichier Excel officiel demandé par la DirENS à partir des données de l'app. Les deux premiers onglets (bilan financier et budget prévisionnel) sont remplis automatiquement : un club par colonne, les dépenses ventilées par catégorie et affichées en NET (déduites des recettes d'activité directement associées, comme la billetterie ou les ventes). Une recette part en section financement (jamais déduite) si sa catégorie est une ressource du plan comptable (subvention, cotisation, don) OU si elle dépasse la dépense associée : ainsi aucune dépense n'apparaît jamais en négatif. Le 3e onglet (demande de subventions) reste vierge.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",

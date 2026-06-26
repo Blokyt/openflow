@@ -146,12 +146,35 @@ def _financement_category_ids(conn) -> set:
     return fin
 
 
-def _net_expenses(exp_amounts: dict, propre: dict) -> dict:
-    """Dépense nette par (club, catégorie) = dépense brute − recettes propres de la MÊME
-    (club, catégorie). Union des clés : une catégorie nette-négative (recette propre >
-    dépense, ex. événement bénéficiaire) apparaît en négatif et réduit le total."""
-    keys = set(exp_amounts) | set(propre)
-    return {k: exp_amounts.get(k, 0) - propre.get(k, 0) for k in keys}
+def _split_net_and_financement(exp_amounts: dict, income_by_cell: dict, fin_ids: set) -> tuple:
+    """Répartit dépenses et recettes par (club, catégorie) en deux blocs, SANS jamais
+    produire de dépense négative :
+
+      - net {(club, cat): cents} : dépense réelle = dépense − recette d'activité déduite.
+      - financement {cat: cents}  : recettes traitées comme ressource (section financement).
+
+    Une recette va en financement (et n'est PAS déduite) si :
+      - sa catégorie est un produit « ressource » du plan comptable (subvention, cotisation,
+        don… : `fin_ids`), OU
+      - pour cette (club, catégorie) la recette dépasse la dépense (net négatif) : la recette
+        est alors une source de financement et la dépense est affichée brute.
+    Sinon la recette est déduite de la dépense (recette d'activité directe : billetterie,
+    ventes…). Les totaux restent équilibrés (financement − dépenses = recettes − dépenses).
+    """
+    net: dict = {}
+    financement: dict = {}
+    for key in set(exp_amounts) | set(income_by_cell):
+        _club, cat = key
+        e = exp_amounts.get(key, 0)
+        i = income_by_cell.get(key, 0)
+        if cat in fin_ids or i > e:
+            if i:
+                financement[cat] = financement.get(cat, 0) + i
+            if e:
+                net[key] = e
+        else:
+            net[key] = e - i
+    return net, financement
 
 
 def _get_expenses(conn, start: str, end: str, club_ids: list) -> dict:
@@ -249,16 +272,10 @@ def _category_rows(conn, amounts: dict, clubs: list) -> list:
     return rows
 
 
-def _get_income_split(conn, start: str, end: str, club_ids: list, fin_ids: set) -> tuple:
-    """Sépare les recettes réelles entrantes en deux dicts :
-      - propre {(club_id, cat_id): cents} : recettes d'activité directes (billetterie,
-        ventes…), À DÉDUIRE des dépenses de la même (club, catégorie).
-      - financement {cat_id: cents} : subventions, cotisations, dons… conservés tels quels
-        dans la section financement.
-    Une recette sans catégorie est traitée comme propre (déduite du « Non catégorisé »).
-    """
+def _get_income_by_cell(conn, start: str, end: str, club_ids: list) -> dict:
+    """{(club_id, category_id): cents} de toutes les recettes réelles entrantes (externe -> club)."""
     if not club_ids:
-        return {}, {}
+        return {}
     ph = ",".join("?" * len(club_ids))
     rows = conn.execute(
         f"""SELECT to_entity_id AS eid, category_id AS cid, SUM(amount) AS total
@@ -269,13 +286,13 @@ def _get_income_split(conn, start: str, end: str, club_ids: list, fin_ids: set) 
             GROUP BY to_entity_id, category_id""",
         [start, end] + club_ids + club_ids,
     ).fetchall()
-    return _partition_income(rows, fin_ids)
+    return {(r["eid"], r["cid"]): r["total"] for r in rows if r["total"]}
 
 
-def _get_budget_income_split(conn, fy_id: int, club_ids: list, fin_ids: set) -> tuple:
-    """Idem `_get_income_split` mais sur le prévisionnel (budget_allocations, sens 'income')."""
+def _get_budget_income_by_cell(conn, fy_id: int, club_ids: list) -> dict:
+    """{(club_id, category_id): cents} des recettes prévisionnelles (budget_allocations, 'income')."""
     if not club_ids:
-        return {}, {}
+        return {}
     ph = ",".join("?" * len(club_ids))
     try:
         rows = conn.execute(
@@ -286,23 +303,8 @@ def _get_budget_income_split(conn, fy_id: int, club_ids: list, fin_ids: set) -> 
             [fy_id] + club_ids,
         ).fetchall()
     except sqlite3.OperationalError:
-        return {}, {}
-    return _partition_income(rows, fin_ids)
-
-
-def _partition_income(rows, fin_ids: set) -> tuple:
-    """Répartit des lignes (eid, cid, total) entre recettes propres (déduites) et
-    financement (subventions/cotisations/dons, conservés)."""
-    propre: dict = {}
-    financement: dict = {}
-    for r in rows:
-        if not r["total"]:
-            continue
-        if r["cid"] in fin_ids:
-            financement[r["cid"]] = financement.get(r["cid"], 0) + r["total"]
-        else:
-            propre[(r["eid"], r["cid"])] = propre.get((r["eid"], r["cid"]), 0) + r["total"]
-    return propre, financement
+        return {}
+    return {(r["eid"], r["cid"]): r["total"] for r in rows if r["total"]}
 
 
 def _financement_rows(conn, financement: dict) -> list:
@@ -514,15 +516,15 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     all_ids = [c["id"] for c in all_clubs]
 
     # ── Onglet 1 : bilan financier (réalisé) ──
-    # Dépense réelle = dépense brute − recettes d'activité directes (billetterie/ventes,
-    # compte 70) de la même (club, catégorie). Les autres produits (subventions 74,
-    # cotisations 756, dons 754, autres 75…) ne sont PAS déduits : ils restent listés
-    # tels quels dans la section financement.
+    # Dépense réelle = dépense brute − recette d'activité directe (billetterie/ventes) de la
+    # même (club, catégorie). Une recette part en financement (jamais déduite) si sa catégorie
+    # est une ressource du plan comptable (subvention/cotisation/don) OU si elle dépasse la
+    # dépense (net négatif) : aucune dépense n'apparaît jamais en négatif.
     ws1 = wb.worksheets[0]
     fin_ids = _financement_category_ids(conn)
     exp_amounts = _get_expenses(conn, bilan_fy["start"], bilan_fy["end"], all_ids)
-    propre, financement = _get_income_split(conn, bilan_fy["start"], bilan_fy["end"], all_ids, fin_ids)
-    net_amounts = _net_expenses(exp_amounts, propre)
+    income_by_cell = _get_income_by_cell(conn, bilan_fy["start"], bilan_fy["end"], all_ids)
+    net_amounts, financement = _split_net_and_financement(exp_amounts, income_by_cell, fin_ids)
     clubs1 = _active_clubs(all_clubs, net_amounts)
     last1, total1 = _layout(ws1, len(clubs1))
     bilan_year = _year_label(bilan_fy["start"], bilan_fy["end"])
@@ -548,8 +550,8 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     if budget_fy:
         ws2 = wb.worksheets[1]
         bexp_amounts = _get_budget_expenses(conn, budget_fy["id"], all_ids)
-        bpropre, _bfin = _get_budget_income_split(conn, budget_fy["id"], all_ids, fin_ids)
-        bnet_amounts = _net_expenses(bexp_amounts, bpropre)
+        bincome = _get_budget_income_by_cell(conn, budget_fy["id"], all_ids)
+        bnet_amounts, _bfin = _split_net_and_financement(bexp_amounts, bincome, fin_ids)
         clubs2 = _active_clubs(all_clubs, bnet_amounts)
         last2, total2 = _layout(ws2, len(clubs2))
         budget_year = _year_label(budget_fy["start"], budget_fy["end"])
