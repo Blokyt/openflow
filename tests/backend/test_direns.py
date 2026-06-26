@@ -297,6 +297,63 @@ def test_subvention_stays_in_financing_not_deducted(client):
     assert ws.cell(row=srow, column=2).value == 300.0
 
 
+def _map_category_to_account(client, category_id, code):
+    """Mappe une catégorie au compte PCG `code` via le module reports."""
+    accounts = client.get("/api/reports/accounts").json()["accounts"]
+    acc = next(a for a in accounts if a["code"] == code)
+    r = client.put("/api/reports/mapping", json={"category_id": category_id, "account_id": acc["id"]})
+    assert r.status_code in (200, 201), r.text
+
+
+def test_cotisation_mapped_756_kept_in_financing_not_deducted(client):
+    """Une cotisation (catégorie mappée au compte 756) reste en financement et n'est PAS
+    déduite des dépenses — même si son nom n'évoque pas une ressource."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    dep = _cat(client, "Nourriture")
+    membres = _cat(client, "Vie associative")  # nom neutre : seul le mapping 756 compte
+    _map_category_to_account(client, membres["id"], "756")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Repas", "amount": 20000,  # 200 € dépense
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": dep["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Cotisations membres", "amount": 30000,  # 300 € cotisation
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": membres["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    # La dépense reste à 200 € (cotisation non déduite).
+    assert ws.cell(row=_row_with_label(ws, "Nourriture"), column=2).value == 200.0
+    # La cotisation figure en financement à 300 €.
+    srow = _row_with_label(ws, "Vie associative")
+    assert srow is not None
+    assert ws.cell(row=srow, column=2).value == 300.0
+
+
+def test_activity_income_mapped_70_is_deducted(client):
+    """Une recette d'activité (catégorie mappée au compte 70) est bien déduite de la dépense."""
+    ext = _external(client)
+    club = _internal(client, "Club")
+    cat = _cat(client, "Concert")  # nom neutre : c'est le mapping 70 qui décide
+    _map_category_to_account(client, cat["id"], "70")
+    fy = _fy(client)
+    client.post("/api/transactions/", json={
+        "date": "2025-10-01", "label": "Coûts", "amount": 50000,  # 500 €
+        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-10-02", "label": "Billetterie", "amount": 30000,  # 300 €
+        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": cat["id"],
+    })
+    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
+    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
+    row = _row_with_label(ws, "Concert")
+    assert row is not None
+    assert ws.cell(row=row, column=2).value == 200.0  # 500 - 300 net
+
+
 def test_net_negative_category_shown_negative(client):
     """Catégorie bénéficiaire (recette propre > dépense) -> dépense nette négative."""
     ext = _external(client)
