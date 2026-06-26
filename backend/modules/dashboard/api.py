@@ -272,7 +272,8 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
         for mth in all_months:
             running += nets_by_month.get(mth, 0)
             forward.append((mth, running))
-        offset = current_balance - (forward[-1][1] if forward else 0)
+        # forward contient toujours au moins le mois courant (boucle while ci-dessus).
+        offset = current_balance - forward[-1][1]
         series = [{"month": mth, "balance": int(round(v + offset))} for mth, v in forward]
         return series[-months:]
     finally:

@@ -414,16 +414,16 @@ def _prev_fy_id(conn, fiscal_year_id: int) -> Optional[int]:
         return None
     try:
         d = date.fromisoformat(str(start)[:10])
-        target = date(d.year - 1, d.month, d.day).isoformat()
+        target = date(d.year - 1, d.month, d.day)
     except Exception:
         return None
-    low = (date.fromisoformat(target) - timedelta(days=31)).isoformat()
-    high = (date.fromisoformat(target) + timedelta(days=31)).isoformat()
+    low = (target - timedelta(days=31)).isoformat()
+    high = (target + timedelta(days=31)).isoformat()
     prev = conn.execute(
         """SELECT id FROM fiscal_years
            WHERE start_date BETWEEN ? AND ? AND start_date < ?
            ORDER BY ABS(julianday(start_date) - julianday(?)) ASC LIMIT 1""",
-        (low, high, start, target),
+        (low, high, start, target.isoformat()),
     ).fetchone()
     return prev["id"] if prev else None
 
@@ -854,7 +854,7 @@ def _fit(pdf, text: str, max_w: float) -> str:
     ell = "..."
     while text and pdf.get_string_width(text + ell) > max_w:
         text = text[:-1]
-    return (text + ell) if text else ell
+    return text + ell
 
 
 def _assoc_name():

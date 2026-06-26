@@ -15,6 +15,7 @@ router = APIRouter()
 # Project root is 3 levels up from this file: backend/modules/transactions/api.py
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+ATTACHMENTS_DIR = PROJECT_ROOT / "data" / "attachments"
 
 
 def _date_in_closed_period(conn: sqlite3.Connection, date: str) -> bool:
@@ -395,12 +396,10 @@ def delete_transaction(tx_id: int, force: bool = False):
         # Justificatifs liés : fichiers sur disque + lignes (la cascade FK déclarée
         # n'est jamais exécutée car PRAGMA foreign_keys est OFF).
         try:
-            from pathlib import Path as _Path
-            _att_dir = _Path(__file__).parent.parent.parent.parent / "data" / "attachments"
             for att in conn.execute(
                 "SELECT filename FROM attachments WHERE transaction_id = ?", (tx_id,)
             ).fetchall():
-                fp = _att_dir / att["filename"]
+                fp = ATTACHMENTS_DIR / att["filename"]
                 if fp.exists():
                     try:
                         fp.unlink()

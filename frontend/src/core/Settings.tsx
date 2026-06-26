@@ -140,6 +140,8 @@ export default function Settings() {
 
     // Find root entity (is_default=1 or parent_id=null)
     const root = entities.find((e: any) => e.is_default === 1) || entities.find((e: any) => !e.parent_id);
+    // Solde legacy : config.balance.amount est en euros, on normalise en centimes.
+    const cfgRef = { date: cfg.balance.date || "2025-01-01", amount: eurosToCents(String(cfg.balance.amount ?? 0)) };
     if (root) {
       setRootEntityId(root.id);
       try {
@@ -147,11 +149,10 @@ export default function Settings() {
         // reference_amount est deja en centimes (table entity_balance_refs)
         setBalanceRef({ date: ref.reference_date || "2025-01-01", amount: ref.reference_amount ?? 0 });
       } catch {
-        // config.balance.amount est en euros : on normalise l'etat en centimes
-        setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: Math.round((cfg.balance.amount ?? 0) * 100) });
+        setBalanceRef(cfgRef);
       }
     } else {
-      setBalanceRef({ date: cfg.balance.date || "2025-01-01", amount: Math.round((cfg.balance.amount ?? 0) * 100) });
+      setBalanceRef(cfgRef);
     }
 
     const manifestMap = new Map(discoveredMods.map((m: ModuleManifest) => [m.id, m]));

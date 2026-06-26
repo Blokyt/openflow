@@ -176,13 +176,10 @@ def list_campaigns(fiscal_year_id: int):
     conn = get_conn()
     try:
         try:
-            fy_exists = conn.execute(
-                "SELECT 1 FROM fiscal_years WHERE id = ?", (fiscal_year_id,)
-            ).fetchone() is not None
+            if conn.execute("SELECT 1 FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Exercice fiscal {fiscal_year_id} introuvable")
         except sqlite3.OperationalError:
-            fy_exists = True  # module budget absent : pas de validation possible
-        if not fy_exists:
-            raise HTTPException(status_code=404, detail=f"Exercice fiscal {fiscal_year_id} introuvable")
+            pass  # module budget absent : pas de validation possible
         campaigns = conn.execute(
             "SELECT * FROM helloasso_campaigns WHERE fiscal_year_id = ? ORDER BY title",
             (fiscal_year_id,),
