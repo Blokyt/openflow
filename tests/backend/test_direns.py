@@ -323,6 +323,8 @@ def test_income_and_expense_same_category_are_netted(client):
     frow = _row_with_label_after(ws, "Campagne don", total_row)
     assert frow is not None
     assert ws.cell(row=frow, column=2).value == 250.0
+    # Garde-fou : l'agrégat « Recettes propres » de l'ancien système n'existe plus.
+    assert _row_with_label(ws, "Recettes propres") is None
 
 
 def _row_with_label_after(ws, label, after_row, max_row=60):
@@ -331,36 +333,6 @@ def _row_with_label_after(ws, label, after_row, max_row=60):
         if ws.cell(row=r, column=1).value == label:
             return r
     return None
-
-
-def test_profitable_activity_appears_positive_in_financing(client):
-    """Catégorie d'activité bénéficiaire (recette > dépense) NON mappée comme ressource :
-    le BÉNÉFICE NET (recette − dépense) apparaît en financement POSITIF sous le nom de la
-    catégorie ; la dépense est absorbée (aucune ligne de dépense, jamais de net négatif),
-    et il n'y a plus de ligne agrégée « Recettes propres »."""
-    ext = _external(client)
-    club = _internal(client, "Club")
-    cat = _cat(client, "Gala")  # nom neutre, non mappé : recette d'activité, pas une ressource
-    fy = _fy(client)
-    client.post("/api/transactions/", json={
-        "date": "2025-10-01", "label": "Coûts", "amount": 30000,  # 300 €
-        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
-    })
-    client.post("/api/transactions/", json={
-        "date": "2025-10-02", "label": "Entrées", "amount": 50000,  # 500 € billetterie
-        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": cat["id"],
-    })
-    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
-    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
-    total_row = _row_with_label(ws, "TOTAL DEPENSES REELLES")
-    # « Gala » n'apparaît PAS dans le bloc dépenses (avant le total) : la dépense est absorbée.
-    assert [r for r in range(1, total_row) if ws.cell(row=r, column=1).value == "Gala"] == []
-    # « Gala » figure en financement (après le total) à +200 € (500 − 300).
-    fin_row = _row_with_label_after(ws, "Gala", total_row)
-    assert fin_row is not None
-    assert ws.cell(row=fin_row, column=2).value == 200.0
-    # Plus aucune ligne agrégée « Recettes propres ».
-    assert _row_with_label(ws, "Recettes propres") is None
 
 
 def test_pure_income_keeps_its_name_in_financing(client):

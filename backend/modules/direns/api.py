@@ -113,23 +113,17 @@ def _categories(conn) -> dict:
 
 def _split_net_and_financement(exp_amounts: dict, income_by_cell: dict) -> tuple:
     """Répartit dépenses et recettes par (club, catégorie) selon UNE seule règle, sans aucun
-    cas particulier (ni plan comptable, ni mots-clés, ni distinction subvention/activité) :
+    cas particulier : solde net = recettes − dépenses.
+          · net > 0 → financement, pour +net, sous le nom de la catégorie.
+          · net < 0 → dépense réelle, pour −net (= dépenses − recettes).
+          · net = 0 → rien à afficher.
 
-        solde net de la catégorie = recettes − dépenses
-          · net > 0 (catégorie qui rapporte) → financement, pour +net, sous son nom.
-          · net < 0 (catégorie qui coûte)    → dépense réelle, pour −net (= dépenses − recettes).
-          · net = 0                          → rien à afficher.
-
-    Conséquences directes, toutes cohérentes : une subvention ou une cotisation (recettes
-    pures) part en financement ; une masterclass bénéficiaire part en financement pour son
-    bénéfice net ; un pôle déficitaire reste en dépense pour son coût net. Recettes et
-    dépenses d'une même catégorie se compensent.
-
+    Retourne (net, financement) :
       - net {(club, cat): cents}  : dépense réelle nette, par club et catégorie.
       - financement {cat: cents}  : soldes positifs, agrégés par catégorie.
 
-    Les totaux restent équilibrés : chaque catégorie pèse son net `recette − dépense`, donc
-    financement − dépenses réelles = recettes − dépenses.
+    Recettes et dépenses d'une même catégorie se compensent ; le bilan reste équilibré
+    (financement − dépenses réelles = recettes − dépenses).
     """
     net: dict = {}
     financement: dict = {}
@@ -241,9 +235,9 @@ def _category_rows(conn, amounts: dict, clubs: list) -> list:
 
 
 def _financement_rows(conn, financement: dict) -> list:
-    """Lignes de la section financement [(label, euros)] : ressources nommées uniquement
-    (subventions, cotisations, dons…). Les recettes d'activité sont déduites des dépenses
-    en amont (cf. _split_net_and_financement) et n'apparaissent jamais ici."""
+    """Lignes de la section financement [(label, euros)] : toutes les catégories au solde net
+    positif (recettes > dépenses), sous leur propre nom, triées par ordre alphabétique
+    (cf. _split_net_and_financement). Aucune distinction catégorie-ressource / activité."""
     names = _categories(conn)
     out = []
     for cid, cents in financement.items():
@@ -545,7 +539,9 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
 
     # ── Onglet 2 : budget prévisionnel ──
     # Même règle nette que le bilan. Le template du prévisionnel n'a pas de section financement
-    # (il s'arrête au TOTAL) : les soldes positifs prévus (`_bfin`) n'y sont donc pas listés.
+    # (il s'arrête au TOTAL) : une catégorie budgétée bénéficiaire (recette > dépense, net positif
+    # → `_bfin`) disparaît entièrement de l'onglet, y compris sa dépense prévue. Le TOTAL peut donc
+    # être inférieur à la somme brute des dépenses prévues (limitation acceptée, faute de section).
     if budget_fy:
         ws2 = wb.worksheets[1]
         bexp_amounts = _get_budget_amounts(conn, budget_fy["id"], all_ids, "expense")
