@@ -10,13 +10,20 @@ données de l'app, au plus proche d'un compte de résultat associatif :
     parente devient un en-tête (gras), ses sous-catégories sont indentées en
     dessous. Les catégories feuilles (sans enfant) sont des lignes simples.
   - Les cellules sans information restent VIDES (jamais de 0).
-  - Section financement : les recettes par catégorie. Soldes de trésorerie estimés.
+  - Section financement : les catégories au solde POSITIF (recettes > dépenses).
+    Soldes de trésorerie estimés.
   - Onglet 3 « Demande subventions » : laissé vierge.
 
 Aucune configuration : tout est déduit des catégories et entités de chaque
 transaction. Le bloc des dépenses (et celui des financements) est redimensionné
 dynamiquement, les formules de totaux sont recalculées, le nom et l'année du
 titre sont dérivés du mandat (exercice) choisi.
+
+Règle de répartition UNIQUE, sans cas particulier : pour chaque (club, catégorie),
+solde net = recettes − dépenses. Net positif → financement (sous le nom de la
+catégorie) ; net négatif → dépense réelle. Aucune distinction subvention/activité,
+aucun plan comptable, aucun mot-clé : une catégorie qui rapporte va en financement,
+une catégorie qui coûte va en dépense.
 
 Convention monétaire : amount = entier de centimes, positif. Sens porté par
 from_entity_id -> to_entity_id (dépense = from interne ; recette = to interne).
@@ -56,22 +63,7 @@ SOLDE_PASS = 40        # SOLDE COMPTE BANCAIRE (Date passation)
 SOLDE_TRES = 41        # SOLDE TRESORERIE (A date)
 SOLDE_DATE = 42        # SOLDE COMPTE BANCAIRE (A date)
 LABEL_NONE = "Non catégorisé"
-RECETTES_PROPRES_LABEL = "Recettes propres"   # excédents d'activité agrégés (jamais une subvention)
 PLACEHOLDER = "à compléter"   # cellules non déductibles des données (à saisir à la main)
-# Compte PCG des recettes d'activité directement associées à un événement (billetterie,
-# ventes, prestations). Ce sont les SEULES recettes déduites des dépenses ; tous les autres
-# produits (subventions 74, dons 754, cotisations 756, autres produits 75…) restent en
-# financement.
-ACTIVITY_INCOME_CODE = "70"
-# Repli pour les catégories NON mappées dans le plan comptable : un nom évoquant une ressource
-# générale (subvention, cotisation, don…) est classé en financement, pas déduit. Liste locale
-# volontairement autonome (direns reste fonctionnel si le module reports est absent) ; elle
-# reprend À L'IDENTIQUE les mots-clés de PRODUITS hors compte 70 de reports
-# (KEYWORD_ACCOUNT_MAP : cotis->756, don/mécénat->754, subvention/subv->74). On n'ajoute
-# PAS « parrainage » ni « adhésion » : ces termes sont ambigus (un parrainage/une adhésion
-# peut être PAYÉ autant que REÇU). Comme dans le tableau DirENS officiel, ils restent donc
-# des activités (dépense nette), sauf mapping comptable explicite vers un compte produit.
-FINANCEMENT_KEYWORDS = ("subvention", "subv", "cotis", "don", "mécénat", "mecenat")
 HEADER_TPL_ROW = 7     # ligne modèle « ACHAT » (en-tête gras)
 DATA_TPL_ROW = 8       # ligne modèle de saisie (normale)
 
@@ -119,84 +111,36 @@ def _categories(conn) -> dict:
     ).fetchall()}
 
 
-def _financement_category_ids(conn) -> set:
-    """Catégories de recette qui RESTENT en financement et ne sont JAMAIS déduites des
-    dépenses : subventions (74), dons (754), cotisations (756), autres produits (75)…
-    Bref tout produit qui n'est PAS une recette d'activité directe (compte 70).
+def _split_net_and_financement(exp_amounts: dict, income_by_cell: dict) -> tuple:
+    """Répartit dépenses et recettes par (club, catégorie) selon UNE seule règle, sans aucun
+    cas particulier (ni plan comptable, ni mots-clés, ni distinction subvention/activité) :
 
-    Source de vérité : le plan comptable du module reports (`category_account_map`). Une
-    catégorie est en financement si son compte est un PRODUIT de code ≠ 70. Repli par
-    mot-clé du nom pour les catégories non mappées. Renvoie un set vide si le module
-    reports est absent (les tables manquent) : tout repose alors sur le repli mot-clé.
-    """
-    fin: set = set()
-    mapped: set = set()
-    try:
-        for r in conn.execute(
-            """SELECT m.category_id AS cid, a.code AS code, a.kind AS kind
-               FROM category_account_map m
-               JOIN report_accounts a ON a.id = m.account_id"""
-        ).fetchall():
-            mapped.add(r["cid"])
-            if r["kind"] == "produit" and r["code"] != ACTIVITY_INCOME_CODE:
-                fin.add(r["cid"])
-    except sqlite3.OperationalError:
-        fin, mapped = set(), set()
-    # Repli mot-clé : uniquement pour les catégories non explicitement mappées (le mapping
-    # comptable, s'il existe, fait foi — il peut volontairement classer en compte 70).
-    for cid, c in _categories(conn).items():
-        if cid in mapped:
-            continue
-        name = (c.get("name") or "").lower()
-        if any(k in name for k in FINANCEMENT_KEYWORDS):
-            fin.add(cid)
-    return fin
+        solde net de la catégorie = recettes − dépenses
+          · net > 0 (catégorie qui rapporte) → financement, pour +net, sous son nom.
+          · net < 0 (catégorie qui coûte)    → dépense réelle, pour −net (= dépenses − recettes).
+          · net = 0                          → rien à afficher.
 
+    Conséquences directes, toutes cohérentes : une subvention ou une cotisation (recettes
+    pures) part en financement ; une masterclass bénéficiaire part en financement pour son
+    bénéfice net ; un pôle déficitaire reste en dépense pour son coût net. Recettes et
+    dépenses d'une même catégorie se compensent.
 
-def _split_net_and_financement(exp_amounts: dict, income_by_cell: dict, fin_ids: set) -> tuple:
-    """Répartit dépenses et recettes par (club, catégorie), SANS jamais produire de
-    dépense négative ni faire passer une activité pour une subvention :
+      - net {(club, cat): cents}  : dépense réelle nette, par club et catégorie.
+      - financement {cat: cents}  : soldes positifs, agrégés par catégorie.
 
-      - net {(club, cat): cents} : dépense réelle = dépense − recette d'activité déduite.
-      - financement {cat: cents}  : RESSOURCES nommées (subventions, cotisations, dons…).
-      - recettes_propres (cents)  : excédents d'activité agrégés (billetterie, ventes,
-        galas, masterclass… bénéficiaires), regroupés sous une SEULE ligne neutre.
-
-    Le partage suit le plan comptable (source de vérité), au plus près du tableau DirENS
-    officiel (où les pôles et les charges restent toujours en dépense, et seul un produit
-    « ressource » figure nommément en financement) :
-
-      - `cat in fin_ids` (produit 74/75/754/756… ou repli mot-clé) → la recette est une
-        ressource : elle va en financement SOUS LE NOM de sa catégorie, jamais déduite.
-      - sinon recette d'activité (compte 70 ou catégorie non mappée) : déduite de la dépense
-        de la même (club, catégorie). Si elle dépasse la dépense (net négatif), la dépense
-        reste affichée brute et la recette ENTIÈRE (i) part dans `recettes_propres` (le
-        lecteur voit dépense e + recette i, soit un excédent net i − e), jamais sous le nom
-        de la catégorie : un pôle (Théâtre…) ou une charge (Nourriture…) bénéficiaire
-        n'apparaît ainsi jamais comme une fausse subvention.
-
-    Les totaux restent équilibrés (financement + recettes propres − dépenses = recettes −
-    dépenses).
+    Les totaux restent équilibrés : chaque catégorie pèse son net `recette − dépense`, donc
+    financement − dépenses réelles = recettes − dépenses.
     """
     net: dict = {}
     financement: dict = {}
-    recettes_propres: int = 0
     for key in set(exp_amounts) | set(income_by_cell):
         _club, cat = key
-        e = exp_amounts.get(key, 0)
-        i = income_by_cell.get(key, 0)
-        if cat in fin_ids:
-            if i:
-                financement[cat] = financement.get(cat, 0) + i
-            if e:
-                net[key] = e
-        elif i > e:
-            recettes_propres += i
-            if e:
-                net[key] = e
-        else:
-            net[key] = e - i
-    return net, financement, recettes_propres
+        bal = income_by_cell.get(key, 0) - exp_amounts.get(key, 0)
+        if bal > 0:
+            financement[cat] = financement.get(cat, 0) + bal
+        elif bal < 0:
+            net[key] = -bal
+    return net, financement
 
 
 def _get_realized_amounts(conn, start: str, end: str, club_ids: list, direction: str) -> dict:
@@ -296,9 +240,10 @@ def _category_rows(conn, amounts: dict, clubs: list) -> list:
     return rows
 
 
-def _financement_rows(conn, financement: dict, recettes_propres: int = 0) -> list:
-    """Lignes de la section financement [(label, euros)] : ressources nommées (subventions,
-    cotisations, dons…) puis, en dernier, l'excédent d'activité agrégé (« Recettes propres »)."""
+def _financement_rows(conn, financement: dict) -> list:
+    """Lignes de la section financement [(label, euros)] : ressources nommées uniquement
+    (subventions, cotisations, dons…). Les recettes d'activité sont déduites des dépenses
+    en amont (cf. _split_net_and_financement) et n'apparaissent jamais ici."""
     names = _categories(conn)
     out = []
     for cid, cents in financement.items():
@@ -307,8 +252,6 @@ def _financement_rows(conn, financement: dict, recettes_propres: int = 0) -> lis
         label = (names.get(cid, {}).get("name") if cid is not None else None) or LABEL_NONE
         out.append((label, round(cents / 100, 2)))
     out.sort(key=lambda x: (x[0] == LABEL_NONE, x[0].lower()))
-    if recettes_propres:
-        out.append((RECETTES_PROPRES_LABEL, round(recettes_propres / 100, 2)))
     return out
 
 
@@ -575,24 +518,20 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
     all_ids = [c["id"] for c in all_clubs]
 
     # ── Onglet 1 : bilan financier (réalisé) ──
-    # Dépense réelle = dépense brute − recette d'activité directe (billetterie/ventes) de la
-    # même (club, catégorie). Une recette part en financement (jamais déduite) si sa catégorie
-    # est une ressource du plan comptable (subvention/cotisation/don) OU si elle dépasse la
-    # dépense (net négatif) : aucune dépense n'apparaît jamais en négatif.
+    # Règle unique par (club, catégorie) : net = recettes − dépenses ; net > 0 → financement,
+    # net < 0 → dépense réelle. Aucune distinction subvention/activité (cf _split_net_and_financement).
     caches: dict = {}
     ws1 = wb.worksheets[0]
-    fin_ids = _financement_category_ids(conn)
     exp_amounts = _get_realized_amounts(conn, bilan_fy["start"], bilan_fy["end"], all_ids, "expense")
     income_by_cell = _get_realized_amounts(conn, bilan_fy["start"], bilan_fy["end"], all_ids, "income")
-    net_amounts, financement, recettes_propres = _split_net_and_financement(
-        exp_amounts, income_by_cell, fin_ids)
+    net_amounts, financement = _split_net_and_financement(exp_amounts, income_by_cell)
     clubs1 = _active_clubs(all_clubs, net_amounts)
     last1, total1 = _layout(ws1, len(clubs1))
     bilan_year = _year_label(bilan_fy["start"], bilan_fy["end"])
     caches[0] = _fill_sheet(
         ws1, clubs1, last1, total1,
         _category_rows(conn, net_amounts, clubs1),
-        _financement_rows(conn, financement, recettes_propres),
+        _financement_rows(conn, financement),
         with_financing=True, total_label="TOTAL DEPENSES REELLES", year_label=bilan_year,
         opening=_opening_explicit(conn, bilan_fy["id"], all_ids),
         current=_get_current_total(conn, all_ids),
@@ -605,14 +544,13 @@ def _build_excel(conn, bilan_fy: dict, budget_fy: Optional[dict], assoc_name: st
         pass
 
     # ── Onglet 2 : budget prévisionnel ──
-    # Même logique de dépense nette que le bilan (recettes propres prévues déduites des
-    # dépenses prévues). Le template du prévisionnel n'a pas de section financement
-    # (il s'arrête au TOTAL), donc les subventions prévues ne sont pas listées ici.
+    # Même règle nette que le bilan. Le template du prévisionnel n'a pas de section financement
+    # (il s'arrête au TOTAL) : les soldes positifs prévus (`_bfin`) n'y sont donc pas listés.
     if budget_fy:
         ws2 = wb.worksheets[1]
         bexp_amounts = _get_budget_amounts(conn, budget_fy["id"], all_ids, "expense")
         bincome = _get_budget_amounts(conn, budget_fy["id"], all_ids, "income")
-        bnet_amounts, _bfin, _brp = _split_net_and_financement(bexp_amounts, bincome, fin_ids)
+        bnet_amounts, _bfin = _split_net_and_financement(bexp_amounts, bincome)
         clubs2 = _active_clubs(all_clubs, bnet_amounts)
         last2, total2 = _layout(ws2, len(clubs2))
         budget_year = _year_label(budget_fy["start"], budget_fy["end"])

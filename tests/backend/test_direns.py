@@ -241,7 +241,7 @@ def test_bank_balance_non_derivable_is_placeholder(client):
     assert ws.cell(row=row, column=2).value == "à compléter"
 
 
-# ─── Dépense nette (recettes propres déduites) + subventions ────────────────
+# ─── Règle unique : net par catégorie (net > 0 → financement, net < 0 → dépense) ──
 
 def test_associated_income_deducted_from_expense(client):
     """Une recette propre (billetterie) réduit la dépense de la même catégorie/club."""
@@ -270,8 +270,9 @@ def test_associated_income_deducted_from_expense(client):
     assert ws.cell(row=fin, column=2).value in (0, None)
 
 
-def test_subvention_stays_in_financing_not_deducted(client):
-    """Une subvention (catégorie reconnue) reste en financement et n'est PAS déduite."""
+def test_income_and_expense_on_separate_categories_not_compensated(client):
+    """Recette et dépense sur des catégories DIFFÉRENTES ne se compensent pas : la dépense
+    reste en dépense, la recette pure part en financement sous le nom de sa catégorie."""
     ext = _external(client)
     club = _internal(client, "Club")
     dep = _cat(client, "Nourriture")
@@ -282,76 +283,46 @@ def test_subvention_stays_in_financing_not_deducted(client):
         "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": dep["id"],
     })
     client.post("/api/transactions/", json={
-        "date": "2025-10-02", "label": "Subvention", "amount": 30000,  # 300 € subvention
+        "date": "2025-10-02", "label": "Subvention", "amount": 30000,  # 300 € recette
         "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": subv["id"],
     })
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
     ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
-    # La dépense reste à 500 € (subvention non déduite).
+    # La dépense (catégorie Nourriture) reste à 500 €.
     drow = _row_with_label(ws, "Nourriture")
     assert drow is not None
     assert ws.cell(row=drow, column=2).value == 500.0
-    # La subvention apparaît en financement à 300 €.
+    # La recette (catégorie Subvention DirENS) apparaît en financement à 300 €.
     srow = _row_with_label(ws, "Subvention DirENS")
     assert srow is not None
     assert ws.cell(row=srow, column=2).value == 300.0
 
 
-def _map_category_to_account(client, category_id, code):
-    """Mappe une catégorie au compte PCG `code` via le module reports."""
-    accounts = client.get("/api/reports/accounts").json()["accounts"]
-    acc = next(a for a in accounts if a["code"] == code)
-    r = client.put("/api/reports/mapping", json={"category_id": category_id, "account_id": acc["id"]})
-    assert r.status_code in (200, 201), r.text
-
-
-def test_cotisation_mapped_756_kept_in_financing_not_deducted(client):
-    """Une cotisation (catégorie mappée au compte 756) reste en financement et n'est PAS
-    déduite des dépenses — même si son nom n'évoque pas une ressource."""
+def test_income_and_expense_same_category_are_netted(client):
+    """Règle unique : recette et dépense d'une MÊME catégorie se compensent. Si la recette
+    l'emporte, la catégorie apparaît en financement pour son solde NET (et nulle part en
+    dépense) — y compris une « subvention » imputée sur une catégorie qui a aussi des frais."""
     ext = _external(client)
     club = _internal(client, "Club")
-    dep = _cat(client, "Nourriture")
-    membres = _cat(client, "Vie associative")  # nom neutre : seul le mapping 756 compte
-    _map_category_to_account(client, membres["id"], "756")
+    cat = _cat(client, "Campagne don")
     fy = _fy(client)
     client.post("/api/transactions/", json={
-        "date": "2025-10-01", "label": "Repas", "amount": 20000,  # 200 € dépense
-        "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": dep["id"],
-    })
-    client.post("/api/transactions/", json={
-        "date": "2025-10-02", "label": "Cotisations membres", "amount": 30000,  # 300 € cotisation
-        "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": membres["id"],
-    })
-    r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
-    ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
-    # La dépense reste à 200 € (cotisation non déduite).
-    assert ws.cell(row=_row_with_label(ws, "Nourriture"), column=2).value == 200.0
-    # La cotisation figure en financement à 300 €.
-    srow = _row_with_label(ws, "Vie associative")
-    assert srow is not None
-    assert ws.cell(row=srow, column=2).value == 300.0
-
-
-def test_activity_income_mapped_70_is_deducted(client):
-    """Une recette d'activité (catégorie mappée au compte 70) est bien déduite de la dépense."""
-    ext = _external(client)
-    club = _internal(client, "Club")
-    cat = _cat(client, "Concert")  # nom neutre : c'est le mapping 70 qui décide
-    _map_category_to_account(client, cat["id"], "70")
-    fy = _fy(client)
-    client.post("/api/transactions/", json={
-        "date": "2025-10-01", "label": "Coûts", "amount": 50000,  # 500 €
+        "date": "2025-10-01", "label": "Frais", "amount": 5000,  # 50 € dépense
         "from_entity_id": club["id"], "to_entity_id": ext["id"], "category_id": cat["id"],
     })
     client.post("/api/transactions/", json={
-        "date": "2025-10-02", "label": "Billetterie", "amount": 30000,  # 300 €
+        "date": "2025-10-02", "label": "Dons reçus", "amount": 30000,  # 300 € recette
         "from_entity_id": ext["id"], "to_entity_id": club["id"], "category_id": cat["id"],
     })
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
     ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
-    row = _row_with_label(ws, "Concert")
-    assert row is not None
-    assert ws.cell(row=row, column=2).value == 200.0  # 500 - 300 net
+    total_row = _row_with_label(ws, "TOTAL DEPENSES REELLES")
+    # Aucune ligne de dépense pour la catégorie : la dépense est compensée.
+    assert [r for r in range(1, total_row) if ws.cell(row=r, column=1).value == "Campagne don"] == []
+    # Solde net (300 − 50 = 250 €) en financement, sous le nom de la catégorie.
+    frow = _row_with_label_after(ws, "Campagne don", total_row)
+    assert frow is not None
+    assert ws.cell(row=frow, column=2).value == 250.0
 
 
 def _row_with_label_after(ws, label, after_row, max_row=60):
@@ -362,11 +333,11 @@ def _row_with_label_after(ws, label, after_row, max_row=60):
     return None
 
 
-def test_net_negative_income_aggregated_as_recettes_propres(client):
+def test_profitable_activity_appears_positive_in_financing(client):
     """Catégorie d'activité bénéficiaire (recette > dépense) NON mappée comme ressource :
-    la dépense reste affichée brute (jamais en négatif), l'excédent part dans la ligne
-    agrégée « Recettes propres » et JAMAIS sous le nom de la catégorie (pas de fausse
-    subvention « Gala »/« Théâtre »…)."""
+    le BÉNÉFICE NET (recette − dépense) apparaît en financement POSITIF sous le nom de la
+    catégorie ; la dépense est absorbée (aucune ligne de dépense, jamais de net négatif),
+    et il n'y a plus de ligne agrégée « Recettes propres »."""
     ext = _external(client)
     club = _internal(client, "Club")
     cat = _cat(client, "Gala")  # nom neutre, non mappé : recette d'activité, pas une ressource
@@ -382,25 +353,22 @@ def test_net_negative_income_aggregated_as_recettes_propres(client):
     r = client.get(f"/api/direns/export?bilan_fiscal_year_id={fy['id']}")
     ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
     total_row = _row_with_label(ws, "TOTAL DEPENSES REELLES")
-    # Dépense affichée brute (300 €), pas en négatif, AVANT le total.
-    dep_row = _row_with_label(ws, "Gala")
-    assert dep_row is not None and dep_row < total_row
-    assert ws.cell(row=dep_row, column=2).value == 300.0
-    # « Gala » n'apparaît jamais comme un libellé de financement (après le total).
-    assert _row_with_label_after(ws, "Gala", total_row) is None
-    # L'excédent (500 €) figure sous la ligne agrégée « Recettes propres ».
-    rp_row = _row_with_label_after(ws, "Recettes propres", total_row)
-    assert rp_row is not None
-    assert ws.cell(row=rp_row, column=2).value == 500.0
+    # « Gala » n'apparaît PAS dans le bloc dépenses (avant le total) : la dépense est absorbée.
+    assert [r for r in range(1, total_row) if ws.cell(row=r, column=1).value == "Gala"] == []
+    # « Gala » figure en financement (après le total) à +200 € (500 − 300).
+    fin_row = _row_with_label_after(ws, "Gala", total_row)
+    assert fin_row is not None
+    assert ws.cell(row=fin_row, column=2).value == 200.0
+    # Plus aucune ligne agrégée « Recettes propres ».
+    assert _row_with_label(ws, "Recettes propres") is None
 
 
-def test_mapped_resource_keeps_its_name_in_financing(client):
-    """Une vraie ressource mappée (compte 74) bénéficiaire garde son NOM en financement
-    (et n'est pas noyée dans « Recettes propres »)."""
+def test_pure_income_keeps_its_name_in_financing(client):
+    """Une recette pure (aucune dépense sur la même catégorie) garde son NOM en financement
+    sous le total (et il n'existe plus de ligne agrégée « Recettes propres »)."""
     ext = _external(client)
     club = _internal(client, "Club")
-    subv = _cat(client, "Aide région")  # nom neutre : seul le mapping 74 la qualifie
-    _map_category_to_account(client, subv["id"], "74")
+    subv = _cat(client, "Aide région")
     fy = _fy(client)
     client.post("/api/transactions/", json={
         "date": "2025-10-02", "label": "Subvention région", "amount": 40000,  # 400 €
