@@ -1,4 +1,4 @@
-"""Authentification et permissions — infrastructure transverse OpenFlow.
+"""Authentification et permissions : infrastructure transverse OpenFlow.
 
 Même statut que database.py ou balance.py : les modules importent d'ici,
 jamais l'inverse. Les mots de passe sont hachés en scrypt (stdlib), les
