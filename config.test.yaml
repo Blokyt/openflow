@@ -25,3 +25,4 @@ modules:
   reports: true
   helloasso: true
   direns: true
+  users: true

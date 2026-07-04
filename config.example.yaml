@@ -24,3 +24,4 @@ modules:
   system: true
   tiers: false
   transactions: true
+  users: true

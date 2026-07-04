@@ -1,0 +1,16 @@
+{
+  "id": "users",
+  "name": "Utilisateurs",
+  "description": "Comptes, connexion et rôles par entité",
+  "help": "Créez des comptes par lien d'invitation, attribuez un rôle (trésorier ou lecteur) sur une entité : il s'applique à toute sa descendance. Les administrateurs gardent tous les droits.",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "core",
+  "dependencies": ["entities"],
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {},
+  "requires_admin": true,
+  "example": "J'invite le trésorier de Gastronomine : il ne verra que le périmètre de son club."
+}

@@ -9,6 +9,7 @@
     "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
     "origin": { "type": "string", "enum": ["builtin", "custom"] },
     "category": { "type": "string", "enum": ["core", "standard", "advanced", "custom"] },
+    "requires_admin": { "type": "boolean" },
     "dependencies": { "type": "array", "items": { "type": "string" } },
     "menu": {
       "type": "object",
