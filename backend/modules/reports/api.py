@@ -770,19 +770,40 @@ def _validate_accrual(conn, kind, amount, fiscal_year_id, entity_id=None):
 
 
 @router.get("/accruals")
-def list_accruals(fiscal_year_id: int):
-    """Liste les régularisations (créances/dettes) d'un exercice."""
+def list_accruals(request: Request, fiscal_year_id: int, entity_id: Optional[int] = None):
+    """Liste les régularisations (créances/dettes) d'un exercice.
+
+    Non-admin : entity_id obligatoire (400 sinon, même règle que compte-résultat
+    / bilan) et vérifié contre le périmètre du rôle (403 hors périmètre). Les
+    lignes sont alors filtrées au sous-arbre demandé (`_entity_perimeter`). Les
+    régularisations sans entity_id (saisies au niveau global) sont EXCLUES pour
+    un non-admin : sans entité de rattachement vérifiable, on refuse par défaut
+    (deny-by-default) plutôt que de risquer une fuite de données globales.
+    Admin (`allowed is None`) : inchangé, toutes les lignes remontent comme
+    avant (y compris entity_id NULL), sans filtre.
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
-        rows = conn.execute(
-            """SELECT a.*, c.name AS category_name, e.name AS entity_name
-               FROM report_accruals a
-               LEFT JOIN categories c ON c.id = a.category_id
-               LEFT JOIN entities e ON e.id = a.entity_id
-               WHERE a.fiscal_year_id = ?
-               ORDER BY a.kind, a.id""",
-            (fiscal_year_id,),
-        ).fetchall()
+        _require_scope(conn, user, entity_id)
+        allowed = get_allowed_entity_ids(conn, user)
+        sql = """SELECT a.*, c.name AS category_name, e.name AS entity_name
+                 FROM report_accruals a
+                 LEFT JOIN categories c ON c.id = a.category_id
+                 LEFT JOIN entities e ON e.id = a.entity_id
+                 WHERE a.fiscal_year_id = ?"""
+        params: list = [fiscal_year_id]
+        if allowed is not None:
+            perimeter = _entity_perimeter(conn, entity_id)
+            if not perimeter:
+                sql += " AND 0 = 1"
+            else:
+                ph = ",".join("?" * len(perimeter))
+                # entity_id NULL exclu explicitement (deny-by-default ci-dessus).
+                sql += f" AND a.entity_id IN ({ph})"
+                params.extend(perimeter)
+        sql += " ORDER BY a.kind, a.id"
+        rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()

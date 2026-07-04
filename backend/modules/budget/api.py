@@ -12,6 +12,21 @@ from backend.core.balance import compute_entity_balance
 
 router = APIRouter()
 
+# Message constant pour la garde « entité obligatoire pour un non-admin »,
+# partagée avec dashboard/api.py et reports/api.py (même formulation exacte).
+ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
+
+
+def _require_scope(conn, user: dict, entity_id):
+    """Non-admin : entity_id obligatoire (400 si absent) + dans le périmètre (403 sinon).
+    Admin (`allowed is None`) : inchangé, aucune contrainte."""
+    allowed = get_allowed_entity_ids(conn, user)
+    if allowed is None:
+        return
+    if entity_id is None:
+        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
+    require_entity_access(conn, user, entity_id)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -269,16 +284,29 @@ def delete_fiscal_year(fy_id: int):
 # ─── Opening-balances ────────────────────────────────────────────────────────
 
 @router.get("/fiscal-years/{fy_id}/opening-balances")
-def list_opening_balances(fy_id: int):
-    """Liste les soldes d'ouverture saisis pour un exercice."""
+def list_opening_balances(fy_id: int, request: Request):
+    """Liste les soldes d'ouverture saisis pour un exercice.
+
+    Non-admin : lignes filtrées au périmètre du rôle (entity_id hors périmètre
+    absentes de la réponse). Admin (`allowed is None`) : inchangé.
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
         if conn.execute("SELECT id FROM fiscal_years WHERE id = ?", (fy_id,)).fetchone() is None:
             raise HTTPException(404, f"Exercice {fy_id} introuvable")
-        rows = conn.execute(
-            "SELECT * FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? ORDER BY entity_id",
-            (fy_id,),
-        ).fetchall()
+        allowed = get_allowed_entity_ids(conn, user)
+        query = "SELECT * FROM fiscal_year_opening_balances WHERE fiscal_year_id = ?"
+        params: list = [fy_id]
+        if allowed is not None:
+            if not allowed:
+                query += " AND 0 = 1"
+            else:
+                ph = ",".join("?" * len(allowed))
+                query += f" AND entity_id IN ({ph})"
+                params.extend(list(allowed))
+        query += " ORDER BY entity_id"
+        rows = conn.execute(query, params).fetchall()
         return [row_to_dict(r) for r in rows]
     finally:
         conn.close()
@@ -318,13 +346,27 @@ def upsert_opening_balance(fy_id: int, entity_id: int, body: OpeningBalanceUpser
 # ─── Allocations CRUD ────────────────────────────────────────────────────────
 
 @router.get("/fiscal-years/{fy_id}/allocations")
-def list_allocations(fy_id: int):
+def list_allocations(fy_id: int, request: Request):
+    """Liste les allocations budgétaires d'un exercice.
+
+    Non-admin : lignes filtrées au périmètre du rôle (entity_id hors périmètre
+    absentes de la réponse). Admin (`allowed is None`) : inchangé.
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
-        rows = conn.execute(
-            "SELECT * FROM budget_allocations WHERE fiscal_year_id = ? ORDER BY entity_id, category_id",
-            (fy_id,),
-        ).fetchall()
+        allowed = get_allowed_entity_ids(conn, user)
+        query = "SELECT * FROM budget_allocations WHERE fiscal_year_id = ?"
+        params: list = [fy_id]
+        if allowed is not None:
+            if not allowed:
+                query += " AND 0 = 1"
+            else:
+                ph = ",".join("?" * len(allowed))
+                query += f" AND entity_id IN ({ph})"
+                params.extend(list(allowed))
+        query += " ORDER BY entity_id, category_id"
+        rows = conn.execute(query, params).fetchall()
         return [row_to_dict(r) for r in rows]
     finally:
         conn.close()
@@ -847,6 +889,32 @@ def get_budget_view(request: Request, fiscal_year_id: int):
 
         groups = [build_node(r) for r in sorted(roots)]
 
+        # Non-admin : élague l'arbre au périmètre du rôle avant tout calcul de
+        # total. `allowed` est clos par sous-arbre (get_allowed_entity_ids) :
+        # si un nœud est dans le périmètre, TOUS ses descendants le sont aussi
+        # (la CTE remonte récursivement depuis les racines octroyées). Les
+        # agrégats déjà calculés par build_node (propre + descendants) pour un
+        # nœud conservé ne peuvent donc contenir aucune entité hors périmètre
+        # -> aucun recalcul de valeur n'est nécessaire, seule la structure est
+        # élaguée. Un nœud hors périmètre est supprimé et ses enfants conservés
+        # (déjà élagués récursivement) sont remontés à son niveau, ce qui
+        # recompose bien les racines de l'arbre affiché à partir de la liste
+        # aplatie filtrée, sans jamais garder de total global.
+        allowed = get_allowed_entity_ids(conn, user)
+
+        def _prune_groups(nodes):
+            result = []
+            for node in nodes:
+                pruned_children = _prune_groups(node["children"])
+                if node["entity_id"] in allowed:
+                    result.append({**node, "children": pruned_children})
+                else:
+                    result.extend(pruned_children)
+            return result
+
+        if allowed is not None:
+            groups = _prune_groups(groups)
+
         flat: list = []
 
         def flatten(node):
@@ -856,6 +924,9 @@ def get_budget_view(request: Request, fiscal_year_id: int):
         for g in groups:
             flatten(g)
 
+        # Recalculé APRÈS élagage : pour un non-admin, `groups` ne contient
+        # plus que les racines (promues) du périmètre, donc ces totaux ne
+        # portent que sur son sous-arbre (jamais le total global).
         totals = {
             "allocated_expense": sum(g["allocated_expense"] for g in groups),
             "allocated_income": sum(g["allocated_income"] for g in groups),
@@ -867,10 +938,6 @@ def get_budget_view(request: Request, fiscal_year_id: int):
         totals["allocated"] = totals["allocated_expense"]
         totals["realized"] = totals["realized_net"]
         totals["remaining"] = totals["allocated"] + totals["realized"]
-
-        allowed = get_allowed_entity_ids(conn, user)
-        if allowed is not None:
-            flat = [e for e in flat if e["entity_id"] in allowed]
 
         return {
             "fiscal_year": row_to_dict(fy),
@@ -884,12 +951,17 @@ def get_budget_view(request: Request, fiscal_year_id: int):
 
 
 @router.get("/view/categories")
-def get_budget_category_view(fiscal_year_id: int, entity_id: Optional[int] = None):
+def get_budget_category_view(request: Request, fiscal_year_id: int, entity_id: Optional[int] = None):
     """Vue par catégorie parente — toutes entités internes confondues, ou
     limitée au sous-arbre d'une entité (focus global) quand entity_id est fourni.
+
+    Non-admin : entity_id obligatoire (400 sinon) et vérifié contre le
+    périmètre du rôle (403 hors périmètre). Admin (`allowed is None`) : inchangé.
     """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
         if fy is None:
             raise HTTPException(404, f"Exercice {fiscal_year_id} introuvable")

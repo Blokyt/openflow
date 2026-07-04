@@ -152,6 +152,114 @@ def test_fiscal_years_readable_by_all(client_and_db, login_as):
     assert viewer.get("/api/budget/fiscal-years").status_code == 200
 
 
+def _walk_entity_ids(nodes):
+    """Parcourt récursivement un arbre `groups` et yield chaque entity_id (tous niveaux)."""
+    for n in nodes:
+        yield n["entity_id"]
+        yield from _walk_entity_ids(n["children"])
+
+
+def test_budget_view_groups_and_totals_scoped(client_and_db, login_as):
+    """CRITICAL : `groups` (arbre) et `totals` (agrégat) doivent être élagués au
+    périmètre, pas seulement `entities` (liste plate)."""
+    client, db_path = client_and_db
+    ids = _seed(db_path)
+    fy = client.post("/api/budget/fiscal-years",
+                     json={"name": "2026g", "start_date": "2026-01-01"}).json()
+    # Allocation hors périmètre (BDA, racine) et dans le périmètre (Gastronomine).
+    assert client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                       json={"entity_id": ids["BDA"], "direction": "expense",
+                             "amount": 10000}).status_code == 201
+    assert client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                       json={"entity_id": ids["Gastronomine"], "direction": "expense",
+                             "amount": 3000}).status_code == 201
+
+    tres = login_as("bv1@t.fr", roles=[(ids["Gastronomine"], "treasurer")])
+    r = tres.get(f"/api/budget/view?fiscal_year_id={fy['id']}")
+    assert r.status_code == 200
+    data = r.json()
+
+    seen = set(_walk_entity_ids(data["groups"]))
+    assert ids["BDA"] not in seen
+    assert ids["CCMP"] not in seen
+    assert ids["Gastronomine"] in seen
+    # Le total ne doit refléter QUE le sous-arbre du rôle (3000), pas le
+    # total global (13000, incluant BDA hors périmètre).
+    assert data["totals"]["allocated_expense"] == 3000
+
+    # Admin : chemin strictement inchangé (BDA racine, total global).
+    admin_data = client.get(f"/api/budget/view?fiscal_year_id={fy['id']}").json()
+    admin_seen = set(_walk_entity_ids(admin_data["groups"]))
+    assert ids["BDA"] in admin_seen and ids["CCMP"] in admin_seen
+    assert admin_data["totals"]["allocated_expense"] == 13000
+
+
+def test_budget_view_zero_roles_empty(client_and_db, login_as):
+    client, db_path = client_and_db
+    ids = _seed(db_path)
+    fy = client.post("/api/budget/fiscal-years",
+                     json={"name": "2026z", "start_date": "2026-01-01"}).json()
+    nouser = login_as("bv2@t.fr", roles=[])
+    r = nouser.get(f"/api/budget/view?fiscal_year_id={fy['id']}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["entities"] == []
+    assert data["groups"] == []
+    assert data["totals"]["allocated_expense"] == 0
+    assert data["totals"]["realized_expense"] == 0
+    assert data["totals"]["realized_net"] == 0
+    assert data["totals"]["remaining"] == 0
+
+
+def test_budget_view_categories_scoped(client_and_db, login_as):
+    client, db_path = client_and_db
+    ids = _seed(db_path)
+    fy = client.post("/api/budget/fiscal-years",
+                     json={"name": "2026c", "start_date": "2026-01-01"}).json()
+    tres = login_as("bc1@t.fr", roles=[(ids["Gastronomine"], "treasurer")])
+    base = f"/api/budget/view/categories?fiscal_year_id={fy['id']}"
+    r = tres.get(base)
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Une entité est requise pour ce rôle"
+    assert tres.get(f"{base}&entity_id={ids['CCMP']}").status_code == 403
+    assert tres.get(f"{base}&entity_id={ids['Gastronomine']}").status_code == 200
+    # Admin : inchangé, y compris sans entity_id (vue globale).
+    assert client.get(base).status_code == 200
+
+
+def test_budget_allocations_and_opening_balances_scoped(client_and_db, login_as):
+    client, db_path = client_and_db
+    ids = _seed(db_path)
+    fy = client.post("/api/budget/fiscal-years",
+                     json={"name": "2026a", "start_date": "2026-01-01"}).json()
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": ids["Gastronomine"], "direction": "expense", "amount": 1000})
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations",
+                json={"entity_id": ids["CCMP"], "direction": "expense", "amount": 2000})
+    client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances/{ids['Gastronomine']}",
+               json={"amount": 500})
+    client.put(f"/api/budget/fiscal-years/{fy['id']}/opening-balances/{ids['CCMP']}",
+               json={"amount": 700})
+
+    tres = login_as("ba1@t.fr", roles=[(ids["Gastronomine"], "treasurer")])
+
+    allocs = tres.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    entity_ids = {a["entity_id"] for a in allocs}
+    assert ids["Gastronomine"] in entity_ids
+    assert ids["CCMP"] not in entity_ids
+
+    obs = tres.get(f"/api/budget/fiscal-years/{fy['id']}/opening-balances").json()
+    ob_ids = {o["entity_id"] for o in obs}
+    assert ids["Gastronomine"] in ob_ids
+    assert ids["CCMP"] not in ob_ids
+
+    # Admin : inchangé (les deux entités remontent).
+    admin_allocs = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    assert {a["entity_id"] for a in admin_allocs} == {ids["Gastronomine"], ids["CCMP"]}
+    admin_obs = client.get(f"/api/budget/fiscal-years/{fy['id']}/opening-balances").json()
+    assert {o["entity_id"] for o in admin_obs} == {ids["Gastronomine"], ids["CCMP"]}
+
+
 # ─── categories ──────────────────────────────────────────────────────────────
 
 def test_categories_tree_scoped(client_and_db, login_as):
@@ -193,6 +301,21 @@ def test_reimbursements_detail_scoped(client_and_db, login_as):
     tres = login_as("r3@t.fr", roles=[(ids["Gastronomine"], "treasurer")])
     assert tres.get(f"/api/reimbursements/{ids['reimb_Alice']}").status_code == 200
     assert tres.get(f"/api/reimbursements/{ids['reimb_Bob']}").status_code == 403
+
+
+def test_reimbursements_summary_scoped(client_and_db, login_as):
+    client, db_path = client_and_db
+    ids = _seed_with_flows(db_path)
+    tres = login_as("rsum1@t.fr", roles=[(ids["Gastronomine"], "treasurer")])
+    r = tres.get("/api/reimbursements/summary")
+    assert r.status_code == 200
+    names = {item["person_name"] for item in r.json()}
+    assert "Alice" in names
+    assert "Bob" not in names
+
+    # Admin : inchangé, les deux remontent.
+    admin_names = {item["person_name"] for item in client.get("/api/reimbursements/summary").json()}
+    assert admin_names == {"Alice", "Bob"}
 
 
 # ─── reports ─────────────────────────────────────────────────────────────────
@@ -239,6 +362,41 @@ def test_reports_bilan_pdf_scoped(client_and_db, login_as):
     assert tres.get(f"/api/reports/bilan/pdf?fiscal_year_id={fy['id']}").status_code in (400, 403)
     assert tres.get(f"/api/reports/bilan/pdf?fiscal_year_id={fy['id']}&entity_id={ids['Gastronomine']}").status_code == 200
     assert tres.get(f"/api/reports/bilan/pdf?fiscal_year_id={fy['id']}&entity_id={ids['CCMP']}").status_code == 403
+
+
+def test_reports_accruals_scoped(client_and_db, login_as):
+    client, db_path = client_and_db
+    ids = _seed_with_flows(db_path)
+    fy = client.post("/api/budget/fiscal-years",
+                     json={"name": "2026acc", "start_date": "2026-01-01"}).json()
+    client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "creance", "amount": 1000,
+        "label": "Creance Gastro", "entity_id": ids["Gastronomine"],
+    })
+    client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "creance", "amount": 2000,
+        "label": "Creance CCMP", "entity_id": ids["CCMP"],
+    })
+    client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "dette", "amount": 500,
+        "label": "Dette globale",
+    })  # entity_id absent (niveau global)
+
+    tres = login_as("racc1@t.fr", roles=[(ids["Gastronomine"], "treasurer")])
+    base = f"/api/reports/accruals?fiscal_year_id={fy['id']}"
+    assert tres.get(base).status_code == 400
+    assert tres.get(f"{base}&entity_id={ids['CCMP']}").status_code == 403
+    r = tres.get(f"{base}&entity_id={ids['Gastronomine']}")
+    assert r.status_code == 200
+    labels = {a["label"] for a in r.json()}
+    assert "Creance Gastro" in labels
+    assert "Creance CCMP" not in labels
+    # entity_id NULL exclu par défaut pour un non-admin (deny-by-default).
+    assert "Dette globale" not in labels
+
+    # Admin : inchangé, toutes les lignes remontent (y compris entity_id NULL).
+    admin_labels = {a["label"] for a in client.get(base).json()}
+    assert admin_labels == {"Creance Gastro", "Creance CCMP", "Dette globale"}
 
 
 def test_reports_catalog_endpoints_open_to_all(client_and_db, login_as):

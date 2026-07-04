@@ -198,21 +198,42 @@ def create_reimbursement(reimbursement: ReimbursementCreate):
 
 
 @router.get("/summary")
-def get_summary():
-    """Retourne qui doit quoi : groupe par contact, somme des montants pending."""
+def get_summary(request: Request):
+    """Retourne qui doit quoi : groupe par contact, somme des montants pending.
+
+    Non-admin : filtré au périmètre du rôle exactement comme la liste, via la
+    transaction liée (transaction_id -> transactions.from_entity_id/
+    to_entity_id) ; le filtre est appliqué AVANT le GROUP BY pour ne pas
+    fausser les totaux agrégés par contact. Un remboursement sans transaction
+    liée est exclu (deny-by-default, cf. liste). Admin (`allowed is None`) :
+    inchangé.
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
-        cur = conn.execute(
-            """SELECT COALESCE(co.name, r.person_name) AS person_name,
+        allowed = get_allowed_entity_ids(conn, user)
+        query = """SELECT COALESCE(co.name, r.person_name) AS person_name,
                       r.contact_id,
                       SUM(r.amount) as total_pending,
                       COUNT(*) as count
                FROM reimbursements r
                LEFT JOIN contacts co ON r.contact_id = co.id
-               WHERE r.status = 'pending'
-               GROUP BY COALESCE(co.name, r.person_name)
-               ORDER BY total_pending DESC""",
-        )
+               LEFT JOIN transactions t ON r.transaction_id = t.id
+               WHERE r.status = 'pending'"""
+        params: list = []
+        if allowed is not None:
+            if not allowed:
+                query += " AND 0 = 1"
+            else:
+                ph = ",".join("?" * len(allowed))
+                query += (
+                    f" AND r.transaction_id IS NOT NULL "
+                    f"AND (t.from_entity_id IN ({ph}) OR t.to_entity_id IN ({ph}))"
+                )
+                params.extend(list(allowed))
+                params.extend(list(allowed))
+        query += " GROUP BY COALESCE(co.name, r.person_name) ORDER BY total_pending DESC"
+        cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
