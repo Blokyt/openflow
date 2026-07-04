@@ -155,3 +155,36 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if not user["is_admin"]:
         raise HTTPException(status_code=403, detail="Action réservée à l'administrateur")
     return user
+
+
+def get_allowed_entity_ids(conn, user: dict):
+    """Périmètre du user : None = tout (admin), sinon l'union des sous-arbres
+    des entités où il a un rôle (même CTE que compute_consolidated_balance)."""
+    if user["is_admin"]:
+        return None
+    roots = [
+        r[0]
+        for r in conn.execute(
+            "SELECT entity_id FROM user_entity_roles WHERE user_id = ?", (user["id"],)
+        ).fetchall()
+    ]
+    if not roots:
+        return set()
+    placeholders = ",".join("?" * len(roots))
+    cur = conn.execute(
+        f"""WITH RECURSIVE tree(id) AS (
+            SELECT id FROM entities WHERE id IN ({placeholders})
+            UNION
+            SELECT e.id FROM entities e JOIN tree t ON e.parent_id = t.id
+        ) SELECT id FROM tree""",
+        roots,
+    )
+    return {r[0] for r in cur.fetchall()}
+
+
+def require_entity_access(conn, user: dict, entity_id: int) -> None:
+    allowed = get_allowed_entity_ids(conn, user)
+    if allowed is None:
+        return
+    if entity_id not in allowed:
+        raise HTTPException(status_code=403, detail="Accès refusé à cette entité")

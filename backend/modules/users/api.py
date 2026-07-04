@@ -9,6 +9,7 @@ from backend.core.auth import (
     SESSION_TTL_DAYS,
     create_session,
     delete_session,
+    get_allowed_entity_ids,
     get_current_user,
     hash_password,
     verify_password,
@@ -43,8 +44,7 @@ def serialize_user(conn, user_row) -> dict:
     if user_row["is_admin"]:
         allowed = None
     else:
-        # Task 5 remplace cette ligne par get_allowed_entity_ids (sous-arbre).
-        allowed = sorted({r["entity_id"] for r in roles})
+        allowed = sorted(get_allowed_entity_ids(conn, {"id": user_row["id"], "is_admin": 0}))
     return {
         "id": user_row["id"],
         "email": user_row["email"],
