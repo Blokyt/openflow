@@ -24,12 +24,13 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.core.config import load_config
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
 from backend.core.balance import (
     compute_consolidated_balance,
     compute_entity_balance,
@@ -39,6 +40,20 @@ from backend.core.balance import (
 from backend.core.database import get_conn
 
 router = APIRouter()
+
+# Endpoints de vue financière globale : entity_id devient obligatoire pour un
+# non-admin (même règle que le dashboard), et vérifié contre son périmètre.
+ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
+FISCAL_YEAR_REQUIRED_MESSAGE = "Un exercice est requis pour ce rôle"
+
+
+def _require_scope(conn, user: dict, entity_id):
+    allowed = get_allowed_entity_ids(conn, user)
+    if allowed is None:
+        return
+    if entity_id is None:
+        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
+    require_entity_access(conn, user, entity_id)
 
 
 # ───────────────────────── Période & entités ──────────────────────────────
@@ -523,6 +538,7 @@ def _resolve_cr_data(conn, fiscal_year_id, start_date, end_date,
 
 @router.get("/compte-resultat")
 def get_compte_resultat(
+    request: Request,
     fiscal_year_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -534,9 +550,14 @@ def get_compte_resultat(
     Avec start_date/end_date seulement : trésorerie pure sur la période.
     Dans les deux cas : produits/charges par catégorie ET par compte, totaux,
     résultat. Avec entity_id : périmètre restreint à ce club (sous-arbre).
+
+    Non-admin : entity_id obligatoire (vue globale sinon) et vérifié contre
+    le périmètre du rôle.
     """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         return _resolve_cr_data(conn, fiscal_year_id, start_date, end_date, entity_id)
     finally:
         conn.close()
@@ -682,11 +703,22 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
 
 
 @router.get("/bilan")
-def get_bilan(fiscal_year_id: Optional[int] = None, entity_id: Optional[int] = None):
+def get_bilan(request: Request, fiscal_year_id: Optional[int] = None, entity_id: Optional[int] = None):
     """Bilan : par exercice (fiscal_year_id) avec actif/passif équilibrés, ou
-    trésorerie instantanée si aucun exercice n'est fourni."""
+    trésorerie instantanée si aucun exercice n'est fourni.
+
+    Non-admin : entity_id obligatoire et vérifié contre le périmètre. Le bilan
+    instantané (_bilan_instantane) agrège tous les internes sans notion
+    d'entity_id : il reste donc réservé à un fiscal_year_id explicite pour un
+    non-admin (sinon entity_id serait ignoré et la vue redeviendrait globale).
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None and fiscal_year_id is None:
+            raise HTTPException(status_code=400, detail=FISCAL_YEAR_REQUIRED_MESSAGE)
         if fiscal_year_id is None:
             return _bilan_instantane(conn)
         return _bilan_exercice(conn, fiscal_year_id, entity_id=entity_id)
@@ -912,14 +944,19 @@ def _pdf_response(pdf, filename: str) -> Response:
 
 @router.get("/compte-resultat/pdf")
 def get_compte_resultat_pdf(
+    request: Request,
     fiscal_year_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     entity_id: Optional[int] = None,
 ):
-    """Export PDF du compte de résultat (postes par compte, accents et €)."""
+    """Export PDF du compte de résultat (postes par compte, accents et €).
+
+    Même règle de périmètre que /compte-resultat (export = lecture)."""
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         data = _resolve_cr_data(conn, fiscal_year_id, start_date, end_date, entity_id)
         start = data["periode"]["start"]
         end = data["periode"]["end"]
@@ -1002,12 +1039,18 @@ def get_compte_resultat_pdf(
 
 
 @router.get("/bilan/pdf")
-def get_bilan_pdf(fiscal_year_id: Optional[int] = None, entity_id: Optional[int] = None):
-    """Export PDF du bilan d'un exercice (actif / passif équilibrés)."""
+def get_bilan_pdf(request: Request, fiscal_year_id: Optional[int] = None, entity_id: Optional[int] = None):
+    """Export PDF du bilan d'un exercice (actif / passif équilibrés).
+
+    Même règle de périmètre que /bilan (export = lecture) ; fiscal_year_id est
+    déjà obligatoire pour tout le monde ici, donc pas de piège "bilan
+    instantané" possible pour un non-admin."""
     if fiscal_year_id is None:
         raise HTTPException(400, "Le bilan PDF nécessite un fiscal_year_id")
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         data = _bilan_exercice(conn, fiscal_year_id, entity_id=entity_id)
         entity_name = None
         if entity_id:

@@ -3,9 +3,10 @@ import sqlite3
 from datetime import datetime, timezone, date as _date, timedelta as _timedelta
 from typing import Optional, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
 from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance
 
@@ -579,13 +580,17 @@ def _split_from_lookup(lookup: dict, entity_id: int, category_id) -> dict:
 
 
 @router.get("/view")
-def get_budget_view(fiscal_year_id: int):
+def get_budget_view(request: Request, fiscal_year_id: int):
     """Vue budgétaire hiérarchique Groupe > Club > Catégorie avec dépenses et
     recettes séparées (prévu et réalisé), N-1 et taux de couverture.
 
     Renvoie `groups` (arbre, totaux agrégés propre + descendants) ET `entities`
     (liste plate, champs historiques) + `totals` pour le widget dashboard.
+
+    Non-admin : la liste `entities` de la réponse composite est restreinte au
+    périmètre du rôle (les entités hors périmètre n'apparaissent pas).
     """
+    user = get_current_user(request)
     conn = get_conn()
     try:
         fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
@@ -863,6 +868,10 @@ def get_budget_view(fiscal_year_id: int):
         totals["realized"] = totals["realized_net"]
         totals["remaining"] = totals["allocated"] + totals["realized"]
 
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None:
+            flat = [e for e in flat if e["entity_id"] in allowed]
+
         return {
             "fiscal_year": row_to_dict(fy),
             "previous_fiscal_year_id": prev["id"] if prev else None,
@@ -875,8 +884,10 @@ def get_budget_view(fiscal_year_id: int):
 
 
 @router.get("/view/categories")
-def get_budget_category_view(fiscal_year_id: int):
-    """Vue par catégorie parente — toutes entités internes confondues."""
+def get_budget_category_view(fiscal_year_id: int, entity_id: Optional[int] = None):
+    """Vue par catégorie parente — toutes entités internes confondues, ou
+    limitée au sous-arbre d'une entité (focus global) quand entity_id est fourni.
+    """
     conn = get_conn()
     try:
         fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
@@ -908,9 +919,15 @@ def get_budget_category_view(fiscal_year_id: int):
             key=lambda c: c["name"],
         )
 
-        internal_ids = [r["id"] for r in conn.execute(
-            "SELECT id FROM entities WHERE type = 'internal'"
-        ).fetchall()]
+        if entity_id is not None:
+            # Périmètre = sous-arbre interne de l'entité focalisée (mêmes
+            # conventions que le dashboard : flux traversant la frontière).
+            from backend.core.balance import get_subtree_ids
+            internal_ids = get_subtree_ids(conn, entity_id)
+        else:
+            internal_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM entities WHERE type = 'internal'"
+            ).fetchall()]
 
         def sum_cat_realized(cat_ids: list, start: str, end: str) -> float:
             if not cat_ids or not internal_ids:
@@ -932,10 +949,13 @@ def get_budget_category_view(fiscal_year_id: int):
             if not cat_ids:
                 return 0.0
             ph = ",".join("?" * len(cat_ids))
-            row = conn.execute(
-                f"SELECT COALESCE(SUM(amount),0) AS t FROM budget_allocations WHERE fiscal_year_id=? AND category_id IN ({ph})",
-                (fiscal_year_id, *cat_ids),
-            ).fetchone()
+            sql = f"SELECT COALESCE(SUM(amount),0) AS t FROM budget_allocations WHERE fiscal_year_id=? AND category_id IN ({ph})"
+            params = [fiscal_year_id, *cat_ids]
+            if entity_id is not None:
+                ph_e = ",".join("?" * len(internal_ids))
+                sql += f" AND entity_id IN ({ph_e})"
+                params.extend(internal_ids)
+            row = conn.execute(sql, params).fetchone()
             return row["t"] if row else 0.0
 
         rows_out = []

@@ -5,13 +5,34 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.balance import compute_consolidated_balance, compute_entity_balance, compute_legacy_balance
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
+from backend.core.balance import (
+    compute_consolidated_balance,
+    compute_entity_balance,
+    compute_legacy_balance,
+    get_subtree_ids,
+)
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
+
+# Message constant pour la garde « entité obligatoire pour un non-admin »,
+# partagée par tous les endpoints de vue financière (dashboard et reports).
+ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
+
+
+def _require_scope(conn, user: dict, entity_id):
+    """Non-admin : entity_id obligatoire (400 si absent) + dans le périmètre (403 sinon).
+    Admin (`allowed is None`) : inchangé, aucune contrainte."""
+    allowed = get_allowed_entity_ids(conn, user)
+    if allowed is None:
+        return
+    if entity_id is None:
+        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
+    require_entity_access(conn, user, entity_id)
 
 # Project root is 3 levels up from this file: backend/modules/dashboard/api.py
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -35,6 +56,37 @@ def _period_conds(date_from: Optional[str], date_to: Optional[str], col: str = "
         conds.append(f"{col} <= ?")
         params.append(date_to)
     return conds, params
+
+
+def _scope_ids(conn, entity_id: int, include_children: bool) -> list:
+    """Périmètre d'entités du focus : l'entité seule, ou son sous-arbre interne.
+
+    Avec un périmètre à une seule entité, la logique « frontière » (flux qui
+    entrent/sortent du périmètre) est strictement équivalente à l'ancienne
+    logique par entité (from/to = entité), puisque from != to est garanti.
+    """
+    if include_children:
+        return get_subtree_ids(conn, entity_id)
+    return [entity_id]
+
+
+def _frontier_case_sql(scope: list) -> tuple:
+    """Expression CASE signée pour le flux net du périmètre + params.
+
+    +amount quand l'argent entre dans le périmètre depuis l'extérieur,
+    -amount quand il en sort. Les mouvements internes au périmètre valent 0.
+    """
+    ph = ",".join("?" * len(scope))
+    sql = f"""CASE
+        WHEN to_entity_id IN ({ph})
+         AND (from_entity_id IS NULL OR from_entity_id NOT IN ({ph}))
+        THEN amount
+        WHEN from_entity_id IN ({ph})
+         AND (to_entity_id IS NULL OR to_entity_id NOT IN ({ph}))
+        THEN -amount
+        ELSE 0
+    END"""
+    return sql, list(scope) * 4
 
 
 class WidgetLayout(BaseModel):
@@ -111,43 +163,62 @@ def save_layout(layout: list[WidgetLayout]):
 
 @router.get("/summary")
 def get_summary(
+    request: Request,
     entity_id: Optional[int] = None,
+    include_children: bool = False,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
     """Compute financial summary from config reference + transactions.
 
-    If entity_id is provided, scope the aggregates to that entity.
+    If entity_id is provided, scope the aggregates to that entity ; with
+    include_children=true the scope is the whole subtree (solde consolidé,
+    flux traversant la frontière du sous-arbre — les virements internes au
+    périmètre sont neutres).
     If date_from/date_to are provided (e.g. an exercise period), the recettes,
     dépenses and transaction count are bounded to that period. The headline
     `balance` always stays the real current balance ("solde actuel"), which is
     a point-in-time figure independent of the selected exercise.
     """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'")
         if cur.fetchone() is None:
             return {"balance": 0.0, "total_income": 0.0, "total_expenses": 0.0, "transaction_count": 0}
 
         if entity_id is not None:
-            bal = compute_entity_balance(conn, entity_id)
+            if include_children:
+                balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
+            else:
+                balance = compute_entity_balance(conn, entity_id)["balance"]
+            scope = _scope_ids(conn, entity_id, include_children)
+            ph = ",".join("?" * len(scope))
             conds, pp = _period_conds(date_from, date_to)
-            income_where = " AND ".join(["to_entity_id = ?"] + conds)
-            expense_where = " AND ".join(["from_entity_id = ?"] + conds)
-            count_where = " AND ".join(["(from_entity_id = ? OR to_entity_id = ?)"] + conds)
+            income_where = " AND ".join([
+                f"to_entity_id IN ({ph})",
+                f"(from_entity_id IS NULL OR from_entity_id NOT IN ({ph}))",
+            ] + conds)
+            expense_where = " AND ".join([
+                f"from_entity_id IN ({ph})",
+                f"(to_entity_id IS NULL OR to_entity_id NOT IN ({ph}))",
+            ] + conds)
+            count_where = " AND ".join([
+                f"(from_entity_id IN ({ph}) OR to_entity_id IN ({ph}))",
+            ] + conds)
             total_income = conn.execute(
                 f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {income_where}",
-                (entity_id, *pp),
+                (*scope, *scope, *pp),
             ).fetchone()[0]
             total_expenses = conn.execute(
                 f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {expense_where}",
-                (entity_id, *pp),
+                (*scope, *scope, *pp),
             ).fetchone()[0]
             transaction_count = conn.execute(
                 f"SELECT COUNT(*) FROM transactions WHERE {count_where}",
-                (entity_id, entity_id, *pp),
+                (*scope, *scope, *pp),
             ).fetchone()[0]
-            balance = bal["balance"]
         else:
             # "Toutes les entités" = consolidated balance of root entity
             root = conn.execute(
@@ -194,38 +265,48 @@ def get_summary(
 
 
 @router.get("/timeseries")
-def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
+def get_timeseries(
+    request: Request,
+    entity_id: Optional[int] = None,
+    months: int = 12,
+    include_children: bool = False,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
     """Return monthly balance evolution: list of {month: 'YYYY-MM', balance: float}.
 
     We compute the current balance, then walk backwards in time to reconstruct
     balance at the end of each past month. This avoids any reference-amount
     accounting ambiguity for consolidated views.
 
-    This widget is a trailing "evolution du solde" view anchored on the real
-    current balance; it is intentionally NOT bounded to the selected exercise
-    (anchoring a past exercise's last month to today's balance would be wrong).
+    Sans bornes, la vue est glissante : les `months` derniers mois ancrés sur
+    le solde courant. Avec date_from/date_to (exercice sélectionné), la série
+    est découpée sur cette fenêtre — chaque point reste le solde de fin de
+    mois historique, donc la fenêtre d'un exercice passé est exacte.
     """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         # Current balance
         if entity_id is not None:
-            current_balance = compute_entity_balance(conn, entity_id)["balance"]
-            # Net flow for the entity = incoming - outgoing (same convention as
-            # compute_entity_balance). Incoming = amount when the entity is the
-            # destination. Outgoing = amount (already negative) when the entity
-            # is the source on an expense. Matches the signed-amount convention
-            # used by the transactions API.
+            if include_children:
+                current_balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
+            else:
+                current_balance = compute_entity_balance(conn, entity_id)["balance"]
+            # Flux net mensuel du périmètre (frontière du sous-arbre : les
+            # virements internes au périmètre sont neutres). Même convention
+            # de signe que compute_entity_balance.
+            scope = _scope_ids(conn, entity_id, include_children)
+            case_sql, case_params = _frontier_case_sql(scope)
+            ph = ",".join("?" * len(scope))
             net_rows = conn.execute(
-                """SELECT substr(date,1,7) AS month,
-                          COALESCE(SUM(CASE
-                              WHEN to_entity_id = ? THEN amount
-                              WHEN from_entity_id = ? THEN -amount
-                              ELSE 0
-                          END), 0) AS net
+                f"""SELECT substr(date,1,7) AS month,
+                          COALESCE(SUM({case_sql}), 0) AS net
                    FROM transactions
-                   WHERE from_entity_id = ? OR to_entity_id = ?
+                   WHERE from_entity_id IN ({ph}) OR to_entity_id IN ({ph})
                    GROUP BY month ORDER BY month""",
-                (entity_id, entity_id, entity_id, entity_id),
+                (*case_params, *scope, *scope),
             ).fetchall()
         else:
             root = conn.execute(
@@ -257,6 +338,10 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
         today = date.today()
         if nets_by_month:
             first = min(nets_by_month)
+            # Si une fenêtre explicite commence avant la première activité,
+            # on matérialise aussi ces mois-là (solde stable à la référence).
+            if date_from and date_from[:7] < first:
+                first = date_from[:7]
             y, m = int(first[:4]), int(first[5:7])
         else:
             y, m = today.year, today.month
@@ -275,6 +360,12 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
         # forward contient toujours au moins le mois courant (boucle while ci-dessus).
         offset = current_balance - forward[-1][1]
         series = [{"month": mth, "balance": int(round(v + offset))} for mth, v in forward]
+        # Fenêtre d'exercice explicite : on découpe la série historique (chaque
+        # point est un solde de fin de mois exact) au lieu du glissement N mois.
+        if date_from or date_to:
+            lo = date_from[:7] if date_from else "0000-00"
+            hi = date_to[:7] if date_to else "9999-99"
+            return [p for p in series if lo <= p["month"] <= hi]
         return series[-months:]
     finally:
         conn.close()
@@ -282,24 +373,37 @@ def get_timeseries(entity_id: Optional[int] = None, months: int = 12):
 
 @router.get("/top-categories")
 def top_categories(
+    request: Request,
     entity_id: Optional[int] = None,
+    include_children: bool = False,
     limit: int = 5,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
-    """Top categories by expense magnitude, optionally bounded to an exercise."""
+    """Top categories by expense magnitude, optionally bounded to an exercise.
+
+    Avec include_children, seules les dépenses qui SORTENT du sous-arbre
+    comptent : un virement interne au périmètre n'est pas une dépense du groupe.
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         conds, pp = _period_conds(date_from, date_to, "t.date")
         if entity_id is not None:
-            where = " AND ".join(["t.from_entity_id = ?"] + conds)
+            scope = _scope_ids(conn, entity_id, include_children)
+            ph = ",".join("?" * len(scope))
+            where = " AND ".join([
+                f"t.from_entity_id IN ({ph})",
+                f"(t.to_entity_id IS NULL OR t.to_entity_id NOT IN ({ph}))",
+            ] + conds)
             rows = conn.execute(
                 f"""SELECT c.name AS name, c.color AS color, SUM(t.amount) AS total
                    FROM transactions t
                    LEFT JOIN categories c ON t.category_id = c.id
                    WHERE {where}
                    GROUP BY t.category_id ORDER BY total DESC LIMIT ?""",
-                (entity_id, *pp, limit),
+                (*scope, *scope, *pp, limit),
             ).fetchall()
         else:
             base = "t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')"
@@ -319,16 +423,21 @@ def top_categories(
 
 @router.get("/recent")
 def recent_transactions(
+    request: Request,
     entity_id: Optional[int] = None,
+    include_children: bool = False,
     limit: int = 5,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
     """Return the N most recent transactions, optionally bounded to an exercise."""
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        _require_scope(conn, user, entity_id)
         query = """SELECT t.id, t.date, t.label, t.amount,
                           ef.name AS from_entity_name, et.name AS to_entity_name,
+                          ef.type AS from_entity_type, et.type AS to_entity_type,
                           c.name AS category_name, c.color AS category_color
                    FROM transactions t
                    LEFT JOIN entities ef ON t.from_entity_id = ef.id
@@ -336,8 +445,10 @@ def recent_transactions(
                    LEFT JOIN categories c ON t.category_id = c.id"""
         conds, params = [], []
         if entity_id is not None:
-            conds.append("(t.from_entity_id = ? OR t.to_entity_id = ?)")
-            params += [entity_id, entity_id]
+            scope = _scope_ids(conn, entity_id, include_children)
+            ph = ",".join("?" * len(scope))
+            conds.append(f"(t.from_entity_id IN ({ph}) OR t.to_entity_id IN ({ph}))")
+            params += list(scope) + list(scope)
         period_conds, pp = _period_conds(date_from, date_to, "t.date")
         conds += period_conds
         params += pp

@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin, require_entity_access
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
 
@@ -265,7 +265,9 @@ def create_transaction(tx: TransactionCreate, force: bool = False):
 # IMPORTANT: /balance must be declared BEFORE /{tx_id} to avoid FastAPI
 # treating "balance" as a tx_id path parameter.
 @router.get("/balance")
-def get_balance():
+def get_balance(user: dict = Depends(require_admin)):
+    """Solde légal global (rétrocompatibilité). Fuite potentielle de la trésorerie
+    totale de l'association à un non-admin : réservé à l'administrateur."""
     conn = get_conn()
     try:
         return compute_legacy_balance(conn, str(CONFIG_PATH))

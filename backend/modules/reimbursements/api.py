@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -60,9 +61,18 @@ class ReimbursementUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/")
-def list_reimbursements(status: Optional[str] = None):
+def list_reimbursements(request: Request, status: Optional[str] = None):
+    """Liste des remboursements.
+
+    Rattachement à une entité : via la transaction liée (transaction_id ->
+    transactions.from_entity_id/to_entity_id) ; un remboursement sans
+    transaction liée n'a pas d'entité de rattachement vérifiable et est donc
+    exclu de la vue d'un non-admin (deny-by-default, cf. require_session).
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        allowed = get_allowed_entity_ids(conn, user)
         query = """SELECT r.*,
                    t.label AS transaction_label,
                    t.date AS transaction_date,
@@ -76,7 +86,23 @@ def list_reimbursements(status: Optional[str] = None):
         if status:
             query += " AND r.status = ?"
             params.append(status)
-        query += " ORDER BY r.created_at DESC, r.id DESC"
+        if allowed is not None:
+            if not allowed:
+                query += " AND 0 = 1"
+            else:
+                ph = ",".join("?" * len(allowed))
+                query += (
+                    f" AND r.transaction_id IS NOT NULL "
+                    f"AND (t.from_entity_id IN ({ph}) OR t.to_entity_id IN ({ph}))"
+                )
+                params.extend(list(allowed))
+                params.extend(list(allowed))
+        # Ordre de travail du trésorier : les avances encore dues d'abord,
+        # puis chaque groupe par date réelle de la dépense (pas par date de
+        # saisie de la fiche, qui n'a aucun sens métier), la plus récente en tête.
+        query += """ ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END,
+                     COALESCE(t.date, DATE(r.created_at)) DESC,
+                     r.id DESC"""
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]
     finally:
@@ -193,7 +219,8 @@ def get_summary():
 
 
 @router.get("/{reimbursement_id}")
-def get_reimbursement(reimbursement_id: int):
+def get_reimbursement(reimbursement_id: int, request: Request):
+    user = get_current_user(request)
     conn = get_conn()
     try:
         row = conn.execute(
@@ -204,6 +231,14 @@ def get_reimbursement(reimbursement_id: int):
                 status_code=404,
                 detail=f"Reimbursement {reimbursement_id} not found",
             )
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None:
+            tx_id = row["transaction_id"]
+            tx = conn.execute(
+                "SELECT from_entity_id, to_entity_id FROM transactions WHERE id = ?", (tx_id,)
+            ).fetchone() if tx_id is not None else None
+            if tx is None or (tx["from_entity_id"] not in allowed and tx["to_entity_id"] not in allowed):
+                raise HTTPException(status_code=403, detail="Accès refusé à cette entité")
         return row_to_dict(row)
     finally:
         conn.close()

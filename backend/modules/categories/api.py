@@ -2,10 +2,11 @@
 
 import sqlite3
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -39,16 +40,61 @@ def list_categories():
 
 
 @router.get("/tree")
-def get_tree():
+def get_tree(
+    request: Request,
+    entity_id: Optional[int] = None,
+    include_children: bool = False,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Arbre des catégories avec statistiques d'usage.
+
+    Les stats (nb de transactions, total) peuvent être bornées au focus global :
+    entité (± sous-entités) et période d'exercice — mêmes conventions que le
+    reste de l'app, pour que la page Catégories raconte la même histoire.
+
+    Non-admin : entity_id obligatoire (les stats globales toutes entités sont
+    réservées à l'admin) et vérifié contre le périmètre du rôle.
+    """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None:
+            if entity_id is None:
+                raise HTTPException(status_code=403, detail="Action réservée à l'administrateur")
+            require_entity_access(conn, user, entity_id)
         rows = conn.execute("SELECT * FROM categories ORDER BY position, id").fetchall()
         nodes = {r["id"]: {**row_to_dict(r), "children": [], "tx_count": 0, "tx_total": 0.0} for r in rows}
 
         # Aggregate transaction counts and totals per category
+        conds = ["category_id IS NOT NULL"]
+        params: list = []
+        if entity_id is not None:
+            if include_children:
+                scope = [r[0] for r in conn.execute(
+                    """WITH RECURSIVE tree(id) AS (
+                           SELECT ? UNION ALL
+                           SELECT e.id FROM entities e JOIN tree t ON e.parent_id = t.id
+                       ) SELECT id FROM tree""",
+                    (entity_id,),
+                ).fetchall()]
+            else:
+                scope = [entity_id]
+            ph = ",".join("?" * len(scope))
+            conds.append(f"(from_entity_id IN ({ph}) OR to_entity_id IN ({ph}))")
+            params.extend(scope)
+            params.extend(scope)
+        if date_from:
+            conds.append("date >= ?")
+            params.append(date_from)
+        if date_to:
+            conds.append("date <= ?")
+            params.append(date_to)
         tx_rows = conn.execute(
             "SELECT category_id, COUNT(*) AS cnt, SUM(amount) AS total "
-            "FROM transactions WHERE category_id IS NOT NULL GROUP BY category_id"
+            f"FROM transactions WHERE {' AND '.join(conds)} GROUP BY category_id",
+            params,
         ).fetchall()
         for tx_row in tx_rows:
             cat_id = tx_row["category_id"]
