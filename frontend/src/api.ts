@@ -31,6 +31,28 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 }
 
 export const api = {
+  // Auth & utilisateurs
+  login: (email: string, password: string) =>
+    request<any>("/users/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  logout: () => request<any>("/users/logout", { method: "POST" }),
+  getMe: () => request<any>("/users/me"),
+  changeMyPassword: (current_password: string, new_password: string) =>
+    request<any>("/users/me/password", { method: "PUT", body: JSON.stringify({ current_password, new_password }) }),
+  listUsers: () => request<any[]>("/users/"),
+  updateUser: (id: number, data: any) =>
+    request<any>(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  setUserRoles: (id: number, roles: { entity_id: number; role: string }[]) =>
+    request<any>(`/users/${id}/roles`, { method: "PUT", body: JSON.stringify({ roles }) }),
+  revokeUserSessions: (id: number) =>
+    request<any>(`/users/${id}/sessions`, { method: "DELETE" }),
+  createInvitation: (data: { email: string; is_admin?: boolean; roles?: { entity_id: number; role: string }[] }) =>
+    request<any>("/users/invitations", { method: "POST", body: JSON.stringify(data) }),
+  listInvitations: () => request<any[]>("/users/invitations"),
+  deleteInvitation: (id: number) => request<any>(`/users/invitations/${id}`, { method: "DELETE" }),
+  previewInvitation: (token: string) =>
+    request<any>(`/users/invitations/preview?token=${encodeURIComponent(token)}`),
+  acceptInvitation: (data: { token: string; display_name: string; password: string }) =>
+    request<any>("/users/invitations/accept", { method: "POST", body: JSON.stringify(data) }),
   getModules: () => request<any[]>("/modules"),
   getAllModules: () => request<any[]>("/modules/all"),
   getConfig: () => request<any>("/config"),
@@ -48,7 +70,15 @@ export const api = {
   deleteTransaction: (id: number, force = false) =>
     request<any>(`/transactions/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
   getCategories: () => request<any[]>("/categories/"),
-  getCategoryTree: () => request<any[]>("/categories/tree"),
+  // Les stats de l'arbre suivent le focus global (entité + sous-entités, exercice).
+  getCategoryTree: (entityId?: number, dateFrom?: string, dateTo?: string) => {
+    const q = new URLSearchParams();
+    if (entityId) { q.set("entity_id", String(entityId)); q.set("include_children", "true"); }
+    if (dateFrom) q.set("date_from", dateFrom);
+    if (dateTo) q.set("date_to", dateTo);
+    const qs = q.toString();
+    return request<any[]>(`/categories/tree${qs ? "?" + qs : ""}`);
+  },
   createCategory: (cat: any) => request<any>("/categories/", { method: "POST", body: JSON.stringify(cat) }),
   updateCategory: (id: number, cat: any) => request<any>(`/categories/${id}`, { method: "PUT", body: JSON.stringify(cat) }),
   deleteCategory: (id: number) => request<any>(`/categories/${id}`, { method: "DELETE" }),
@@ -93,18 +123,22 @@ export const api = {
     ),
   getBudgetView: (fyId: number) =>
     request<any>(`/budget/view?fiscal_year_id=${fyId}`),
-  getBudgetCategoryView: (fyId: number) =>
-    request<any>(`/budget/view/categories?fiscal_year_id=${fyId}`),
-  getTimeseries: (entityId?: number, months = 12) => {
+  getBudgetCategoryView: (fyId: number, entityId?: number) =>
+    request<any>(`/budget/view/categories?fiscal_year_id=${fyId}${entityId ? `&entity_id=${entityId}` : ""}`),
+  // Focus entité : le dashboard couvre toujours l'entité ET ses sous-entités
+  // (include_children), comme la page Transactions — cohérence de périmètre.
+  getTimeseries: (entityId?: number, months = 12, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
     q.set("months", String(months));
-    if (entityId) q.set("entity_id", String(entityId));
+    if (entityId) { q.set("entity_id", String(entityId)); q.set("include_children", "true"); }
+    if (dateFrom) q.set("date_from", dateFrom);
+    if (dateTo) q.set("date_to", dateTo);
     return request<any[]>(`/dashboard/timeseries?${q.toString()}`);
   },
   getTopCategories: (entityId?: number, limit = 5, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
     q.set("limit", String(limit));
-    if (entityId) q.set("entity_id", String(entityId));
+    if (entityId) { q.set("entity_id", String(entityId)); q.set("include_children", "true"); }
     if (dateFrom) q.set("date_from", dateFrom);
     if (dateTo) q.set("date_to", dateTo);
     return request<any[]>(`/dashboard/top-categories?${q.toString()}`);
@@ -112,14 +146,14 @@ export const api = {
   getRecentTransactions: (entityId?: number, limit = 5, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
     q.set("limit", String(limit));
-    if (entityId) q.set("entity_id", String(entityId));
+    if (entityId) { q.set("entity_id", String(entityId)); q.set("include_children", "true"); }
     if (dateFrom) q.set("date_from", dateFrom);
     if (dateTo) q.set("date_to", dateTo);
     return request<any[]>(`/dashboard/recent?${q.toString()}`);
   },
   getSummary: (entityId?: number, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
-    if (entityId) q.set("entity_id", String(entityId));
+    if (entityId) { q.set("entity_id", String(entityId)); q.set("include_children", "true"); }
     if (dateFrom) q.set("date_from", dateFrom);
     if (dateTo) q.set("date_to", dateTo);
     const qs = q.toString();
@@ -145,6 +179,14 @@ export const api = {
   },
   getContacts: () =>
     request<{ total: number; items: any[] }>("/tiers/?limit=10000").then((r) => r.items),
+  // Recherche paginée côté serveur (combobox) : évite de charger tout le carnet.
+  searchContacts: (search: string, limit = 30) => {
+    const q = new URLSearchParams();
+    if (search) q.set("search", search);
+    q.set("limit", String(limit));
+    return request<{ total: number; items: any[] }>(`/tiers/?${q.toString()}`).then((r) => r.items);
+  },
+  getContact: (id: number) => request<any>(`/tiers/${id}`),
   createContact: (data: { name: string; type: string; email?: string; phone?: string }) =>
     request<any>("/tiers/", { method: "POST", body: JSON.stringify(data) }),
   // Backup

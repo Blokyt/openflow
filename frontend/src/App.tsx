@@ -7,6 +7,8 @@ import Settings from "./core/Settings";
 import ContextBar from "./core/ContextBar";
 import { EntityProvider } from "./core/EntityContext";
 import { FiscalYearProvider } from "./core/FiscalYearContext";
+import { AuthProvider, useAuth } from "./core/AuthContext";
+import LoginPage from "./core/LoginPage";
 import { MODULE_ROUTES } from "./routes";
 
 function Spinner() {
@@ -79,6 +81,17 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function AuthGate() {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <LoginPage />;
   return <AppContent />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
 }
