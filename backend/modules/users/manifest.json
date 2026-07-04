@@ -7,6 +7,11 @@
   "origin": "builtin",
   "category": "core",
   "dependencies": ["entities"],
+  "menu": {
+    "label": "Utilisateurs",
+    "icon": "users",
+    "position": 90
+  },
   "api_routes": ["api.py"],
   "db_models": ["models.py"],
   "dashboard_widgets": [],

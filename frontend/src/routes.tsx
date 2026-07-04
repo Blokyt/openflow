@@ -1,29 +1,49 @@
-import EntityTree from "./modules/entities/EntityTree";
-import TransactionList from "./modules/transactions/TransactionList";
-import CategoryManager from "./modules/categories/CategoryManager";
-import BudgetManager from "./modules/budget/BudgetManager";
-import BackupManager from "./modules/backup/BackupManager";
-import SystemPage from "./modules/system/SystemPage";
-import TiersList from "./modules/tiers/TiersList";
-import ReimbursementManager from "./modules/reimbursements/ReimbursementManager";
-import Reports from "./modules/reports/index";
-import HelloAssoPage from "./modules/helloasso/HelloAssoPage";
-import DirensPage from "./modules/direns/index";
+import { lazy, Suspense } from "react";
+
+// Pages chargées à la demande : le bundle initial ne contient que le shell
+// et le dashboard ; chaque module n'est téléchargé qu'à la première visite.
+const EntityTree = lazy(() => import("./modules/entities/EntityTree"));
+const TransactionList = lazy(() => import("./modules/transactions/TransactionList"));
+const CategoryManager = lazy(() => import("./modules/categories/CategoryManager"));
+const BudgetManager = lazy(() => import("./modules/budget/BudgetManager"));
+const BackupManager = lazy(() => import("./modules/backup/BackupManager"));
+const SystemPage = lazy(() => import("./modules/system/SystemPage"));
+const TiersList = lazy(() => import("./modules/tiers/TiersList"));
+const ReimbursementManager = lazy(() => import("./modules/reimbursements/ReimbursementManager"));
+const Reports = lazy(() => import("./modules/reports/index"));
+const HelloAssoPage = lazy(() => import("./modules/helloasso/HelloAssoPage"));
+const DirensPage = lazy(() => import("./modules/direns/index"));
+const UsersAdmin = lazy(() => import("./modules/users/UsersAdmin"));
+
+function Page({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  );
+}
 
 export type ModuleRoute = { path: string; element: React.ReactNode };
 
 export const MODULE_ROUTES: Record<string, ModuleRoute> = {
-  transactions: { path: "/transactions", element: <TransactionList /> },
-  categories: { path: "/categories", element: <CategoryManager /> },
-  entities: { path: "/entities", element: <EntityTree /> },
-  budget: { path: "/budget", element: <BudgetManager /> },
-  tiers: { path: "/contacts", element: <TiersList /> },
-  reimbursements: { path: "/reimbursements", element: <ReimbursementManager /> },
-  reports: { path: "/reports", element: <Reports /> },
-  direns: { path: "/direns", element: <DirensPage /> },
-  backup: { path: "/backup", element: <BackupManager /> },
-  system: { path: "/system", element: <SystemPage /> },
-  helloasso: { path: "/helloasso", element: <HelloAssoPage /> },
+  transactions: { path: "/transactions", element: <Page><TransactionList /></Page> },
+  categories: { path: "/categories", element: <Page><CategoryManager /></Page> },
+  entities: { path: "/entities", element: <Page><EntityTree /></Page> },
+  budget: { path: "/budget", element: <Page><BudgetManager /></Page> },
+  tiers: { path: "/contacts", element: <Page><TiersList /></Page> },
+  reimbursements: { path: "/reimbursements", element: <Page><ReimbursementManager /></Page> },
+  reports: { path: "/reports", element: <Page><Reports /></Page> },
+  direns: { path: "/direns", element: <Page><DirensPage /></Page> },
+  backup: { path: "/backup", element: <Page><BackupManager /></Page> },
+  system: { path: "/system", element: <Page><SystemPage /></Page> },
+  helloasso: { path: "/helloasso", element: <Page><HelloAssoPage /></Page> },
+  users: { path: "/users", element: <Page><UsersAdmin /></Page> },
 };
 
 export const MODULE_IDS_WITH_ROUTE = new Set(Object.keys(MODULE_ROUTES));
