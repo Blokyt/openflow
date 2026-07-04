@@ -112,6 +112,34 @@ def test_update_unknown_user(client):
     assert client.put("/api/users/99999", json={"is_active": False}).status_code == 404
 
 
+def test_admin_only_gets_blocked_for_non_admin(client_and_db, login_as):
+    _, _ = client_and_db
+    other = login_as("simple@test.local")
+    assert other.get("/api/users/").status_code == 403
+    assert other.get("/api/users/invitations").status_code == 403
+
+
+def test_set_roles_rejects_duplicate_entity(client_and_db, login_as):
+    client, db_path = client_and_db
+    login_as("doublon@test.local")
+    users = client.get("/api/users/").json()
+    target = next(u for u in users if u["email"] == "doublon@test.local")
+
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.execute(
+        "INSERT INTO entities (name, type, parent_id, is_default, color, position, created_at, updated_at) "
+        "VALUES ('Club Doublon', 'internal', NULL, 0, '#000', 0, '2026-01-01', '2026-01-01')")
+    entity_id = cur.lastrowid
+    conn.commit(); conn.close()
+
+    r = client.put(f"/api/users/{target['id']}/roles",
+                   json={"roles": [
+                       {"entity_id": entity_id, "role": "treasurer"},
+                       {"entity_id": entity_id, "role": "viewer"},
+                   ]})
+    assert r.status_code == 400
+
+
 def test_change_own_password(client_and_db, login_as):
     client, db_path = client_and_db
     user = login_as("moi@test.local")

@@ -1,6 +1,7 @@
 """API du module users : authentification, comptes, rôles, invitations."""
 import json as _json
 import secrets
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
@@ -17,6 +18,7 @@ from backend.core.auth import (
     get_current_user,
     hash_password,
     hash_token,
+    require_admin,
     verify_password,
 )
 from backend.core.database import get_conn
@@ -149,6 +151,16 @@ def logout(request: Request, response: Response):
     return {"ok": True}
 
 
+def _check_no_duplicate_entities(items) -> None:
+    """Rejette proprement les rôles en double sur une même entité (UNIQUE(user_id, entity_id))."""
+    seen = set()
+    for item in items:
+        entity_id = item["entity_id"] if isinstance(item, dict) else item.entity_id
+        if entity_id in seen:
+            raise HTTPException(status_code=400, detail="Entité en double dans les rôles")
+        seen.add(entity_id)
+
+
 def _get_user_or_404(conn, user_id: int):
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if row is None:
@@ -156,7 +168,7 @@ def _get_user_or_404(conn, user_id: int):
     return row
 
 
-@router.get("/")
+@router.get("/", dependencies=[Depends(require_admin)])
 def list_users():
     conn = get_conn()
     try:
@@ -222,14 +234,19 @@ def create_invitation(request: Request, payload: InvitationPayload):
         conn.close()
 
 
-@router.get("/invitations")
+@router.get("/invitations", dependencies=[Depends(require_admin)])
 def list_invitations():
     conn = get_conn()
     try:
         rows = conn.execute(
             "SELECT id, email, is_admin, roles_json, expires_at, created_at FROM invitations "
             "WHERE used_at IS NULL ORDER BY created_at DESC").fetchall()
-        return [dict(r) | {"roles": _json.loads(r["roles_json"])} for r in rows]
+        out = []
+        for r in rows:
+            data = dict(r)
+            data["roles"] = _json.loads(data.pop("roles_json"))
+            out.append(data)
+        return out
     finally:
         conn.close()
 
@@ -276,14 +293,19 @@ def accept_invitation(request: Request, payload: AcceptPayload, response: Respon
     try:
         inv = _valid_invitation(conn, payload.token)
         now = _now_iso()
-        cur = conn.execute(
-            "INSERT INTO users (email, display_name, password_hash, is_admin, is_active, created_at) "
-            "VALUES (?, ?, ?, ?, 1, ?)",
-            (inv["email"], payload.display_name.strip() or inv["email"],
-             hash_password(payload.password), inv["is_admin"], now),
-        )
+        roles = _json.loads(inv["roles_json"])
+        _check_no_duplicate_entities(roles)
+        try:
+            cur = conn.execute(
+                "INSERT INTO users (email, display_name, password_hash, is_admin, is_active, created_at) "
+                "VALUES (?, ?, ?, ?, 1, ?)",
+                (inv["email"], payload.display_name.strip() or inv["email"],
+                 hash_password(payload.password), inv["is_admin"], now),
+            )
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
         user_id = cur.lastrowid
-        for item in _json.loads(inv["roles_json"]):
+        for item in roles:
             conn.execute(
                 "INSERT INTO user_entity_roles (user_id, entity_id, role, created_at) VALUES (?, ?, ?, ?)",
                 (user_id, item["entity_id"], item["role"], now))
@@ -330,6 +352,7 @@ def set_user_roles(user_id: int, payload: RolesPayload):
     conn = get_conn()
     try:
         _get_user_or_404(conn, user_id)
+        _check_no_duplicate_entities(payload.roles)
         for item in payload.roles:
             if conn.execute("SELECT id FROM entities WHERE id = ?", (item.entity_id,)).fetchone() is None:
                 raise HTTPException(status_code=400, detail=f"Entité {item.entity_id} introuvable")
