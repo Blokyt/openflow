@@ -106,9 +106,9 @@ Toujours lancer `check.py` apres modification d'un manifest.
 
 Pour creer un module : `python tools/create_module.py <id> --name "..." --description "..."`
 
-## 13 modules disponibles
+## 14 modules disponibles
 
-**Noyau (7) :** transactions, categories, dashboard, entities, system, attachments, backup
+**Noyau (8) :** transactions, categories, dashboard, entities, system, attachments, backup, users
 
 **Metier (6) :** reimbursements, budget, tiers, reports, helloasso, direns
 
@@ -146,3 +146,7 @@ d'etre consideree terminee. Un code sans test n'est pas fonctionnel.**
   d'une feature. Régénérer uniquement lors d'une release (bouton "Mettre à jour" ou
   régénération manuelle du ZIP). Ne pas paniquer si 14 fichiers sont marqués modifiés pendant
   un WIP.
+- **Auth deny-by-default** : toute route /api exige une session (backend/core/auth.py,
+  dépendance globale dans main.py). Les mutations sont réservées à l'admin sauf
+  NON_ADMIN_MUTATIONS. En test, les fixtures client/client_and_db sont connectées en
+  admin ; utiliser login_as(email, roles=[...]) pour tester treasurer/viewer.
