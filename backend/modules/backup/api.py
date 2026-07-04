@@ -8,12 +8,13 @@ import tempfile
 import zipfile
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 
+from backend.core.auth import require_admin
 from backend.core.database import get_conn, row_to_dict
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 # Tables système (état des modules/config/dashboard, dont le suivi des migrations).
 SYSTEM_TABLES = ("_dashboard", "_config", "_modules")

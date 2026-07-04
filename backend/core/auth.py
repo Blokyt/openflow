@@ -159,7 +159,10 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 def get_allowed_entity_ids(conn, user: dict):
     """Périmètre du user : None = tout (admin), sinon l'union des sous-arbres
-    des entités où il a un rôle (même CTE que compute_consolidated_balance)."""
+    des entités où il a un rôle. CTE récursive multi-racines : part de toutes
+    les entités où le user a un rôle, descend vers leurs enfants, et l'UNION
+    (sans ALL) dédoublonne les id partagés par plusieurs sous-arbres. Aucun
+    filtre de type : entités internes et externes sont incluses indifféremment."""
     if user["is_admin"]:
         return None
     roots = [

@@ -3,9 +3,10 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -94,15 +95,34 @@ def create_contact(contact: ContactCreate):
 
 
 @router.get("/{contact_id}/transactions")
-def get_contact_transactions(contact_id: int):
+def get_contact_transactions(contact_id: int, request: Request):
+    user = get_current_user(request)
     conn = get_conn()
     try:
         existing = conn.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,)).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail=f"Contact {contact_id} not found")
+        # Périmètre : un non-admin ne voit que les transactions touchant une
+        # entité de son périmètre (même logique que /api/transactions).
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None and not allowed:
+            return []
+        where = "WHERE t.contact_id = ?"
+        params: list = [contact_id]
+        if allowed is not None:
+            placeholders = ",".join("?" * len(allowed))
+            where += f" AND (t.from_entity_id IN ({placeholders}) OR t.to_entity_id IN ({placeholders}))"
+            params.extend(list(allowed))
+            params.extend(list(allowed))
+        # Types d'entités inclus pour que l'UI affiche le sens du flux
+        # (recette verte / dépense rouge), comme partout ailleurs.
         cur = conn.execute(
-            "SELECT * FROM transactions WHERE contact_id = ? ORDER BY date DESC, id DESC",
-            (contact_id,),
+            f"""SELECT t.*, ef.type AS from_entity_type, et.type AS to_entity_type
+               FROM transactions t
+               LEFT JOIN entities ef ON t.from_entity_id = ef.id
+               LEFT JOIN entities et ON t.to_entity_id = et.id
+               {where} ORDER BY t.date DESC, t.id DESC""",
+            params,
         )
         return [row_to_dict(r) for r in cur.fetchall()]
     finally:

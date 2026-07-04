@@ -1,13 +1,14 @@
 import sqlite3
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.core.auth import require_admin
 from backend.core.database import get_conn, row_to_dict
 from backend.modules.helloasso.client import HelloAssoClient, HelloAssoError
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 def _now() -> str:

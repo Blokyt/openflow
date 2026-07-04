@@ -4,6 +4,7 @@ import {
   Check, X, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
 } from "lucide-react";
 import ConfirmDialog from "../../core/ConfirmDialog";
+import { useAuth } from "../../core/AuthContext";
 
 interface SystemStatus {
   version: string;
@@ -52,7 +53,7 @@ function formatAge(seconds: number): string {
 }
 
 export default function SystemPage() {
-  const isAdmin = true;
+  const { isAdmin } = useAuth();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [pristine, setPristine] = useState<PristineCheck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,12 +168,9 @@ export default function SystemPage() {
       onCancel={() => setBackupToDelete(null)}
     />
     <div className="p-8 max-w-4xl">
-      <div className="flex items-center gap-3 mb-6">
-        <Activity className="text-[#F2C48D]" size={26} />
-        <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
-          Système
-        </h1>
-      </div>
+      <h1 className="text-3xl font-bold text-white mb-6" style={{ letterSpacing: "-0.02em" }}>
+        Système
+      </h1>
 
       {error && (
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-start gap-2">

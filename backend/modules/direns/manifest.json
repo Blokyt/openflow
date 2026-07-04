@@ -7,6 +7,7 @@
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "categories", "entities", "budget", "reports"],
+  "requires_admin": true,
   "menu": {
     "label": "DirENS",
     "icon": "table-2",

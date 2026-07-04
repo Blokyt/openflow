@@ -37,14 +37,15 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from backend.core.auth import require_admin
 from backend.core.balance import compute_entity_balance
 from backend.core.config import load_config
 from backend.core.database import get_conn
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"

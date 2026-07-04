@@ -7,6 +7,7 @@
   "origin": "builtin",
   "category": "standard",
   "dependencies": [],
+  "requires_admin": true,
   "menu": {
     "label": "Sauvegarde & Restauration",
     "icon": "archive",

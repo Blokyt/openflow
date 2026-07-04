@@ -7,6 +7,7 @@
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "categories", "entities"],
+  "requires_admin": true,
   "menu": {
     "label": "HelloAsso",
     "icon": "hand-coins",

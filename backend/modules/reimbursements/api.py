@@ -225,13 +225,14 @@ def get_summary(request: Request):
             if not allowed:
                 query += " AND 0 = 1"
             else:
-                ph = ",".join("?" * len(allowed))
+                allowed_list = list(allowed)
+                ph = ",".join("?" * len(allowed_list))
                 query += (
                     f" AND r.transaction_id IS NOT NULL "
                     f"AND (t.from_entity_id IN ({ph}) OR t.to_entity_id IN ({ph}))"
                 )
-                params.extend(list(allowed))
-                params.extend(list(allowed))
+                params.extend(allowed_list)
+                params.extend(allowed_list)
         query += " GROUP BY COALESCE(co.name, r.person_name) ORDER BY total_pending DESC"
         cur = conn.execute(query, params)
         return [row_to_dict(r) for r in cur.fetchall()]

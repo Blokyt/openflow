@@ -23,12 +23,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from backend.core.auth import require_admin
 from backend.core.database import get_conn, get_db_path
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
