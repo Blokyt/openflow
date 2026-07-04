@@ -5,9 +5,10 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -34,15 +35,25 @@ def ensure_attachments_dir():
     ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-
+def _require_tx_access(conn, request: Request, tx_id: int) -> None:
+    user = get_current_user(request)
+    allowed = get_allowed_entity_ids(conn, user)
+    if allowed is None:
+        return
+    tx = conn.execute(
+        "SELECT from_entity_id, to_entity_id FROM transactions WHERE id = ?", (tx_id,)
+    ).fetchone()
+    if tx is None or (tx["from_entity_id"] not in allowed and tx["to_entity_id"] not in allowed):
+        raise HTTPException(status_code=403, detail="Accès refusé à cette pièce jointe")
 
 @router.get("/transaction/{tx_id}")
-def list_attachments(tx_id: int):
+def list_attachments(tx_id: int, request: Request):
     conn = get_conn()
     try:
         tx = conn.execute("SELECT id FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         if tx is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
+        _require_tx_access(conn, request, tx_id)
         cur = conn.execute(
             "SELECT * FROM attachments WHERE transaction_id = ? ORDER BY created_at ASC",
             (tx_id,),
@@ -98,13 +109,14 @@ async def upload_attachment(tx_id: int, file: UploadFile = File(...)):
 
 
 @router.get("/{id}/preview")
-def preview_attachment(id: int):
+def preview_attachment(id: int, request: Request):
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM attachments WHERE id = ?", (id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Attachment {id} not found")
         attachment = row_to_dict(row)
+        _require_tx_access(conn, request, attachment["transaction_id"])
     finally:
         conn.close()
 
@@ -121,13 +133,14 @@ def preview_attachment(id: int):
 
 
 @router.get("/{id}/download")
-def download_attachment(id: int):
+def download_attachment(id: int, request: Request):
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM attachments WHERE id = ?", (id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Attachment {id} not found")
         attachment = row_to_dict(row)
+        _require_tx_access(conn, request, attachment["transaction_id"])
     finally:
         conn.close()
 
