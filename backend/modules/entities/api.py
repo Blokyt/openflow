@@ -3,9 +3,10 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
 from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance, compute_consolidated_balance
 
@@ -43,7 +44,8 @@ class BalanceRefUpdate(BaseModel):
 # --- CRUD ---
 
 @router.get("/")
-def list_entities(type: Optional[str] = None):
+def list_entities(request: Request, type: Optional[str] = None):
+    user = get_current_user(request)
     conn = get_conn()
     try:
         query = "SELECT * FROM entities WHERE 1=1"
@@ -51,6 +53,16 @@ def list_entities(type: Optional[str] = None):
         if type:
             query += " AND type = ?"
             params.append(type)
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None:
+            # Périmètre du rôle + toutes les entités externes (contreparties
+            # nécessaires à l'affichage, jamais rattachées à un sous-arbre interne).
+            if allowed:
+                placeholders = ",".join("?" * len(allowed))
+                query += f" AND (id IN ({placeholders}) OR type = 'external')"
+                params.extend(list(allowed))
+            else:
+                query += " AND type = 'external'"
         query += " ORDER BY position ASC, id ASC"
         return [row_to_dict(r) for r in conn.execute(query, params).fetchall()]
     finally:
@@ -104,13 +116,22 @@ def create_entity(entity: EntityCreate):
 
 
 @router.get("/tree")
-def get_tree():
+def get_tree(request: Request):
     """Return hierarchical tree of internal entities."""
+    user = get_current_user(request)
     conn = get_conn()
     try:
-        rows = conn.execute(
-            "SELECT * FROM entities WHERE type = 'internal' ORDER BY position ASC, id ASC"
-        ).fetchall()
+        allowed = get_allowed_entity_ids(conn, user)
+        query = "SELECT * FROM entities WHERE type = 'internal'"
+        params = []
+        if allowed is not None:
+            if not allowed:
+                return []
+            placeholders = ",".join("?" * len(allowed))
+            query += f" AND id IN ({placeholders})"
+            params.extend(list(allowed))
+        query += " ORDER BY position ASC, id ASC"
+        rows = conn.execute(query, params).fetchall()
         entities = [row_to_dict(r) for r in rows]
 
         by_id = {e["id"]: {**e, "children": []} for e in entities}
@@ -127,12 +148,17 @@ def get_tree():
 
 
 @router.get("/{entity_id}")
-def get_entity(entity_id: int):
+def get_entity(entity_id: int, request: Request):
+    user = get_current_user(request)
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Entity not found")
+        allowed = get_allowed_entity_ids(conn, user)
+        # Les entités externes restent visibles (contreparties), même hors périmètre.
+        if allowed is not None and row["type"] != "external" and entity_id not in allowed:
+            raise HTTPException(403, "Accès refusé à cette entité")
         return row_to_dict(row)
     finally:
         conn.close()
@@ -243,9 +269,11 @@ def delete_entity(entity_id: int):
 # --- Balance ---
 
 @router.get("/{entity_id}/balance")
-def get_entity_balance(entity_id: int, as_of_date: Optional[str] = None):
+def get_entity_balance(entity_id: int, request: Request, as_of_date: Optional[str] = None):
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        require_entity_access(conn, user, entity_id)
         entity = conn.execute("SELECT * FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
             raise HTTPException(404, "Internal entity not found")
@@ -255,9 +283,11 @@ def get_entity_balance(entity_id: int, as_of_date: Optional[str] = None):
 
 
 @router.get("/{entity_id}/consolidated")
-def get_consolidated_balance(entity_id: int, as_of_date: Optional[str] = None):
+def get_consolidated_balance(entity_id: int, request: Request, as_of_date: Optional[str] = None):
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        require_entity_access(conn, user, entity_id)
         entity = conn.execute("SELECT * FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
             raise HTTPException(404, "Internal entity not found")
@@ -267,9 +297,11 @@ def get_consolidated_balance(entity_id: int, as_of_date: Optional[str] = None):
 
 
 @router.get("/{entity_id}/balance-ref")
-def get_balance_ref(entity_id: int):
+def get_balance_ref(entity_id: int, request: Request):
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        require_entity_access(conn, user, entity_id)
         row = conn.execute("SELECT * FROM entity_balance_refs WHERE entity_id = ?", (entity_id,)).fetchone()
         if not row:
             return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0}

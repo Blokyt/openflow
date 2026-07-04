@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
 
@@ -69,6 +70,7 @@ _SORT_COLUMNS = {"date": "t.date", "amount": "t.amount", "label": "t.label", "id
 
 @router.get("/")
 def list_transactions(
+    request: Request,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     category_id: Optional[int] = None,
@@ -83,8 +85,14 @@ def list_transactions(
     sort_by: str = "date",
     sort_dir: str = "desc",
 ):
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        allowed = get_allowed_entity_ids(conn, user)
+        # Périmètre vide sans focus explicite : rien à voir, court-circuit avant
+        # de construire la requête (évite un WHERE ... IN () invalide).
+        if entity_id is None and allowed is not None and not allowed:
+            return {"total": 0, "items": []}
         select_cols = """SELECT t.*,
                    c.name AS category_name, c.color AS category_color,
                    ef.name AS from_entity_name, ef.color AS from_entity_color, ef.type AS from_entity_type,
@@ -125,6 +133,8 @@ def list_transactions(
             s = f"%{search}%"
             params.extend([s, s, s, s, s, s, s])
         if entity_id is not None:
+            if allowed is not None:
+                require_entity_access(conn, user, entity_id)
             if include_children:
                 rows = conn.execute(
                     """WITH RECURSIVE subtree(id) AS (
@@ -144,6 +154,13 @@ def list_transactions(
             else:
                 from_where += " AND (t.from_entity_id = ? OR t.to_entity_id = ?)"
                 params.extend([entity_id, entity_id])
+        elif allowed is not None:
+            # Pas de focus explicite : filtre implicite sur le périmètre du rôle
+            # (non vide, déjà court-circuité plus haut sinon).
+            placeholders = ",".join("?" * len(allowed))
+            from_where += f" AND (t.from_entity_id IN ({placeholders}) OR t.to_entity_id IN ({placeholders}))"
+            params.extend(list(allowed))
+            params.extend(list(allowed))
         if reimb_status == "pending":
             from_where += " AND rb.reimb_status = 'pending'"
         elif reimb_status == "reimbursed":
@@ -257,12 +274,16 @@ def get_balance():
 
 
 @router.get("/{tx_id}")
-def get_transaction(tx_id: int):
+def get_transaction(tx_id: int, request: Request):
+    user = get_current_user(request)
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
+        allowed = get_allowed_entity_ids(conn, user)
+        if allowed is not None and row["from_entity_id"] not in allowed and row["to_entity_id"] not in allowed:
+            raise HTTPException(status_code=403, detail="Accès refusé à cette entité")
         return row_to_dict(row)
     finally:
         conn.close()
