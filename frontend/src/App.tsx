@@ -9,6 +9,7 @@ import { EntityProvider } from "./core/EntityContext";
 import { FiscalYearProvider } from "./core/FiscalYearContext";
 import { AuthProvider, useAuth } from "./core/AuthContext";
 import LoginPage from "./core/LoginPage";
+import InvitationPage from "./core/InvitationPage";
 import { MODULE_ROUTES } from "./routes";
 
 function Spinner() {
@@ -83,6 +84,7 @@ function AppContent() {
 
 function AuthGate() {
   const { user, loading } = useAuth();
+  if (window.location.pathname === "/invitation") return <InvitationPage />;
   if (loading) return <Spinner />;
   if (!user) return <LoginPage />;
   return <AppContent />;

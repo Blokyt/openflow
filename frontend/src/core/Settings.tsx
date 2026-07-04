@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
@@ -6,6 +6,107 @@ import { Pencil, Check, X, Info, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
 import { formatEuros, eurosToCents, centsToEuros } from "../utils/format";
 import BalanceRefsSection from "./BalanceRefsSection";
+import { useAuth } from "./AuthContext";
+
+const accountInputClass =
+  "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
+
+function MyAccountSection() {
+  const { user, logout } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+    if (newPassword !== confirmPassword) {
+      setError("Les deux mots de passe ne correspondent pas");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.changeMyPassword(currentPassword, newPassword);
+      setSuccess(true);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setError(err?.message || "Changement de mot de passe impossible");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    await logout();
+    window.location.href = "/";
+  }
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-white mb-3">Mon compte</h2>
+      <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">{user?.display_name}</p>
+            <p className="text-xs text-[#666]">{user?.email}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 text-xs font-semibold text-white bg-[#1a1a1a] border border-[#222] rounded-full hover:border-[#FF5252] hover:text-[#FF5252] transition-colors"
+          >
+            Se déconnecter
+          </button>
+        </div>
+
+        <div className="border-t border-[#1a1a1a] pt-5">
+          <form onSubmit={onSubmit} className="space-y-3 max-w-sm">
+            <p className="text-xs text-[#666]">Changer de mot de passe</p>
+            <input
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Mot de passe actuel"
+              className={accountInputClass}
+            />
+            <input
+              type="password"
+              required
+              minLength={10}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Nouveau mot de passe (10 caractères minimum)"
+              className={accountInputClass}
+            />
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirme le nouveau mot de passe"
+              className={accountInputClass}
+            />
+            {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+            {success && <p className="text-sm text-[#00C853]">Mot de passe modifié</p>}
+            <button
+              type="submit"
+              disabled={busy}
+              className="px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
+            >
+              {busy ? "Modification..." : "Changer le mot de passe"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 // Category labels — modules are classified dynamically via manifest.category.
 const CATEGORY_LABELS: Record<string, string> = {
@@ -119,6 +220,7 @@ function EditableField({
 }
 
 export default function Settings() {
+  const { isAdmin } = useAuth();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [modules, setModules] = useState<DisplayModule[]>([]);
   const [coreModuleIds, setCoreModuleIds] = useState<Set<string>>(new Set());
@@ -219,14 +321,6 @@ export default function Settings() {
     await reload();
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-      </div>
-    );
-  }
-
   function renderModuleRow(mod: DisplayModule, idx: number) {
     const isCore = coreModuleIds.has(mod.id);
     const isExpanded = expandedHelp === mod.id;
@@ -323,121 +417,135 @@ export default function Settings() {
         Paramètres
       </h1>
 
-      {error && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex justify-between items-center">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-xs underline ml-2">Fermer</button>
-        </div>
-      )}
+      <MyAccountSection />
 
-      {config && (
-        <section className="mb-8">
-          <h2 className="text-base font-semibold text-white mb-3">Entité</h2>
-          <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-4">
-            <EditableField
-              label="Nom"
-              value={config.entity.name}
-              onSave={(v) => updateEntity("name", v)}
-            />
-            <div className="border-t border-[#1a1a1a] pt-4">
-              <EditableField
-                label="Type"
-                value={config.entity.type}
-                onSave={(v) => updateEntity("type", v)}
-                type="select"
-                options={ENTITY_TYPES}
-              />
+      {isAdmin && (
+        <>
+          {error && (
+            <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex justify-between items-center">
+              <span>{error}</span>
+              <button onClick={() => setError(null)} className="text-xs underline ml-2">Fermer</button>
             </div>
-            <div className="border-t border-[#1a1a1a] pt-4">
-              <EditableField
-                label="Devise"
-                value={config.entity.currency}
-                onSave={(v) => updateEntity("currency", v)}
-                type="select"
-                options={CURRENCIES}
-              />
-            </div>
-            <div className="border-t border-[#1a1a1a] pt-4">
-              <EditableField
-                label="Date de référence"
-                value={balanceRef.date}
-                onSave={(v) => updateBalanceRef("date", v)}
-                type="date"
-              />
-            </div>
-            <div className="border-t border-[#1a1a1a] pt-4">
-              <EditableField
-                label="Solde de référence"
-                value={String(centsToEuros(balanceRef.amount))}
-                displayValue={formatEuros(balanceRef.amount)}
-                onSave={(v) => updateBalanceRef("amount", v)}
-                type="number"
-              />
-            </div>
-          </div>
-        </section>
-      )}
+          )}
 
-      <BalanceRefsSection />
-
-      <section className="space-y-6">
-        <h2 className="text-base font-semibold text-white">Modules</h2>
-        <p className="text-xs text-[#666] -mt-4">
-          Active un module pour le voir apparaître dans la barre latérale à gauche.
-          Chaque module activé = un onglet fonctionnel.
-        </p>
-
-        {CATEGORY_ORDER.map((catKey) => {
-          const catModules = modules.filter((m) => m.category === catKey);
-          if (catModules.length === 0) return null;
-          const activeCount = catModules.filter((m) => m.active).length;
-          const label = CATEGORY_LABELS[catKey] ?? catKey;
-          const isCoreGroup = catKey === "core";
-          const collapsed = isCoreGroup && !showCoreModules;
-          return (
-            <div key={catKey}>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">{label}</h3>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-[#666]">{activeCount}/{catModules.length} actifs</span>
-                  {isCoreGroup && (
-                    <button
-                      onClick={() => setShowCoreModules((v) => !v)}
-                      className="text-xs text-[#F2C48D] hover:underline"
-                    >
-                      {collapsed ? "Afficher" : "Masquer"}
-                    </button>
-                  )}
-                </div>
-              </div>
-              {!collapsed && (
-                <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-                  {catModules.map((mod, idx) => renderModuleRow(mod, idx))}
-                </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
+            </div>
+          ) : (
+            <>
+              {config && (
+                <section className="mb-8">
+                  <h2 className="text-base font-semibold text-white mb-3">Entité</h2>
+                  <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-4">
+                    <EditableField
+                      label="Nom"
+                      value={config.entity.name}
+                      onSave={(v) => updateEntity("name", v)}
+                    />
+                    <div className="border-t border-[#1a1a1a] pt-4">
+                      <EditableField
+                        label="Type"
+                        value={config.entity.type}
+                        onSave={(v) => updateEntity("type", v)}
+                        type="select"
+                        options={ENTITY_TYPES}
+                      />
+                    </div>
+                    <div className="border-t border-[#1a1a1a] pt-4">
+                      <EditableField
+                        label="Devise"
+                        value={config.entity.currency}
+                        onSave={(v) => updateEntity("currency", v)}
+                        type="select"
+                        options={CURRENCIES}
+                      />
+                    </div>
+                    <div className="border-t border-[#1a1a1a] pt-4">
+                      <EditableField
+                        label="Date de référence"
+                        value={balanceRef.date}
+                        onSave={(v) => updateBalanceRef("date", v)}
+                        type="date"
+                      />
+                    </div>
+                    <div className="border-t border-[#1a1a1a] pt-4">
+                      <EditableField
+                        label="Solde de référence"
+                        value={String(centsToEuros(balanceRef.amount))}
+                        displayValue={formatEuros(balanceRef.amount)}
+                        onSave={(v) => updateBalanceRef("amount", v)}
+                        type="number"
+                      />
+                    </div>
+                  </div>
+                </section>
               )}
-            </div>
-          );
-        })}
 
-        {(() => {
-          const known = new Set(CATEGORY_ORDER);
-          const orphans = modules.filter((m) => !known.has(m.category));
-          if (orphans.length === 0) return null;
-          return (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">Autre</h3>
-                <span className="text-xs text-[#666]">
-                  {orphans.filter((m) => m.active).length}/{orphans.length} actifs
-                </span>
-              </div>
-              <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-                {orphans.map((mod, idx) => renderModuleRow(mod, idx))}
-              </div>
-            </div>
-          );
-        })()}
-      </section>
+              <BalanceRefsSection />
+
+              <section className="space-y-6">
+                <h2 className="text-base font-semibold text-white">Modules</h2>
+                <p className="text-xs text-[#666] -mt-4">
+                  Active un module pour le voir apparaître dans la barre latérale à gauche.
+                  Chaque module activé = un onglet fonctionnel.
+                </p>
+
+                {CATEGORY_ORDER.map((catKey) => {
+                  const catModules = modules.filter((m) => m.category === catKey);
+                  if (catModules.length === 0) return null;
+                  const activeCount = catModules.filter((m) => m.active).length;
+                  const label = CATEGORY_LABELS[catKey] ?? catKey;
+                  const isCoreGroup = catKey === "core";
+                  const collapsed = isCoreGroup && !showCoreModules;
+                  return (
+                    <div key={catKey}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">{label}</h3>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-[#666]">{activeCount}/{catModules.length} actifs</span>
+                          {isCoreGroup && (
+                            <button
+                              onClick={() => setShowCoreModules((v) => !v)}
+                              className="text-xs text-[#F2C48D] hover:underline"
+                            >
+                              {collapsed ? "Afficher" : "Masquer"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {!collapsed && (
+                        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+                          {catModules.map((mod, idx) => renderModuleRow(mod, idx))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {(() => {
+                  const known = new Set(CATEGORY_ORDER);
+                  const orphans = modules.filter((m) => !known.has(m.category));
+                  if (orphans.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">Autre</h3>
+                        <span className="text-xs text-[#666]">
+                          {orphans.filter((m) => m.active).length}/{orphans.length} actifs
+                        </span>
+                      </div>
+                      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+                        {orphans.map((mod, idx) => renderModuleRow(mod, idx))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </section>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
