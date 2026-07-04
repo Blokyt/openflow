@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useEntity } from "./EntityContext";
 import { useFiscalYear } from "./FiscalYearContext";
+import { useAuth } from "./AuthContext";
 import { api } from "../api";
 import { Entity } from "../types";
 import { MODULE_IDS_WITH_ROUTE } from "../routes";
@@ -272,6 +273,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeModules }: SidebarProps) {
+  const { user } = useAuth();
   const [pendingReimbursements, setPendingReimbursements] = useState(0);
 
   const reimbursementsActive = activeModules.some((m) => m.id === "reimbursements");
@@ -298,8 +300,10 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     api.getBudgetView(currentYear.id)
       .then((data) => {
         if (cancelled) return;
+        // Même règle que le widget Budget : dépenses réalisées vs budget dépenses
+        // (le net recettes-dépenses faussait le seuil des 95 %).
         const count = (data.entities as any[]).filter(
-          (e) => e.allocated_total > 0 && Math.abs(e.realized_total) / e.allocated_total >= 0.95
+          (e) => e.allocated_expense > 0 && e.realized_expense / e.allocated_expense >= 0.95
         ).length;
         setBudgetBadge(count);
       })
@@ -371,8 +375,13 @@ export default function Sidebar({ activeModules }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Bottom section: settings */}
+      {/* Bottom section: user + settings */}
       <div className="px-3 pb-3 space-y-0.5 border-t border-[#222] pt-3">
+        {user && (
+          <div className="px-3 pb-2 text-xs text-[#B0B0B0] truncate" title={user.email}>
+            {user.display_name}
+          </div>
+        )}
         <NavItem to="/settings" label="Paramètres" icon={Settings} />
       </div>
     </aside>

@@ -3,6 +3,7 @@ import { api } from "../../api";
 import { Transaction, Category } from "../../types";
 import { useEntity } from "../../core/EntityContext";
 import { useFiscalYear } from "../../core/FiscalYearContext";
+import { useAuth } from "../../core/AuthContext";
 import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
 import { formatEuros, formatDate, eurosToCents, txTone } from "../../utils/format";
@@ -12,6 +13,7 @@ import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, Rot
 const PAGE_SIZE = 100;
 
 export default function TransactionList() {
+  const { isAdmin } = useAuth();
   const { selectedEntityId, selectedEntity } = useEntity();
   const { selectedYear } = useFiscalYear();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -66,8 +68,14 @@ export default function TransactionList() {
       setDateFrom(from);
       setDateTo(to);
     } else {
+      // Filtre exercice effacé : on retire les dates qu'il avait posées, mais on
+      // préserve des dates saisies manuellement par l'utilisateur.
+      const ctx = contextDatesRef.current;
       contextDatesRef.current = null;
-      // Ne pas réinitialiser les dates si l'utilisateur les a déjà définies manuellement
+      if (ctx) {
+        setDateFrom((cur) => (cur === ctx.from ? "" : cur));
+        setDateTo((cur) => (cur === ctx.to ? "" : cur));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear?.id]);
@@ -232,7 +240,7 @@ export default function TransactionList() {
             Transactions
           </h1>
           {selectedEntity && (
-            <p className="text-sm text-[#999] mt-1">
+            <p className="text-sm text-[#666] mt-1">
               Filtrées pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités
             </p>
           )}
@@ -246,12 +254,14 @@ export default function TransactionList() {
           >
             <Download size={15} /> {exporting ? "Export..." : "Exporter CSV"}
           </button>
-          <button
-            onClick={() => { setShowForm(true); setEditingTx(null); }}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
-          >
-            <Plus size={15} /> Nouvelle transaction
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => { setShowForm(true); setEditingTx(null); }}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+            >
+              <Plus size={15} /> Nouvelle transaction
+            </button>
+          )}
         </div>
       </div>
 
@@ -526,20 +536,24 @@ export default function TransactionList() {
                             <Eye size={14} strokeWidth={1.5} />
                           </button>
                         )}
-                        <button
-                          onClick={() => { setEditingTx(tx); setShowForm(false); }}
-                          className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
-                          title="Modifier"
-                        >
-                          <Pencil size={14} strokeWidth={1.5} />
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(tx.id)}
-                          className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 size={14} strokeWidth={1.5} />
-                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => { setEditingTx(tx); setShowForm(false); }}
+                              className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+                              title="Modifier"
+                            >
+                              <Pencil size={14} strokeWidth={1.5} />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(tx.id)}
+                              className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={14} strokeWidth={1.5} />
+                            </button>
+                          </>
+                        )}
                       </span>
                     )}
                   </td>

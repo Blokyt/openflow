@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, type ReactElement } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
+import { useEntity } from "../../../core/EntityContext";
+import { useAuth } from "../../../core/AuthContext";
 import { Category } from "../../../types";
 import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME, COLOR_BUDGET_SEEDED, COLOR_BUDGET_MODIFIED } from "../../../utils/format";
 import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
@@ -10,7 +12,19 @@ interface Props { year: FiscalYear | null }
 const EXPENSE = COLOR_EXPENSE;
 const INCOME = COLOR_INCOME;
 
+/** Cherche le nœud d'entité `id` dans l'arbre budgétaire. */
+function findGroupNode(nodes: any[], id: number): any | null {
+  for (const n of nodes) {
+    if (n.entity_id === id) return n;
+    const found = findGroupNode(n.children ?? [], id);
+    if (found) return found;
+  }
+  return null;
+}
+
 export default function OverviewTab({ year }: Props) {
+  const { isAdmin } = useAuth();
+  const { selectedEntityId, selectedEntity } = useEntity();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -44,15 +58,37 @@ export default function OverviewTab({ year }: Props) {
 
   useEffect(() => { reload(); }, [reload]);
 
+  // Focus entité : déplie automatiquement le nœud ciblé (sinon un club replié
+  // arriverait fermé alors qu'il est le seul affiché). Dépend aussi de `data`
+  // pour repasser APRÈS l'initialisation du dépliage faite au chargement.
+  useEffect(() => {
+    if (selectedEntityId != null) {
+      setExpanded((prev) => new Set(prev).add(selectedEntityId));
+    }
+  }, [selectedEntityId, data]);
+
   if (!year) return <p className="text-sm text-[#666]">Crée un exercice pour voir le suivi.</p>;
   if (loading && !data) return <p className="text-sm text-[#666]">Chargement…</p>;
   if (!data) return null;
 
+  // Périmètre : le focus entité global limite la vue à son sous-arbre, avec des
+  // totaux recalculés — mêmes chiffres que le widget du dashboard.
+  const scopedNode = selectedEntityId ? findGroupNode(data.groups ?? [], selectedEntityId) : null;
+  const displayGroups: any[] = scopedNode ? [scopedNode] : data.groups;
+
   const hasN1: boolean = data.previous_fiscal_year_id !== null;
-  const t = data.totals;
+  const t = scopedNode
+    ? {
+        allocated_expense: scopedNode.allocated_expense,
+        allocated_income: scopedNode.allocated_income,
+        realized_expense: scopedNode.realized_expense,
+        realized_income: scopedNode.realized_income,
+        realized_net: scopedNode.realized_net,
+      }
+    : data.totals;
   const showN1Cols = hasN1 && showN1;
-  const totalExpN1: number = data.groups.reduce((s: number, g: any) => s + g.realized_expense_n1, 0);
-  const totalIncN1: number = data.groups.reduce((s: number, g: any) => s + g.realized_income_n1, 0);
+  const totalExpN1: number = displayGroups.reduce((s: number, g: any) => s + g.realized_expense_n1, 0);
+  const totalIncN1: number = displayGroups.reduce((s: number, g: any) => s + g.realized_income_n1, 0);
 
   function toggle(id: number) {
     setTouched(true);
@@ -173,28 +209,30 @@ export default function OverviewTab({ year }: Props) {
         .forEach((c: any) => pushCategory(node, c, depth + 1));
 
       const existingCatIds = collectCatIds(node.categories);
-      rows.push(
-        <tr key={`add-${node.entity_id}`} className="bg-[#0a0a0a]">
-          <td colSpan={colCount} className="px-3 py-1.5" style={{ paddingLeft: 12 + (depth + 1) * 18 + 18 }}>
-            {addingEntityId === node.entity_id ? (
-              <AddCategoryForm
-                yearId={year!.id}
-                entityId={node.entity_id}
-                categories={allCategories.filter((c) => !existingCatIds.has(c.id))}
-                onSaved={() => { setAddingEntityId(null); reload(); }}
-                onCancel={() => setAddingEntityId(null)}
-              />
-            ) : (
-              <button
-                onClick={() => setAddingEntityId(node.entity_id)}
-                className="inline-flex items-center gap-1 text-xs text-[#666] hover:text-[#F2C48D]"
-              >
-                <Plus size={13} /> Ajouter une catégorie à budgéter
-              </button>
-            )}
-          </td>
-        </tr>,
-      );
+      if (isAdmin) {
+        rows.push(
+          <tr key={`add-${node.entity_id}`} className="bg-[#0a0a0a]">
+            <td colSpan={colCount} className="px-3 py-1.5" style={{ paddingLeft: 12 + (depth + 1) * 18 + 18 }}>
+              {addingEntityId === node.entity_id ? (
+                <AddCategoryForm
+                  yearId={year!.id}
+                  entityId={node.entity_id}
+                  categories={allCategories.filter((c) => !existingCatIds.has(c.id))}
+                  onSaved={() => { setAddingEntityId(null); reload(); }}
+                  onCancel={() => setAddingEntityId(null)}
+                />
+              ) : (
+                <button
+                  onClick={() => setAddingEntityId(node.entity_id)}
+                  className="inline-flex items-center gap-1 text-xs text-[#666] hover:text-[#F2C48D]"
+                >
+                  <Plus size={13} /> Ajouter une catégorie à budgéter
+                </button>
+              )}
+            </td>
+          </tr>,
+        );
+      }
 
       [...node.children]
         .sort((a, b) => a.entity_name.localeCompare(b.entity_name, "fr"))
@@ -202,7 +240,7 @@ export default function OverviewTab({ year }: Props) {
     }
   }
 
-  [...data.groups]
+  [...displayGroups]
     .sort((a, b) => a.entity_name.localeCompare(b.entity_name, "fr"))
     .forEach((g: any) => pushEntity(g, 0));
 
@@ -216,18 +254,25 @@ export default function OverviewTab({ year }: Props) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-[#666]">
+          {scopedNode && selectedEntity ? (
+            <>Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités (totaux recalculés). </>
+          ) : selectedEntityId && !scopedNode ? (
+            <>Entité sélectionnée absente du budget : vue complète affichée. </>
+          ) : null}
           Hiérarchie pôle / club / catégorie. Déplie une catégorie pour voir ses sous-catégories. Clique sur un montant de budget pour le modifier.
         </p>
         {hasN1 && (
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={seed}
-              disabled={seeding}
-              title="Pré-remplit les budgets vides à partir des transactions réelles de l'exercice précédent"
-              className="text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] rounded-full px-3 py-1 disabled:opacity-50"
-            >
-              {seeding ? "Récupération…" : "Récupérer le réel de l'an dernier"}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={seed}
+                disabled={seeding}
+                title="Pré-remplit les budgets vides à partir des transactions réelles de l'exercice précédent"
+                className="text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] rounded-full px-3 py-1 disabled:opacity-50"
+              >
+                {seeding ? "Récupération…" : "Récupérer le réel de l'an dernier"}
+              </button>
+            )}
             <button
               onClick={() => setShowN1((v) => !v)}
               className="text-xs text-[#666] hover:text-white border border-[#222] rounded-full px-3 py-1"
@@ -406,6 +451,7 @@ function Num({ value, color, muted, signed }: { value: number; color?: string; m
 function EditableBudget({
   year, node, cat, direction, onSaved,
 }: { year: FiscalYear; node: any; cat: any; direction: "expense" | "income"; onSaved: () => void }) {
+  const { isAdmin } = useAuth();
   const allocId: number | null = direction === "expense" ? cat.allocation_id_expense : cat.allocation_id_income;
   const value: number = direction === "expense" ? cat.allocated_expense : cat.allocated_income;
   const origin: string | null = direction === "expense" ? cat.origin_expense : cat.origin_income;
@@ -441,7 +487,7 @@ function EditableBudget({
     }
   }
 
-  if (editing) {
+  if (editing && isAdmin) {
     return (
       <td className="px-3 py-2 text-right">
         <input
@@ -458,6 +504,14 @@ function EditableBudget({
           }}
           className="w-24 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[#F2C48D]"
         />
+      </td>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <td className="px-3 py-2 text-right whitespace-nowrap" style={{ color: value ? color : "#444" }}>
+        {value ? formatEuros(value) : "—"}
       </td>
     );
   }

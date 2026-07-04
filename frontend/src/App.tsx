@@ -39,6 +39,7 @@ function AppContent() {
   const [activeModules, setActiveModules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     api.getModules()
@@ -50,14 +51,17 @@ function AppContent() {
   if (loading) return <Spinner />;
   if (error) return <ErrorScreen message={error} />;
 
-  const activeModuleIds = activeModules.map((m: any) => m.id);
+  // Filtrage par rôle : un module dont le manifest a requires_admin: true
+  // n'apparaît ni dans la sidebar ni dans les routes pour un non-admin.
+  const visibleModules = activeModules.filter((m: any) => isAdmin || !m.requires_admin);
+  const activeModuleIds = visibleModules.map((m: any) => m.id);
 
   return (
     <BrowserRouter>
       <FiscalYearProvider>
         <EntityProvider>
           <div className="flex h-screen bg-black">
-            <Sidebar activeModules={activeModules} />
+            <Sidebar activeModules={visibleModules} />
             <div className="flex-1 flex flex-col overflow-hidden">
               <ContextBar />
               <main className="flex-1 overflow-auto bg-black">

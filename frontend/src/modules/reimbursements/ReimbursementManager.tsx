@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, CheckCircle2, Clock, RotateCcw } from "lucide-react";
 import { api } from "../../api";
 import EmptyState from "../../core/EmptyState";
+import { useAuth } from "../../core/AuthContext";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 
 const BASE_URL = "/api";
@@ -78,6 +79,7 @@ function toPayload(form: ReimbForm) {
 }
 
 export default function ReimbursementManager() {
+  const { isAdmin } = useAuth();
   const [items, setItems] = useState<Reimbursement[]>([]);
   const [summary, setSummary] = useState<SummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +95,9 @@ export default function ReimbursementManager() {
   const [orgName, setOrgName] = useState("l'association");
 
   useEffect(() => {
-    api.getTransactions().then((r) =>
+    // Les 200 transactions les plus récentes suffisent pour lier une avance ;
+    // charger tout l'historique rendait la page inutilisable à terme.
+    api.getTransactions({ limit: "200", sort_by: "date", sort_dir: "desc" }).then((r) =>
       setTxOptions(r.items.map((t: any) => ({ id: t.id, label: t.label, date: t.date, amount: t.amount })))
     ).catch(() => {});
     api.getConfig().then((cfg: any) => {
@@ -129,6 +133,16 @@ export default function ReimbursementManager() {
   }
 
   function openEdit(r: Reimbursement) {
+    // La transaction liée peut être plus ancienne que la fenêtre chargée :
+    // on l'injecte dans les options pour que le select l'affiche correctement.
+    if (r.transaction_id && !txOptions.some((t) => t.id === r.transaction_id)) {
+      setTxOptions((prev) => [{
+        id: r.transaction_id as number,
+        label: r.transaction_label || `#${r.transaction_id}`,
+        date: r.transaction_date || "",
+        amount: r.transaction_amount ?? r.amount,
+      }, ...prev]);
+    }
     setEditing(r);
     setForm({
       transaction_id: r.transaction_id ? String(r.transaction_id) : "",
@@ -215,12 +229,14 @@ export default function ReimbursementManager() {
             Avances de frais et remboursements membres.
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
-        >
-          <Plus size={15} /> Nouveau remboursement
-        </button>
+        {isAdmin && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+          >
+            <Plus size={15} /> Nouveau remboursement
+          </button>
+        )}
       </div>
 
       {error && (
@@ -276,7 +292,7 @@ export default function ReimbursementManager() {
         </select>
       </div>
 
-      {showForm && (
+      {isAdmin && showForm && (
         <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
           <h2 className="text-base font-semibold text-white mb-5">
             {editing ? "Modifier le remboursement" : "Nouveau remboursement"}
@@ -380,8 +396,8 @@ export default function ReimbursementManager() {
             "Marie a avancé 45 € de courses → en attente",
             "Paul a avancé 120 € pour la soirée → remboursé",
           ]}
-          ctaLabel="Créer le premier remboursement"
-          onCta={openCreate}
+          ctaLabel={isAdmin ? "Créer le premier remboursement" : undefined}
+          onCta={isAdmin ? openCreate : undefined}
         />
       ) : (
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
@@ -431,7 +447,7 @@ export default function ReimbursementManager() {
                     {formatEuros(r.amount)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    {confirmDelete === r.id ? (
+                    {!isAdmin ? null : confirmDelete === r.id ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="text-xs text-[#666]">Supprimer ?</span>
                         <button onClick={() => handleDelete(r.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>

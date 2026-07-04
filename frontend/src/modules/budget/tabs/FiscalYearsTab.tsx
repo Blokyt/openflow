@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useFiscalYear, FiscalYear } from "../../../core/FiscalYearContext";
+import { useAuth } from "../../../core/AuthContext";
 import { api } from "../../../api";
 import FiscalYearWizard from "../FiscalYearWizard";
 import { Plus, Trash2 } from "lucide-react";
 import { formatDate } from "../../../utils/format";
 
 export default function FiscalYearsTab() {
+  const { isAdmin } = useAuth();
   const { years, reload } = useFiscalYear();
   const [showWizard, setShowWizard] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
@@ -46,13 +48,15 @@ export default function FiscalYearsTab() {
             ? " Un exercice est en cours : clos-le avant d'en ouvrir un nouveau."
             : " Aucun exercice ouvert."}
         </p>
-        <button
-          onClick={() => setShowWizard(true)}
-          disabled={hasOpenMandate}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Plus size={14} /> Nouvel exercice
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowWizard(true)}
+            disabled={hasOpenMandate}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus size={14} /> Nouvel exercice
+          </button>
+        )}
       </div>
 
       {error && (
@@ -97,7 +101,7 @@ export default function FiscalYearsTab() {
                   <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.start_date)}</td>
                   <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.end_date)}</td>
                   <td className="px-4 py-3 text-right">
-                    {y.end_date === null && closingId !== y.id && (
+                    {isAdmin && y.end_date === null && closingId !== y.id && (
                       <button
                         onClick={() => { setClosingId(y.id); setCloseDate(new Date().toISOString().slice(0, 10)); }}
                         className="text-xs text-[#B0B0B0] hover:text-white mr-3 border border-[#333] px-2.5 py-1 rounded-full"
@@ -105,7 +109,7 @@ export default function FiscalYearsTab() {
                         Clore
                       </button>
                     )}
-                    {closingId === y.id && (
+                    {isAdmin && closingId === y.id && (
                       <span className="inline-flex items-center gap-2 text-xs">
                         <input
                           type="date"
@@ -125,21 +129,23 @@ export default function FiscalYearsTab() {
                         </button>
                       </span>
                     )}
-                    {confirmDelete === y.id ? (
-                      <span className="inline-flex items-center gap-2 text-xs">
-                        <span className="text-[#666]">Supprimer ?</span>
-                        <button onClick={() => doDelete(y.id)} className="text-[#FF5252] font-semibold">Oui</button>
-                        <button onClick={() => setConfirmDelete(null)} className="text-[#666]">Non</button>
-                      </span>
-                    ) : (
-                      closingId !== y.id && (
-                        <button
-                          onClick={() => setConfirmDelete(y.id)}
-                          className="p-1.5 text-[#666] hover:text-[#FF5252]"
-                          title="Supprimer"
-                        >
-                          <Trash2 size={14} strokeWidth={1.5} />
-                        </button>
+                    {isAdmin && (
+                      confirmDelete === y.id ? (
+                        <span className="inline-flex items-center gap-2 text-xs">
+                          <span className="text-[#666]">Supprimer ?</span>
+                          <button onClick={() => doDelete(y.id)} className="text-[#FF5252] font-semibold">Oui</button>
+                          <button onClick={() => setConfirmDelete(null)} className="text-[#666]">Non</button>
+                        </span>
+                      ) : (
+                        closingId !== y.id && (
+                          <button
+                            onClick={() => setConfirmDelete(y.id)}
+                            className="p-1.5 text-[#666] hover:text-[#FF5252]"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={14} strokeWidth={1.5} />
+                          </button>
+                        )
                       )
                     )}
                   </td>

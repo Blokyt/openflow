@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Entity, EntityBalance, ConsolidatedBalance } from "../../types";
 import { GitBranch, Plus, Building2, Users, Trash2, ChevronRight, ChevronDown, X, ArrowRight, Pencil } from "lucide-react";
 import { useEntity } from "../../core/EntityContext";
+import { useAuth } from "../../core/AuthContext";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 import ConfirmDialog from "../../core/ConfirmDialog";
 
@@ -28,6 +29,7 @@ function EntityNode({
   onEdit: (entity: Entity) => void;
   onSelect: (id: number) => void;
 }) {
+  const { isAdmin } = useAuth();
   const [expanded, setExpanded] = useState(true);
   const hasChildren = entity.children && entity.children.length > 0;
 
@@ -64,20 +66,24 @@ function EntityNode({
           </span>
         )}
 
-        <button
-          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity ml-1"
-          onClick={(e) => { e.stopPropagation(); onEdit(entity); }}
-          title="Modifier"
-        >
-          <Pencil size={13} />
-        </button>
-        <button
-          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
-          onClick={(e) => { e.stopPropagation(); onDelete(entity.id); }}
-          title="Supprimer"
-        >
-          <Trash2 size={13} />
-        </button>
+        {isAdmin && (
+          <>
+            <button
+              className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity ml-1"
+              onClick={(e) => { e.stopPropagation(); onEdit(entity); }}
+              title="Modifier"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
+              onClick={(e) => { e.stopPropagation(); onDelete(entity.id); }}
+              title="Supprimer"
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
+        )}
       </div>
 
       {hasChildren && expanded && (
@@ -260,6 +266,7 @@ function EntityBalancePanel({
   entityName: string;
   onClose: () => void;
 }) {
+  const { isAdmin } = useAuth();
   const [balance, setBalance] = useState<EntityBalance | null>(null);
   const [consolidated, setConsolidated] = useState<ConsolidatedBalance | null>(null);
   const [loading, setLoading] = useState(true);
@@ -389,7 +396,7 @@ function EntityBalancePanel({
                 <p className="text-xs text-[#666] uppercase tracking-wider">
                   {isAggregate ? "Solde propre (calculé)" : "Solde propre"}
                 </p>
-                {!isAggregate && !editingRef && (
+                {isAdmin && !isAggregate && !editingRef && (
                   <button
                     onClick={openEditForm}
                     className="text-[#666] hover:text-[#F2C48D] transition-colors"
@@ -398,7 +405,7 @@ function EntityBalancePanel({
                     <Pencil size={13} />
                   </button>
                 )}
-                {isAggregate && (
+                {isAggregate && isAdmin && (
                   <Link
                     to="/settings#balances"
                     className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5"
@@ -488,7 +495,7 @@ function EntityBalancePanel({
             </div>
           )}
 
-          {hasChildren && !isAggregate && (
+          {isAdmin && hasChildren && !isAggregate && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
               <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Calculer le solde propre</p>
               <p className="text-xs text-[#666] mb-3 leading-relaxed">
@@ -544,6 +551,7 @@ function EntityBalancePanel({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function EntityTree() {
+  const { isAdmin } = useAuth();
   const { entities, reload } = useEntity();
   const [externalEntities, setExternalEntities] = useState<Entity[]>([]);
   const [showCreateModal, setShowCreateModal] = useState<"internal" | "external" | null>(null);
@@ -603,10 +611,7 @@ export default function EntityTree() {
     <div className="p-8 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <GitBranch size={22} className="text-[#F2C48D]" strokeWidth={1.5} />
-          <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Entités</h1>
-        </div>
+        <h1 className="text-3xl font-bold text-white mb-2" style={{ letterSpacing: "-0.02em" }}>Entités</h1>
         <p className="text-sm text-[#B0B0B0] leading-relaxed">
           Les entités représentent <span className="text-white font-medium">qui gère le budget</span> :
           ta structure et ses <em>sous-clubs, pôles, sections</em>, ainsi que les{" "}
@@ -641,13 +646,15 @@ export default function EntityTree() {
                   {flatInternal.length}
                 </span>
               </div>
-              <button
-                onClick={() => setShowCreateModal("internal")}
-                className="flex items-center gap-1.5 text-xs text-[#F2C48D] border border-[#F2C48D]/30 hover:border-[#F2C48D]/60 hover:bg-[#F2C48D]/5 rounded-lg px-3 py-1.5 transition-colors"
-              >
-                <Plus size={13} />
-                Nouvelle
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowCreateModal("internal")}
+                  className="flex items-center gap-1.5 text-xs text-[#F2C48D] border border-[#F2C48D]/30 hover:border-[#F2C48D]/60 hover:bg-[#F2C48D]/5 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <Plus size={13} />
+                  Nouvelle
+                </button>
+              )}
             </div>
 
             <div className="p-2">
@@ -680,13 +687,15 @@ export default function EntityTree() {
                   {externalEntities.length}
                 </span>
               </div>
-              <button
-                onClick={() => setShowCreateModal("external")}
-                className="flex items-center gap-1.5 text-xs text-[#B0B0B0] border border-[#333] hover:border-[#555] hover:bg-[#1a1a1a] rounded-lg px-3 py-1.5 transition-colors"
-              >
-                <Plus size={13} />
-                Nouvelle
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowCreateModal("external")}
+                  className="flex items-center gap-1.5 text-xs text-[#B0B0B0] border border-[#333] hover:border-[#555] hover:bg-[#1a1a1a] rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <Plus size={13} />
+                  Nouvelle
+                </button>
+              )}
             </div>
 
             <div className="p-2">
@@ -709,20 +718,24 @@ export default function EntityTree() {
                     {e.description && (
                       <span className="text-xs text-[#555] truncate max-w-[120px]">{e.description}</span>
                     )}
-                    <button
-                      className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity"
-                      onClick={(e2) => { e2.stopPropagation(); setEditingEntity(e); }}
-                      title="Modifier"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
-                      onClick={(e2) => { e2.stopPropagation(); requestDelete(e.id); }}
-                      title="Supprimer"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity"
+                          onClick={(e2) => { e2.stopPropagation(); setEditingEntity(e); }}
+                          title="Modifier"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
+                          onClick={(e2) => { e2.stopPropagation(); requestDelete(e.id); }}
+                          title="Supprimer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))
               )}

@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../../api";
 import { Category } from "../../types";
+import { useEntity } from "../../core/EntityContext";
+import { useFiscalYear } from "../../core/FiscalYearContext";
+import { useAuth } from "../../core/AuthContext";
 import { formatEuros } from "../../utils/format";
 import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Check } from "lucide-react";
 
@@ -10,11 +13,13 @@ function CategoryNode({
   allCategories,
   onEdit,
   onDelete,
+  canEdit,
 }: {
   cat: Category;
   allCategories: Category[];
   onEdit: (cat: Category) => void;
   onDelete: (id: number) => void;
+  canEdit: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const hasChildren = cat.children && cat.children.length > 0;
@@ -51,22 +56,24 @@ function CategoryNode({
             </span>
           )
         )}
-        <span className="hidden group-hover:inline-flex items-center gap-1">
-          <button
-            onClick={() => onEdit(cat)}
-            className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
-            title="Modifier"
-          >
-            <Pencil size={12} strokeWidth={1.5} />
-          </button>
-          <button
-            onClick={() => onDelete(cat.id)}
-            className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
-            title="Supprimer"
-          >
-            <Trash2 size={12} strokeWidth={1.5} />
-          </button>
-        </span>
+        {canEdit && (
+          <span className="hidden group-hover:inline-flex items-center gap-1">
+            <button
+              onClick={() => onEdit(cat)}
+              className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+              title="Modifier"
+            >
+              <Pencil size={12} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={() => onDelete(cat.id)}
+              className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+              title="Supprimer"
+            >
+              <Trash2 size={12} strokeWidth={1.5} />
+            </button>
+          </span>
+        )}
       </div>
       {hasChildren && open && (
         <div className="ml-6 border-l border-[#222] pl-2">
@@ -77,6 +84,7 @@ function CategoryNode({
               allCategories={allCategories}
               onEdit={onEdit}
               onDelete={onDelete}
+              canEdit={canEdit}
             />
           ))}
         </div>
@@ -140,6 +148,7 @@ function EditRow({
 
 /* ---------- Main component ---------- */
 export default function CategoryManager() {
+  const { isAdmin } = useAuth();
   const [tree, setTree] = useState<Category[]>([]);
   const [flatList, setFlatList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,16 +161,27 @@ export default function CategoryManager() {
   const [newParentId, setNewParentId] = useState("");
   const [creating, setCreating] = useState(false);
 
+  const { selectedEntityId, selectedEntity } = useEntity();
+  const { selectedYear } = useFiscalYear();
+
   const fetchCategories = useCallback(() => {
     setLoading(true);
-    Promise.all([api.getCategoryTree(), api.getCategories()])
+    // Les compteurs/montants par catégorie suivent le focus global : même
+    // périmètre (entité + sous-entités) et même fenêtre d'exercice que le reste.
+    const today = new Date().toISOString().slice(0, 10);
+    const dateFrom = selectedYear?.start_date;
+    const dateTo = selectedYear ? (selectedYear.end_date ?? today) : undefined;
+    Promise.all([
+      api.getCategoryTree(selectedEntityId ?? undefined, dateFrom, dateTo),
+      api.getCategories(),
+    ])
       .then(([t, flat]) => {
         setTree(t);
         setFlatList(flat);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedEntityId, selectedYear?.id]);
 
   useEffect(() => {
     fetchCategories();
@@ -251,6 +271,7 @@ export default function CategoryManager() {
           allCategories={flatList}
           onEdit={setEditingCat}
           onDelete={setConfirmDelete}
+          canEdit={isAdmin}
         />
       );
     });
@@ -265,11 +286,25 @@ export default function CategoryManager() {
         Les catégories décrivent <span className="text-white font-medium">la nature</span> d'une
         transaction (ex&nbsp;: <em>matériel, transport, cotisations, sponsoring</em>).
       </p>
-      <p className="text-xs text-[#666] mb-8 leading-relaxed">
+      <p className="text-xs text-[#666] mb-2 leading-relaxed">
         Pour modéliser <span className="text-[#B0B0B0]">qui gère le budget</span> (sous-clubs,
         pôles, sections), utilise plutôt{" "}
         <a href="/entities" className="text-[#F2C48D] hover:underline">Entités</a>.
       </p>
+      {(selectedEntity || selectedYear) && (
+        <p className="text-xs text-[#666] mb-8">
+          Statistiques comptées pour{" "}
+          {selectedEntity ? (
+            <span className="text-[#F2C48D] font-medium">{selectedEntity.name} et sous-entités</span>
+          ) : (
+            "toutes les entités"
+          )}
+          {selectedYear && (
+            <> sur l'exercice <span className="text-[#F2C48D] font-medium">{selectedYear.name}</span></>
+          )}.
+        </p>
+      )}
+      {!selectedEntity && !selectedYear && <div className="mb-6" />}
 
       {error && (
         <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
@@ -281,38 +316,40 @@ export default function CategoryManager() {
       )}
 
       {/* Create form */}
-      <form onSubmit={handleCreate} className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-white mb-4">Nouvelle catégorie</h2>
-        <div className="flex gap-3 flex-wrap">
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Nom de la catégorie"
-            required
-            className="flex-1 min-w-40 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]"
-          />
-          <select
-            value={newParentId}
-            onChange={(e) => setNewParentId(e.target.value)}
-            className="bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
-          >
-            <option value="">— Racine —</option>
-            {flatList.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={creating}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
-          >
-            <Plus size={14} /> Créer
-          </button>
-        </div>
-      </form>
+      {isAdmin && (
+        <form onSubmit={handleCreate} className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-white mb-4">Nouvelle catégorie</h2>
+          <div className="flex gap-3 flex-wrap">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Nom de la catégorie"
+              required
+              className="flex-1 min-w-40 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]"
+            />
+            <select
+              value={newParentId}
+              onChange={(e) => setNewParentId(e.target.value)}
+              className="bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+            >
+              <option value="">— Racine —</option>
+              {flatList.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={creating}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+            >
+              <Plus size={14} /> Créer
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Tree */}
       <div className="bg-[#111] border border-[#222] rounded-2xl p-4">

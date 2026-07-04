@@ -33,6 +33,14 @@ export function EntityProvider({ children }: { children: ReactNode }) {
     try {
       const tree = await api.getEntityTree();
       setEntities(tree);
+      // Si le focus stocké (localStorage) ne correspond plus à une entité de
+      // l'arbre reçu (ex : périmètre réduit d'un treasurer, focus fantôme),
+      // on retombe sur la première entité interne racine, ou null si l'arbre est vide.
+      setSelectedEntityId((current) => {
+        if (current !== null && findEntity(tree, current)) return current;
+        const firstRoot = tree.find((e) => e.type === "internal") || tree[0];
+        return firstRoot ? firstRoot.id : null;
+      });
     } catch {
       setEntities([]);
     }

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users, GitMerge, AlertTriangle } from "lucide-react";
 import EmptyState from "../../core/EmptyState";
-import { formatEuros, formatDate } from "../../utils/format";
+import { useAuth } from "../../core/AuthContext";
+import { formatEuros, formatDate, txTone } from "../../utils/format";
 
 const BASE_URL = "/api";
 const PAGE_SIZE = 80;
@@ -35,6 +36,8 @@ interface Transaction {
   date: string;
   label: string;
   amount: number;
+  from_entity_type?: string;
+  to_entity_type?: string;
 }
 
 type ContactForm = Omit<Contact, "id" | "created_at" | "updated_at">;
@@ -62,6 +65,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export default function TiersList() {
+  const { isAdmin } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -232,9 +236,11 @@ export default function TiersList() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Contacts</h1>
           <p className="text-sm text-[#666] mt-1">Clients, fournisseurs, membres, sponsors.</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
-          <Plus size={15} /> Nouveau contact
-        </button>
+        {isAdmin && (
+          <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
+            <Plus size={15} /> Nouveau contact
+          </button>
+        )}
       </div>
 
       {error && (
@@ -279,7 +285,7 @@ export default function TiersList() {
         )}
       </div>
 
-      {showForm && (
+      {isAdmin && showForm && (
         <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
           <h2 className="text-base font-semibold text-white mb-5">{editing ? "Modifier le contact" : "Nouveau contact"}</h2>
           <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -327,8 +333,8 @@ export default function TiersList() {
           title="Aucun contact pour l'instant"
           description="Ton carnet d'adresses : sponsors, fournisseurs, membres, organismes."
           examples={["Schneider Electric (sponsor)", "Marie Dupont (membre)"]}
-          ctaLabel="Ajouter mon premier contact"
-          onCta={openCreate}
+          ctaLabel={isAdmin ? "Ajouter mon premier contact" : undefined}
+          onCta={isAdmin ? openCreate : undefined}
         />
       ) : (
         <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
@@ -364,7 +370,7 @@ export default function TiersList() {
                       <td className="px-5 py-3.5 text-[#B0B0B0]">{c.email || <span className="text-[#444]">—</span>}</td>
                       <td className="px-5 py-3.5 text-[#B0B0B0]">{c.phone || <span className="text-[#444]">—</span>}</td>
                       <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        {confirmDelete === c.id ? (
+                        {!isAdmin ? null : confirmDelete === c.id ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="text-xs text-[#666]">Supprimer ?</span>
                             <button onClick={() => handleDelete(c.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
@@ -455,15 +461,21 @@ export default function TiersList() {
                         <div className="text-sm text-white">{t.label || "—"}</div>
                         <div className="text-xs text-[#666]">{formatDate(t.date)}</div>
                       </div>
-                      <div className="text-sm font-semibold text-[#B0B0B0]">
-                        {formatEuros(t.amount)}
-                      </div>
+                      {(() => {
+                        const { color, sign } = txTone(t);
+                        return (
+                          <div className="text-sm font-semibold" style={{ color }}>
+                            {sign}{formatEuros(t.amount)}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
+            {isAdmin && (
             <div className="border-t border-[#1a1a1a] pt-4">
               {!mergeMode ? (
                 <button onClick={openMergeMode} className="flex items-center gap-2 text-sm text-[#666] hover:text-[#F2C48D] transition-colors">
@@ -522,12 +534,15 @@ export default function TiersList() {
                 </div>
               )}
             </div>
+            )}
 
+            {isAdmin && (
             <div className="mt-6 flex gap-3">
               <button onClick={() => openEdit(selected)} className="flex-1 px-4 py-2 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
                 Modifier
               </button>
             </div>
+            )}
           </div>
         </div>
       )}
