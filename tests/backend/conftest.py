@@ -14,7 +14,17 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.main import create_app
 from backend.core.rate_limit import limiter
+from backend.core.auth import SESSION_COOKIE, hash_token
+from backend.core.auth import hash_password as _hash_password
 from tools.migrate import ensure_system_tables, load_migrations, apply_migrations
+
+ADMIN_EMAIL = "admin@test.local"
+ADMIN_SESSION_TOKEN = "test-admin-session-token"
+# Hash précalculé UNE fois (scrypt coûte ~100 ms), mot de passe "admin-test-password".
+_ADMIN_HASH = _hash_password("admin-test-password")
+
+FAR_FUTURE = "2099-01-01T00:00:00+00:00"
+PAST = "2020-01-01T00:00:00+00:00"
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +58,12 @@ def _init_db(db_path: str):
         target_version = manifest.get("version", "1.0.0")
         migrations = load_migrations(models_path)
         apply_migrations(conn, module_id, migrations, None, target_version)
+    conn.execute(
+        "INSERT INTO users (email, display_name, password_hash, is_admin, is_active, created_at) "
+        "VALUES (?, 'Admin Test', ?, 1, 1, ?)",
+        (ADMIN_EMAIL, _ADMIN_HASH, PAST),
+    )
+    conn.commit()
     conn.close()
 
 
@@ -132,21 +148,92 @@ def _install_default_entity_injection(client: TestClient, db_path: Path) -> None
     client.put = patched_put  # type: ignore[method-assign]
 
 
+def _open_session(db_path, email, token):
+    """Insère une session directement en DB (évite un login scrypt par test).
+
+    INSERT OR IGNORE : certains tests dépendent à la fois de `client` et de
+    `client_and_db` (via une fixture intermédiaire) sur le même app_and_db ;
+    les deux fixtures posent alors la même session admin, ce qui violerait
+    l'unicité de token_hash sans cet idempotence.
+    """
+    conn = sqlite3.connect(str(db_path))
+    try:
+        user_id = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()[0]
+        conn.execute(
+            "INSERT OR IGNORE INTO sessions (token_hash, user_id, created_at, expires_at, last_seen_at, user_agent) "
+            "VALUES (?, ?, ?, ?, ?, '')",
+            (hash_token(token), user_id, PAST, FAR_FUTURE, PAST),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 @pytest.fixture
-def client(db_path):
-    """TestClient backed by the same isolated DB as db_path."""
+def app_and_db(db_path):
     app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
+    return app, db_path
+
+
+@pytest.fixture
+def client(app_and_db):
+    """TestClient authentifié en admin, backé par une DB isolée."""
+    app, db_path = app_and_db
     tc = TestClient(app)
+    _open_session(db_path, ADMIN_EMAIL, ADMIN_SESSION_TOKEN)
+    tc.cookies.set(SESSION_COOKIE, ADMIN_SESSION_TOKEN)
     _install_default_entity_injection(tc, db_path)
     return tc
 
 
 @pytest.fixture
-def client_and_db(db_path):
-    """TestClient + raw DB path for tests that need both."""
-    app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
+def client_and_db(app_and_db):
+    app, db_path = app_and_db
     tc = TestClient(app)
+    _open_session(db_path, ADMIN_EMAIL, ADMIN_SESSION_TOKEN)
+    tc.cookies.set(SESSION_COOKIE, ADMIN_SESSION_TOKEN)
     _install_default_entity_injection(tc, db_path)
     return tc, db_path
+
+
+@pytest.fixture
+def login_as(app_and_db):
+    """Fabrique un TestClient authentifié pour un user arbitraire.
+
+    roles : liste de tuples (entity_id, "treasurer" | "viewer").
+    """
+    app, db_path = app_and_db
+    counter = {"n": 0}
+
+    def _make(email, *, is_admin=False, roles=None):
+        counter["n"] += 1
+        token = f"test-session-{counter['n']}-{email}"
+        conn = sqlite3.connect(str(db_path))
+        try:
+            now = PAST
+            cur = conn.execute(
+                "INSERT INTO users (email, display_name, password_hash, is_admin, is_active, created_at) "
+                "VALUES (?, ?, 'x', ?, 1, ?)",
+                (email.lower(), email.split("@")[0], 1 if is_admin else 0, now),
+            )
+            user_id = cur.lastrowid
+            for entity_id, role in roles or []:
+                conn.execute(
+                    "INSERT INTO user_entity_roles (user_id, entity_id, role, created_at) VALUES (?, ?, ?, ?)",
+                    (user_id, entity_id, role, now),
+                )
+            conn.execute(
+                "INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen_at, user_agent) "
+                "VALUES (?, ?, ?, ?, ?, '')",
+                (hash_token(token), user_id, now, FAR_FUTURE, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        tc = TestClient(app)
+        tc.cookies.set(SESSION_COOKIE, token)
+        return tc
+
+    return _make
 
 

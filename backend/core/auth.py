@@ -8,6 +8,11 @@ import hashlib
 import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
+
+from fastapi import Depends, HTTPException, Request
+
+from backend.core.database import get_conn
 
 SESSION_COOKIE = "openflow_session"
 SESSION_TTL_DAYS = 30
@@ -73,3 +78,80 @@ def create_session(conn, user_id: int, user_agent: str = "") -> str:
 
 def delete_session(conn, token: str) -> None:
     conn.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
+
+
+# Routes accessibles sans session (login et acceptation d'invitation).
+PUBLIC_API_PATHS = {
+    "/api/users/login",
+    "/api/users/invitations/preview",
+    "/api/users/invitations/accept",
+}
+
+# Mutations autorisées aux non-admins (gestion de leur propre compte).
+NON_ADMIN_MUTATIONS = {
+    "/api/users/login",
+    "/api/users/logout",
+    "/api/users/me/password",
+    "/api/users/invitations/accept",
+}
+
+_MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _check_origin(request: Request) -> None:
+    """Anti-CSRF : sur une mutation, si le navigateur envoie Origin, il doit
+    correspondre au Host. Les clients sans Origin (curl, tests) passent."""
+    if request.method not in _MUTATING_METHODS:
+        return
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    if urlparse(origin).netloc != request.headers.get("host", ""):
+        raise HTTPException(status_code=403, detail="Origine non autorisée")
+
+
+def require_session(request: Request) -> None:
+    """Dépendance globale : deny-by-default sur /api + garde centrale des écritures."""
+    path = request.url.path
+    if not path.startswith("/api"):
+        return
+    _check_origin(request)
+    if path in PUBLIC_API_PATHS:
+        return
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    conn = get_conn()
+    try:
+        now = _now().isoformat()
+        row = conn.execute(
+            "SELECT u.*, s.id AS session_id FROM sessions s JOIN users u ON u.id = s.user_id "
+            "WHERE s.token_hash = ? AND s.expires_at > ? AND u.is_active = 1",
+            (hash_token(token), now),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=401, detail="Session expirée ou invalide")
+        conn.execute("UPDATE sessions SET last_seen_at = ? WHERE id = ?", (now, row["session_id"]))
+        conn.commit()
+        request.state.user = {
+            "id": row["id"], "email": row["email"], "display_name": row["display_name"],
+            "is_admin": row["is_admin"], "is_active": row["is_active"],
+        }
+    finally:
+        conn.close()
+    if request.method in _MUTATING_METHODS and not request.state.user["is_admin"] \
+            and path not in NON_ADMIN_MUTATIONS:
+        raise HTTPException(status_code=403, detail="Action réservée à l'administrateur")
+
+
+def get_current_user(request: Request) -> dict:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    return user
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Action réservée à l'administrateur")
+    return user

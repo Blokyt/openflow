@@ -1,7 +1,7 @@
 """API du module users : authentification, comptes, rôles, invitations."""
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from backend.core.auth import (
@@ -9,8 +9,8 @@ from backend.core.auth import (
     SESSION_TTL_DAYS,
     create_session,
     delete_session,
+    get_current_user,
     hash_password,
-    hash_token,
     verify_password,
 )
 from backend.core.database import get_conn
@@ -86,25 +86,11 @@ def login(request: Request, payload: LoginPayload, response: Response):
         conn.close()
 
 
-def _user_from_cookie(request: Request, conn):
-    token = request.cookies.get(SESSION_COOKIE)
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentification requise")
-    row = conn.execute(
-        "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
-        "WHERE s.token_hash = ? AND s.expires_at > ? AND u.is_active = 1",
-        (hash_token(token), _now_iso()),
-    ).fetchone()
-    if row is None:
-        raise HTTPException(status_code=401, detail="Session expirée ou invalide")
-    return row
-
-
 @router.get("/me")
-def me(request: Request):
+def me(request: Request, user: dict = Depends(get_current_user)):
     conn = get_conn()
     try:
-        row = _user_from_cookie(request, conn)
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
         return serialize_user(conn, row)
     finally:
         conn.close()

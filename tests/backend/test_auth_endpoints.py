@@ -24,6 +24,7 @@ def _seed_user(db_path, email="tresorier@club.fr", password="mot-de-passe-solide
 
 def test_login_success_sets_cookie(client_and_db):
     client, db_path = client_and_db
+    client.cookies.clear()
     _seed_user(db_path)
     r = client.post("/api/users/login",
                     json={"email": "tresorier@club.fr", "password": "mot-de-passe-solide"})
@@ -35,6 +36,7 @@ def test_login_success_sets_cookie(client_and_db):
 
 def test_login_wrong_password(client_and_db):
     client, db_path = client_and_db
+    client.cookies.clear()
     _seed_user(db_path)
     r = client.post("/api/users/login",
                     json={"email": "tresorier@club.fr", "password": "mauvais-mot-de-passe"})
@@ -43,6 +45,7 @@ def test_login_wrong_password(client_and_db):
 
 def test_login_unknown_email(client_and_db):
     client, _ = client_and_db
+    client.cookies.clear()
     r = client.post("/api/users/login",
                     json={"email": "inconnu@club.fr", "password": "peu-importe-longueur"})
     assert r.status_code == 401
@@ -50,6 +53,7 @@ def test_login_unknown_email(client_and_db):
 
 def test_login_inactive_user(client_and_db):
     client, db_path = client_and_db
+    client.cookies.clear()
     _seed_user(db_path, is_active=0)
     r = client.post("/api/users/login",
                     json={"email": "tresorier@club.fr", "password": "mot-de-passe-solide"})
@@ -58,12 +62,14 @@ def test_login_inactive_user(client_and_db):
 
 def test_login_invalid_payload(client_and_db):
     client, _ = client_and_db
+    client.cookies.clear()
     r = client.post("/api/users/login", json={"email": "seul"})
     assert r.status_code == 422
 
 
 def test_me_roundtrip_and_logout(client_and_db):
     client, db_path = client_and_db
+    client.cookies.clear()
     _seed_user(db_path)
     client.post("/api/users/login",
                 json={"email": "tresorier@club.fr", "password": "mot-de-passe-solide"})
@@ -79,12 +85,15 @@ def test_me_roundtrip_and_logout(client_and_db):
     assert client.get("/api/users/me").status_code == 401
 
 
-def test_me_without_session(client):
+def test_me_without_session(client_and_db):
+    client, _ = client_and_db
+    client.cookies.clear()
     assert client.get("/api/users/me").status_code == 401
 
 
 def test_login_rate_limited(client_and_db):
     client, db_path = client_and_db
+    client.cookies.clear()
     _seed_user(db_path)
     for _ in range(5):
         client.post("/api/users/login",

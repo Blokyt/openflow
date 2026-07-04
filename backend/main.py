@@ -3,8 +3,7 @@ import importlib
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
@@ -12,6 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
+from backend.core.auth import require_session
 from backend.core.config import load_config, save_config
 from backend.core.database import set_db_path
 from backend.core.module_loader import discover_modules, filter_active
@@ -97,7 +97,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db", bootstrap: bool = True) -> FastAPI:
-    app = FastAPI(title="OpenFlow", version="0.1.0")
+    app = FastAPI(title="OpenFlow", version="0.1.0", dependencies=[Depends(require_session)])
 
     # Item A — Rate limiting
     app.state.limiter = limiter
@@ -112,8 +112,6 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
         config.modules["tiers"] = True
         save_config(config, str(config_file))
         print("  Auto-activated 'tiers' module (required by reimbursements).")
-
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
     # SecurityHeadersMiddleware ajouté en dernier = plus externe dans la chaîne Starlette
     # (dernier add_middleware = premier middleware traversé à l'entrée de la requête)
@@ -166,6 +164,8 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
     def toggle_module(module_id: str, active: bool):
         if module_id not in config.modules:
             raise HTTPException(404, f"Module '{module_id}' not found")
+        if module_id == "users" and not active:
+            raise HTTPException(400, "Le module users ne peut pas être désactivé (verrouillage de l'accès)")
         if active:
             module_manifest = next((m for m in all_modules if m["id"] == module_id), None)
             if module_manifest:
