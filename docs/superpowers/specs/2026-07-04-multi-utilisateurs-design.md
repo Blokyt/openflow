@@ -121,7 +121,13 @@ Un futur module est protégé sans action de son auteur.
 - **Attachments** : accès conditionné au droit de lecture sur la transaction ou la
   soumission liée (aujourd'hui n'importe quel id se télécharge : fermé en phase 1).
 - **Tiers (entités externes)** : lisibles par les connectés (nécessaires pour
-  soumettre), écriture admin.
+  soumettre), écriture admin. L'historique des transactions d'un tiers
+  (`/{contact_id}/transactions`) est filtré au périmètre du rôle.
+- **Modules d'exploitation (backup, system, direns, helloasso)** : admin de bout
+  en bout, lectures comprises (router entier sous require_admin + manifest
+  `requires_admin: true` qui masque la page pour un non-admin). L'export backup
+  contient la base entière (dont les hash de mots de passe) : il ne doit jamais
+  être accessible à un non-admin.
 
 ## Frontend
 
