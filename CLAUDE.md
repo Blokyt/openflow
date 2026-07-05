@@ -34,7 +34,7 @@ python tools/migrate.py   # Applique les migrations DB (backup auto)
 python tools/create_module.py <id> --name "Nom" --description "Desc"
 
 pip install -r requirements-dev.txt   # Deps de test
-python -m pytest tests/ -v            # 535 tests, ~7min
+python -m pytest tests/ -v            # 537 tests, ~7min
 
 cd frontend && npm run build   # Build prod (Vite + React + Tailwind)
 cd frontend && npm run dev     # Dev server HMR sur port 5173
