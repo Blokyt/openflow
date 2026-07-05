@@ -1,5 +1,6 @@
 """OpenFlow FastAPI application."""
 import importlib
+import mimetypes
 from dataclasses import asdict
 from pathlib import Path
 
@@ -16,6 +17,10 @@ from backend.core.config import load_config, save_config
 from backend.core.database import init_db_pragmas, set_db_path
 from backend.core.module_loader import discover_modules, filter_active
 from backend.core.rate_limit import limiter
+
+# Le registre MIME de Windows ne connaît pas .woff2 : FileResponse retomberait
+# sur text/plain pour les polices auto-hébergées. On enregistre le type ici.
+mimetypes.add_type("font/woff2", ".woff2")
 
 
 def safe_static_file(build_dir: Path, path: str) -> Path | None:

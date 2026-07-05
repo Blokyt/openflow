@@ -35,3 +35,10 @@ def test_csp_header_present(client):
     assert "object-src 'none'" in csp
     # Les styles inline (attributs style= de React/Recharts) doivent rester permis.
     assert "style-src 'self' 'unsafe-inline'" in csp
+
+
+def test_woff2_mime_enregistre(client):
+    """Le type font/woff2 doit être enregistré (le registre Windows ne le connaît
+    pas), sinon les polices auto-hébergées seraient servies en text/plain."""
+    import mimetypes
+    assert mimetypes.guess_type("police.woff2")[0] == "font/woff2"
