@@ -5,7 +5,7 @@ parcourt les 401) pour que tout futur endpoint soit couvert d'office.
 """
 import starlette.routing
 
-from backend.core.auth import NON_ADMIN_MUTATIONS, PUBLIC_API_PATHS
+from backend.core.auth import NON_ADMIN_MUTATIONS, NON_ADMIN_MUTATION_PATTERNS, PUBLIC_API_PATHS, is_non_admin_mutation
 
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -32,7 +32,7 @@ def test_every_mutation_is_admin_only(client_and_db, login_as):
     treasurer = login_as("matrix-tres@test.local")
     covered = 0
     for method, path in _mutating_api_routes(client.app):
-        if path in PUBLIC_API_PATHS or path in NON_ADMIN_MUTATIONS:
+        if path in PUBLIC_API_PATHS or is_non_admin_mutation(_concretize(path)):
             continue
         r = treasurer.request(method, _concretize(path), json={})
         assert r.status_code == 403, (
@@ -48,4 +48,8 @@ def test_non_admin_mutations_allowlist_is_minimal():
         "/api/users/logout",
         "/api/users/me/password",
         "/api/users/invitations/accept",
+        "/api/submissions/",
     }
+    assert [p.pattern for p in NON_ADMIN_MUTATION_PATTERNS] == [
+        r"^/api/submissions/\d+/cancel$",
+    ]

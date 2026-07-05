@@ -6,6 +6,7 @@ tokens (sessions, invitations) ne sont jamais stockés en clair.
 """
 import hashlib
 import hmac
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
@@ -93,7 +94,20 @@ NON_ADMIN_MUTATIONS = {
     "/api/users/logout",
     "/api/users/me/password",
     "/api/users/invitations/accept",
+    "/api/submissions/",
 }
+
+# Mutations non-admin dont le chemin contient un paramètre : motifs regex.
+# La vérification FINE (propriétaire, statut, périmètre) reste dans l'endpoint ;
+# ici on ne fait qu'ouvrir le passage de la garde centrale.
+NON_ADMIN_MUTATION_PATTERNS = [
+    re.compile(r"^/api/submissions/\d+/cancel$"),
+]
+
+
+def is_non_admin_mutation(path: str) -> bool:
+    return path in NON_ADMIN_MUTATIONS or any(p.match(path) for p in NON_ADMIN_MUTATION_PATTERNS)
+
 
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -140,7 +154,7 @@ def require_session(request: Request) -> None:
     finally:
         conn.close()
     if request.method in _MUTATING_METHODS and not request.state.user["is_admin"] \
-            and path not in NON_ADMIN_MUTATIONS:
+            and not is_non_admin_mutation(path):
         raise HTTPException(status_code=403, detail="Action réservée à l'administrateur")
 
 
@@ -157,20 +171,26 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
-def get_allowed_entity_ids(conn, user: dict):
+def get_allowed_entity_ids(conn, user: dict, role: str | None = None):
     """Périmètre du user : None = tout (admin), sinon l'union des sous-arbres
-    des entités où il a un rôle. CTE récursive multi-racines : part de toutes
-    les entités où le user a un rôle, descend vers leurs enfants, et l'UNION
-    (sans ALL) dédoublonne les id partagés par plusieurs sous-arbres. Aucun
-    filtre de type : entités internes et externes sont incluses indifféremment."""
+    des entités où il a un rôle. `role` restreint aux lignes de ce rôle
+    (ex : "treasurer" pour les écritures). CTE récursive multi-racines : part
+    de toutes les entités où le user a un rôle, descend vers leurs enfants, et
+    l'UNION (sans ALL) dédoublonne les id partagés par plusieurs sous-arbres.
+    Aucun filtre de type : entités internes et externes sont incluses
+    indifféremment."""
     if user["is_admin"]:
         return None
-    roots = [
-        r[0]
-        for r in conn.execute(
+    if role is None:
+        rows = conn.execute(
             "SELECT entity_id FROM user_entity_roles WHERE user_id = ?", (user["id"],)
         ).fetchall()
-    ]
+    else:
+        rows = conn.execute(
+            "SELECT entity_id FROM user_entity_roles WHERE user_id = ? AND role = ?",
+            (user["id"], role),
+        ).fetchall()
+    roots = [r[0] for r in rows]
     if not roots:
         return set()
     placeholders = ",".join("?" * len(roots))

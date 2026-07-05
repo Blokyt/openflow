@@ -88,3 +88,45 @@ def test_require_entity_access(db_path):
         require_entity_access(conn, {"id": 0, "is_admin": 1}, bda)  # admin passe
     finally:
         conn.close()
+
+
+def test_role_filter_treasurer_only(db_path):
+    conn = _conn(db_path)
+    try:
+        bda = _entity(conn, "BDA2")
+        gastro = _entity(conn, "Gastronomine2", bda)
+        cave = _entity(conn, "Cave2", gastro)
+        ccmp = _entity(conn, "CCMP2", bda)
+        conn.execute(
+            "INSERT INTO users (email, display_name, password_hash, is_admin, is_active, created_at) "
+            "VALUES ('mix@c.fr', 'M', 'x', 0, 1, ?)", (NOW,))
+        uid = conn.execute("SELECT id FROM users WHERE email='mix@c.fr'").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO user_entity_roles (user_id, entity_id, role, created_at) "
+            "VALUES (?, ?, 'treasurer', ?)", (uid, gastro, NOW))
+        conn.execute(
+            "INSERT INTO user_entity_roles (user_id, entity_id, role, created_at) "
+            "VALUES (?, ?, 'viewer', ?)", (uid, ccmp, NOW))
+        conn.commit()
+        user = {"id": uid, "is_admin": 0}
+        # Sans filtre : union des deux sous-arbres.
+        assert get_allowed_entity_ids(conn, user) == {gastro, cave, ccmp}
+        # Filtre treasurer : seulement le sous-arbre treasurer.
+        assert get_allowed_entity_ids(conn, user, role="treasurer") == {gastro, cave}
+        # Filtre viewer : seulement le sous-arbre viewer.
+        assert get_allowed_entity_ids(conn, user, role="viewer") == {ccmp}
+        # Admin : None quel que soit le filtre.
+        assert get_allowed_entity_ids(conn, {"id": 1, "is_admin": 1}, role="treasurer") is None
+    finally:
+        conn.close()
+
+
+def test_is_non_admin_mutation_patterns():
+    from backend.core.auth import is_non_admin_mutation
+    assert is_non_admin_mutation("/api/users/logout")            # entrée exacte existante
+    assert is_non_admin_mutation("/api/submissions/")            # création par treasurer
+    assert is_non_admin_mutation("/api/submissions/42/cancel")   # annulation par motif
+    assert not is_non_admin_mutation("/api/submissions/42/approve")
+    assert not is_non_admin_mutation("/api/submissions/42/reject")
+    assert not is_non_admin_mutation("/api/transactions/")
+    assert not is_non_admin_mutation("/api/submissions/abc/cancel")
