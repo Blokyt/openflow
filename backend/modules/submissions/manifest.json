@@ -7,6 +7,11 @@
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "entities", "attachments", "users"],
+  "menu": {
+    "label": "Soumissions",
+    "icon": "file-up",
+    "position": 4
+  },
   "api_routes": ["api.py"],
   "db_models": ["models.py"],
   "dashboard_widgets": [],

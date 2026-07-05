@@ -14,6 +14,7 @@ const Reports = lazy(() => import("./modules/reports/index"));
 const HelloAssoPage = lazy(() => import("./modules/helloasso/HelloAssoPage"));
 const DirensPage = lazy(() => import("./modules/direns/index"));
 const UsersAdmin = lazy(() => import("./modules/users/UsersAdmin"));
+const SubmissionsPage = lazy(() => import("./modules/submissions/index"));
 
 function Page({ children }: { children: React.ReactNode }) {
   return (
@@ -44,6 +45,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   system: { path: "/system", element: <Page><SystemPage /></Page> },
   helloasso: { path: "/helloasso", element: <Page><HelloAssoPage /></Page> },
   users: { path: "/users", element: <Page><UsersAdmin /></Page> },
+  submissions: { path: "/submissions", element: <Page><SubmissionsPage /></Page> },
 };
 
 export const MODULE_IDS_WITH_ROUTE = new Set(Object.keys(MODULE_ROUTES));

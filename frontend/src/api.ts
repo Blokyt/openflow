@@ -189,6 +189,30 @@ export const api = {
   getContact: (id: number) => request<any>(`/tiers/${id}`),
   createContact: (data: { name: string; type: string; email?: string; phone?: string }) =>
     request<any>("/tiers/", { method: "POST", body: JSON.stringify(data) }),
+  // Soumissions (module submissions)
+  createSubmission: (s: any) =>
+    request<any>("/submissions/", { method: "POST", body: JSON.stringify(s) }),
+  getMySubmissions: () => request<any[]>("/submissions/mine"),
+  getSubmissions: (status?: string) =>
+    request<any[]>(`/submissions/${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  cancelSubmission: (id: number) =>
+    request<any>(`/submissions/${id}/cancel`, { method: "POST" }),
+  approveSubmission: (id: number, force = false) =>
+    request<any>(`/submissions/${id}/approve${force ? "?force=true" : ""}`, { method: "POST" }),
+  rejectSubmission: (id: number, comment: string) =>
+    request<any>(`/submissions/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
+  listSubmissionAttachments: (id: number) => request<any[]>(`/attachments/submission/${id}`),
+  uploadSubmissionAttachment: async (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(`${BASE_URL}/attachments/submission/${id}`, { method: "POST", body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || response.statusText);
+    }
+    return response.json();
+  },
+  deleteAttachment: (id: number) => request<any>(`/attachments/${id}`, { method: "DELETE" }),
   // Backup
   getBackupPreview: () => request<any>("/backup/preview"),
   exportBackup: async () => {
