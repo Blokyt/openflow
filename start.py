@@ -26,9 +26,6 @@ def run_migrations():
         print(f"Migration warnings: {result.stderr}")
 
 def main():
-    port = 8001
-    host = "0.0.0.0"
-
     config_file = PROJECT_ROOT / "config.yaml"
     if not config_file.exists():
         config_example = PROJECT_ROOT / "config.example.yaml"
@@ -39,6 +36,12 @@ def main():
         else:
             print("ERREUR: config.yaml introuvable. Lancez: python setup.py")
             sys.exit(1)
+
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from backend.core.config import load_config
+    config = load_config(str(config_file))
+    host = config.server.host
+    port = config.server.port
 
     run_migrations()
     check_frontend_build()
@@ -55,7 +58,11 @@ def main():
     print(f"\n{'=' * 50}")
     print(f"  OpenFlow")
     print(f"  Local  : http://localhost:{port}")
-    print(f"  Réseau : http://{local_ip}:{port}")
+    if host == "0.0.0.0":
+        print(f"  Réseau : http://{local_ip}:{port}")
+        print(f"  (écoute LAN : HTTP non chiffré, réservez ce mode au réseau de l'école)")
+    else:
+        print(f"  (écoute locale uniquement ; passez server.host à 0.0.0.0 dans config.yaml pour le LAN)")
     print(f"{'=' * 50}\n")
 
     import threading
@@ -65,6 +72,7 @@ def main():
     threading.Thread(target=open_browser, daemon=True).start()
 
     import uvicorn
+    # Un seul worker : SQLite (WAL) n'accepte qu'un processus écrivain.
     uvicorn.run("backend.main:create_app", host=host, port=port, factory=True, reload=False)
 
 if __name__ == "__main__":

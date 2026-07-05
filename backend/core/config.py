@@ -24,6 +24,13 @@ class BalanceConfig:
 
 
 @dataclass
+class ServerConfig:
+    # 127.0.0.1 par défaut (dev) ; passer à 0.0.0.0 pour exposer sur le LAN.
+    host: str = "127.0.0.1"
+    port: int = 8000
+
+
+@dataclass
 class AppConfig:
     entity: EntityConfig = field(default_factory=EntityConfig)
     balance: BalanceConfig = field(default_factory=BalanceConfig)
@@ -32,6 +39,7 @@ class AppConfig:
         "categories": True,
         "dashboard": True,
     })
+    server: ServerConfig = field(default_factory=ServerConfig)
 
 
 def load_config(path: str) -> AppConfig:
@@ -43,7 +51,8 @@ def load_config(path: str) -> AppConfig:
     entity = EntityConfig(**raw.get("entity", {}))
     balance = BalanceConfig(**raw.get("balance", {}))
     modules = raw.get("modules", {"transactions": True, "categories": True, "dashboard": True})
-    return AppConfig(entity=entity, balance=balance, modules=modules)
+    server = ServerConfig(**raw.get("server", {}))
+    return AppConfig(entity=entity, balance=balance, modules=modules, server=server)
 
 
 def save_config(config: AppConfig, path: str) -> None:
@@ -51,6 +60,7 @@ def save_config(config: AppConfig, path: str) -> None:
         "entity": asdict(config.entity),
         "balance": asdict(config.balance),
         "modules": config.modules,
+        "server": asdict(config.server),
     }
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
