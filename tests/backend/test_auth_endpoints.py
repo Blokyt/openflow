@@ -101,3 +101,5 @@ def test_login_rate_limited(client_and_db):
     r = client.post("/api/users/login",
                     json={"email": "tresorier@club.fr", "password": "mauvais-mot-de-passe"})
     assert r.status_code == 429
+    # Le verrouillage par compte se déclenche avant le plafond slowapi (10/minute).
+    assert "Trop de tentatives" in r.json()["detail"]

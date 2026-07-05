@@ -41,4 +41,16 @@ migrations = {
         "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_roles_user ON user_entity_roles(user_id)",
     ],
+    "1.1.0": [
+        """CREATE TABLE login_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            ip TEXT NOT NULL DEFAULT '',
+            success INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            user_agent TEXT NOT NULL DEFAULT ''
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_login_events_email ON login_events(email, id)",
+        "CREATE INDEX IF NOT EXISTS idx_login_events_ip ON login_events(ip, id)",
+    ],
 }

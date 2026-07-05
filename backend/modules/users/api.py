@@ -23,6 +23,7 @@ from backend.core.auth import (
 )
 from backend.core.database import get_conn
 from backend.core.rate_limit import limiter
+from backend.modules.users.lockout import lockout_remaining_seconds, record_login_event
 
 router = APIRouter()
 
@@ -107,19 +108,30 @@ def _set_session_cookie(response: Response, request: Request, token: str) -> Non
 
 
 @router.post("/login")
-@limiter.limit("5/minute")
+@limiter.limit("10/minute;30/hour")
 def login(request: Request, payload: LoginPayload, response: Response):
+    email = payload.email.strip().lower()
+    ip = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent", "")
     conn = get_conn()
     try:
-        row = conn.execute(
-            "SELECT * FROM users WHERE email = ?", (payload.email.strip().lower(),)
-        ).fetchone()
+        remaining = lockout_remaining_seconds(conn, email, ip)
+        if remaining > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Trop de tentatives échouées. Réessayez dans {remaining} secondes.",
+                headers={"Retry-After": str(remaining)},
+            )
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
         stored = row["password_hash"] if row is not None else _DUMMY_HASH
         ok = verify_password(payload.password, stored)
         if row is None or not ok or not row["is_active"]:
+            record_login_event(conn, email, ip, success=False, user_agent=user_agent)
+            conn.commit()
             raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
-        token = create_session(conn, row["id"], request.headers.get("user-agent", ""))
+        token = create_session(conn, row["id"], user_agent)
         conn.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (_now_iso(), row["id"]))
+        record_login_event(conn, email, ip, success=True, user_agent=user_agent)
         conn.commit()
         _set_session_cookie(response, request, token)
         return serialize_user(conn, row)
@@ -178,6 +190,21 @@ def list_users():
             data["last_login_at"] = row["last_login_at"]
             out.append(data)
         return out
+    finally:
+        conn.close()
+
+
+@router.get("/login-events", dependencies=[Depends(require_admin)])
+def list_login_events(limit: int = 100):
+    """Journal des connexions (réussites et échecs), du plus récent au plus ancien."""
+    limit = max(1, min(limit, 500))
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, email, ip, success, created_at, user_agent FROM login_events "
+            "ORDER BY id DESC LIMIT ?", (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -284,7 +311,7 @@ def preview_invitation(token: str):
 
 
 @router.post("/invitations/accept")
-@limiter.limit("5/minute")
+@limiter.limit("5/minute;20/hour")
 def accept_invitation(request: Request, payload: AcceptPayload, response: Response):
     if len(payload.password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(status_code=400,
