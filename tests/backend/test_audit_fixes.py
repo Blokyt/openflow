@@ -6,10 +6,12 @@ Couvre les nouveaux comportements introduits par le nettoyage :
 - montant de remboursement strictement positif ;
 - comblement des mois manquants dans la série temporelle du dashboard ;
 - export de sauvegarde dynamique (toutes les tables, dont budget) ;
+- snapshot d'import cohérent sous WAL (API backup SQLite, pas copie brute) ;
 - cascade de suppression d'un exercice fiscal.
 """
 import io
 import json
+import sqlite3
 import zipfile
 
 
@@ -157,6 +159,54 @@ def test_backup_export_includes_budget_tables(client):
         data = json.loads(zf.read("data.json"))
     assert "fiscal_years" in data
     assert any(row.get("name") == "2025" for row in data["fiscal_years"])
+
+
+# --------------------------------------------------------------------------- #
+# Sauvegarde : snapshot d'import cohérent sous WAL
+# --------------------------------------------------------------------------- #
+
+def test_import_snapshot_coherent_sous_wal(client_and_db):
+    """Le snapshot de sécurité pris avant un import doit inclure les données
+    encore dans le journal WAL (API backup SQLite, pas une copie brute du .db).
+
+    Un lecteur avec transaction ouverte AVANT l'écriture empêche le checkpoint
+    de fusionner le WAL dans le fichier .db (comme des requêtes concurrentes en
+    production) : une copie brute du fichier raterait alors la donnée."""
+    client, db_path = client_and_db
+
+    # Lecteur ouvert avant l'écriture : bloque l'avancée du checkpoint.
+    reader = sqlite3.connect(str(db_path))
+    try:
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM entities").fetchone()
+
+        # Donnée écrite via l'API juste avant l'import (reste dans le -wal).
+        ext = _entity(client, "Fournisseur WAL", "external")
+
+        # Import valide minimal (data.json vide : aucune table réécrite).
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            zf.writestr("metadata.json", json.dumps({"tables": {}}))
+            zf.writestr("data.json", json.dumps({}))
+        r = client.post(
+            "/api/backup/import",
+            files={"file": ("b.zip", buffer.getvalue(), "application/zip")},
+        )
+        assert r.status_code == 200, r.text
+        backup_path = r.json()["backup_created"]
+    finally:
+        reader.rollback()
+        reader.close()
+
+    # Le snapshot est une base SQLite valide contenant la donnée pré-import.
+    snap = sqlite3.connect(backup_path)
+    try:
+        row = snap.execute(
+            "SELECT name FROM entities WHERE id = ?", (ext["id"],)
+        ).fetchone()
+    finally:
+        snap.close()
+    assert row is not None and row[0] == "Fournisseur WAL"
 
 
 # --------------------------------------------------------------------------- #

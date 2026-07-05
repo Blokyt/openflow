@@ -2,7 +2,6 @@
 import io
 import json
 import os
-import shutil
 import sqlite3
 import tempfile
 import zipfile
@@ -63,6 +62,25 @@ def _restore_table(conn, table_name: str, rows: list[dict], existing: set[str]):
     for row in rows:
         values = [row.get(c) for c in columns]
         conn.execute(f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})", values)
+
+
+def _snapshot_db(src_path: str, dest_path: str) -> None:
+    """Copie cohérente d'une base SQLite via l'API backup native.
+
+    Contrairement à une copie brute du fichier (shutil.copy2), l'API backup
+    intègre les pages encore dans le journal WAL : le résultat est cohérent
+    même à chaud (serveur en cours d'exécution, connexions concurrentes).
+    Sert aussi au rollback : la destination est écrasée proprement, sans
+    laisser de sidecars -wal/-shm en décalage."""
+    src = sqlite3.connect(src_path)
+    try:
+        dest = sqlite3.connect(dest_path)
+        try:
+            src.backup(dest)
+        finally:
+            dest.close()
+    finally:
+        src.close()
 
 
 @router.get("/export")
@@ -161,7 +179,8 @@ async def import_backup(file: UploadFile = File(...)):
     db_path = str(get_db_path())
     backup_path = db_path + f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     if os.path.exists(db_path):
-        shutil.copy2(db_path, backup_path)
+        # Snapshot cohérent sous WAL (les pages du -wal sont incluses).
+        _snapshot_db(db_path, backup_path)
 
     # Restore config.yaml if present
     if "config.yaml" in zf.namelist():
@@ -181,9 +200,10 @@ async def import_backup(file: UploadFile = File(...)):
         conn.commit()
     except Exception as e:
         conn.rollback()
-        # Restore backup
+        # Rollback : restaure le snapshot dans la vraie base via l'API backup
+        # (pas de copie brute qui laisserait des sidecars -wal/-shm en décalage).
         if os.path.exists(backup_path):
-            shutil.copy2(backup_path, db_path)
+            _snapshot_db(backup_path, db_path)
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=f"Erreur lors de la restauration : {str(e)}")
     finally:
