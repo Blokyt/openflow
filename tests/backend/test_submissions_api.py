@@ -119,6 +119,20 @@ def test_create_validations(client_and_db, login_as):
     assert tres.post("/api/submissions/", json=_payload(gastro, fournisseur, direction="transfer")).status_code == 422
 
 
+def test_counterparty_must_be_external(client_and_db, login_as):
+    _, db_path = client_and_db
+    a = _entity(db_path, "A")
+    b = _entity(db_path, "B", parent_id=a)
+    fournisseur = _entity(db_path, "Fournisseur externe", type="external")
+    tres = login_as("tres-ext@test.local", roles=[(a, "treasurer")])
+    # Contrepartie interne (B) refusée : la contrepartie doit être une entité externe.
+    r = tres.post("/api/submissions/", json=_payload(a, b))
+    assert r.status_code == 400
+    # Contrepartie externe : toujours acceptée.
+    r = tres.post("/api/submissions/", json=_payload(a, fournisseur))
+    assert r.status_code == 201
+
+
 def test_anonymous_401(client_and_db):
     from fastapi.testclient import TestClient
     client, _ = client_and_db

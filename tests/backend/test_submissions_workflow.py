@@ -138,6 +138,22 @@ def test_approve_fails_when_entity_deleted(client_and_db, login_as):
     assert tx_count_after == tx_count_before
 
 
+def test_approve_with_deleted_category_creates_uncategorized_tx(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    cat = client.post("/api/categories/", json={"name": "Farine", "color": "#3B82F6"}).json()
+    sid = _submission(tres, gastro, fournisseur, category_id=cat["id"])
+    # La catégorie disparaît après la soumission (FK OFF, pas de cascade).
+    assert client.delete(f"/api/categories/{cat['id']}").status_code == 200
+    r = client.post(f"/api/submissions/{sid}/approve")
+    assert r.status_code == 200
+    body = r.json()
+    # La soumission garde la trace de sa catégorie d'origine.
+    assert body["category_id"] == cat["id"]
+    tx = client.get(f"/api/transactions/{body['transaction_id']}").json()
+    assert tx["category_id"] is None
+
+
 def test_approve_rejected_submission_409(client_and_db, login_as):
     client, db_path = client_and_db
     gastro, fournisseur, tres = _env(db_path, login_as)

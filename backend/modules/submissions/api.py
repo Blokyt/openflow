@@ -65,10 +65,10 @@ def create_submission(sub: SubmissionCreate, request: Request):
         if entity is None or entity["type"] != "internal":
             raise HTTPException(status_code=400, detail="entity_id doit référencer une entité interne existante")
         counterparty = conn.execute(
-            "SELECT id FROM entities WHERE id = ?", (sub.counterparty_entity_id,)
+            "SELECT type FROM entities WHERE id = ?", (sub.counterparty_entity_id,)
         ).fetchone()
-        if counterparty is None:
-            raise HTTPException(status_code=400, detail="counterparty_entity_id ne référence aucune entité")
+        if counterparty is None or counterparty["type"] != "external":
+            raise HTTPException(status_code=400, detail="counterparty_entity_id doit référencer une entité externe existante")
         if sub.category_id is not None:
             cat = conn.execute("SELECT id FROM categories WHERE id = ?", (sub.category_id,)).fetchone()
             if cat is None:
@@ -176,6 +176,12 @@ def approve_submission(submission_id: int, force: bool = False, admin: dict = De
         for field in ("entity_id", "counterparty_entity_id"):
             if conn.execute("SELECT 1 FROM entities WHERE id = ?", (row[field],)).fetchone() is None:
                 raise HTTPException(status_code=400, detail=f"L'entité référencée par {field} n'existe plus")
+        # La catégorie peut aussi avoir disparu depuis la soumission (FK OFF) :
+        # on approuve quand même, la transaction est créée sans catégorie.
+        category_id = row["category_id"]
+        if category_id is not None:
+            if conn.execute("SELECT 1 FROM categories WHERE id = ?", (category_id,)).fetchone() is None:
+                category_id = None
         if row["direction"] == "expense":
             from_id, to_id = row["entity_id"], row["counterparty_entity_id"]
         else:
@@ -191,7 +197,7 @@ def approve_submission(submission_id: int, force: bool = False, admin: dict = De
                 from_entity_id, to_entity_id, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)""",
             (row["date"], row["label"], row["description"], row["amount"],
-             row["category_id"], created_by, from_id, to_id, now, now),
+             category_id, created_by, from_id, to_id, now, now),
         )
         tx_id = cur.lastrowid
         # Justificatifs re-liés à la transaction, submission_id conservé (historique).
