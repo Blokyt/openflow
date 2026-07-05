@@ -13,7 +13,7 @@ from starlette.requests import Request as StarletteRequest
 
 from backend.core.auth import require_session
 from backend.core.config import load_config, save_config
-from backend.core.database import set_db_path
+from backend.core.database import init_db_pragmas, set_db_path
 from backend.core.module_loader import discover_modules, filter_active
 from backend.core.rate_limit import limiter
 
@@ -122,6 +122,7 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
     active_modules = filter_active(all_modules, config.modules)
 
     set_db_path(project_root / db_path)
+    init_db_pragmas()
 
     for manifest in active_modules:
         module_id = manifest["id"]
