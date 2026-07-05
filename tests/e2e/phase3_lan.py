@@ -150,28 +150,34 @@ def run_checks(client: httpx.Client, db_path: Path) -> None:
 
 
 def main():
+    # Le dossier scratch et le serveur doivent TOUJOURS être nettoyés, même si le
+    # setup échoue (ex : port 8791 déjà occupé). On enveloppe donc tout le setup
+    # ET les vérifications dans un seul try/finally.
     scratch = Path(tempfile.mkdtemp(prefix="openflow-e2e-phase3-"))
-    db_path = scratch / "e2e.db"
-    build_scratch_db(db_path)
-    app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(50):
-        try:
-            with socket.create_connection(("127.0.0.1", PORT), timeout=0.2):
-                break
-        except OSError:
-            time.sleep(0.2)
-    else:
-        print("ERREUR : le serveur n'a pas démarré.")
-        sys.exit(1)
+    server = None
+    thread = None
     try:
+        db_path = scratch / "e2e.db"
+        build_scratch_db(db_path)
+        app = create_app(config_path="config.test.yaml", db_path=str(db_path), bootstrap=False)
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        for _ in range(50):
+            try:
+                with socket.create_connection(("127.0.0.1", PORT), timeout=0.2):
+                    break
+            except OSError:
+                time.sleep(0.2)
+        else:
+            raise RuntimeError("le serveur n'a pas démarré")
         with httpx.Client(base_url=BASE, timeout=15) as client:
             run_checks(client, db_path)
     finally:
-        server.should_exit = True
-        thread.join(timeout=5)
+        if server is not None:
+            server.should_exit = True
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=5)
         shutil.rmtree(scratch, ignore_errors=True)
     total = checks["ok"] + checks["ko"]
     print(f"\nE2E phase 3 : {checks['ok']}/{total} vérifications OK")
