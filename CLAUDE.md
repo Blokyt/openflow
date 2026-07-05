@@ -34,7 +34,7 @@ python tools/migrate.py   # Applique les migrations DB (backup auto)
 python tools/create_module.py <id> --name "Nom" --description "Desc"
 
 pip install -r requirements-dev.txt   # Deps de test
-python -m pytest tests/ -v            # 435 tests, ~2.5min
+python -m pytest tests/ -v            # 535 tests, ~7min
 
 cd frontend && npm run build   # Build prod (Vite + React + Tailwind)
 cd frontend && npm run dev     # Dev server HMR sur port 5173
@@ -92,6 +92,16 @@ widget dashboard.
 Le contexte React `FiscalYearContext` expose `currentYear` et `selectedYear`
 (persiste dans `localStorage` sous la cle `openflow_fiscal_year_id`).
 
+## Soumissions
+
+Le module `submissions` (1.0.0) porte le workflow treasurer → admin :
+table `transaction_submissions` séparée (JAMAIS de statut sur `transactions`),
+approbation = création d'une vraie transaction (from/to déduits de
+entité + contrepartie + direction) et re-liaison des justificatifs
+(`attachments.submission_id`, conservé pour l'historique).
+`test_coherence_submissions.py` garantit qu'une soumission non approuvée
+n'affecte jamais un solde, un budget ni un rapport.
+
 ## Convention modules
 
 Chaque module = un dossier `backend/modules/<id>/` avec :
@@ -106,11 +116,11 @@ Toujours lancer `check.py` apres modification d'un manifest.
 
 Pour creer un module : `python tools/create_module.py <id> --name "..." --description "..."`
 
-## 14 modules disponibles
+## 15 modules disponibles
 
 **Noyau (8) :** transactions, categories, dashboard, entities, system, attachments, backup, users
 
-**Metier (6) :** reimbursements, budget, tiers, reports, helloasso, direns
+**Metier (7) :** reimbursements, budget, tiers, reports, helloasso, direns, submissions
 
 ## Testing
 
@@ -150,3 +160,7 @@ d'etre consideree terminee. Un code sans test n'est pas fonctionnel.**
   dépendance globale dans main.py). Les mutations sont réservées à l'admin sauf
   NON_ADMIN_MUTATIONS. En test, les fixtures client/client_and_db sont connectées en
   admin ; utiliser login_as(email, roles=[...]) pour tester treasurer/viewer.
+  Les mutations non-admin à chemin paramétré (annulation de soumission, justificatifs
+  de soumission) passent par NON_ADMIN_MUTATION_PATTERNS (regex) dans auth.py, avec
+  vérification fine (propriétaire, statut pending) dans l'endpoint. Les GET admin-only
+  (file de validation /api/submissions/) portent Depends(require_admin) explicitement.
