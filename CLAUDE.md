@@ -34,10 +34,12 @@ python tools/migrate.py   # Applique les migrations DB (backup auto)
 python tools/create_module.py <id> --name "Nom" --description "Desc"
 
 pip install -r requirements-dev.txt   # Deps de test
-python -m pytest tests/ -v            # 537 tests, ~7min
+python -m pytest tests/ -v            # 585 tests, ~8min
 
 cd frontend && npm run build   # Build prod (Vite + React + Tailwind)
 cd frontend && npm run dev     # Dev server HMR sur port 5173
+
+python tools/backup_externe.py   # Sauvegarde externe (base + justificatifs), rotation
 ```
 
 ## Architecture
@@ -164,3 +166,19 @@ d'etre consideree terminee. Un code sans test n'est pas fonctionnel.**
   de soumission) passent par NON_ADMIN_MUTATION_PATTERNS (regex) dans auth.py, avec
   vérification fine (propriétaire, statut pending) dans l'endpoint. Les GET admin-only
   (file de validation /api/submissions/) portent Depends(require_admin) explicitement.
+- **SQLite en WAL + un seul worker** : `create_app` pose `journal_mode=WAL` et chaque
+  `get_conn()` pose `busy_timeout=5000` (backend/core/database.py). Ne jamais lancer
+  uvicorn avec `workers>1` ni une seconde instance sur la même base.
+- **Uploads par magic bytes** : les deux endpoints d'upload n'acceptent que PDF/PNG/
+  JPEG/GIF/WebP, vérifiés par le contenu (backend/core/uploads.py). Le MIME stocké est
+  le MIME détecté. Dans les tests, uploader `MINIMAL_PDF`/`MINIMAL_PNG` de conftest.py.
+- **Verrouillage du login** : 5 échecs consécutifs par email (15 par IP) verrouillent
+  en 429 avec délais croissants (backend/modules/users/lockout.py). La table
+  login_events sert de journal des connexions (GET /api/users/login-events, admin).
+- **Écoute réseau** : `server.host`/`server.port` dans config.yaml (défaut 127.0.0.1:8000,
+  le template livre 0.0.0.0 pour le LAN). Cookies fonctionnels en HTTP : ne pas toucher
+  `secure=request.url.scheme == "https"`. Pas de HSTS tant qu'on est en HTTP.
+- **Sauvegarde externe** : `python tools/backup_externe.py` (config external_backup),
+  planifiée quotidiennement, voir docs/deploiement-lan.md.
+- **Audit des GET** : toute nouvelle route GET doit être classée dans
+  tests/backend/test_audit_get_permissions.py (public/admin/connected), sinon CI rouge.
