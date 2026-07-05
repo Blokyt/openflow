@@ -308,8 +308,12 @@ function AdminQueue() {
     } catch (err: any) {
       // Verrou d'exercice clôturé : on propose de forcer.
       if (String(err?.message || "").includes("Exercice clôturé")) {
-        if (window.confirm("Exercice clôturé : approuver quand même ?")) {
+        if (!window.confirm("Exercice clôturé : approuver quand même ?")) return;
+        try {
           await api.approveSubmission(id, true);
+        } catch (err2: any) {
+          setError(err2?.message || "Erreur lors de l'approbation forcée.");
+          return;
         }
       } else {
         setError(err?.message || "Erreur lors de l'approbation.");
