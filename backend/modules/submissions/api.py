@@ -137,6 +137,111 @@ def get_submission(submission_id: int, request: Request):
         conn.close()
 
 
+def _date_in_closed_period(conn, date: str) -> bool:
+    """Copie locale du verrou de clôture de transactions/api.py (pas d'import
+    inter-modules : la table peut ne pas exister si le module budget est inactif)."""
+    try:
+        row = conn.execute(
+            """SELECT 1 FROM fiscal_years
+               WHERE end_date IS NOT NULL
+                 AND ? BETWEEN start_date AND end_date""",
+            (date,),
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
+class RejectPayload(BaseModel):
+    comment: str
+
+
+@router.post("/{submission_id}/approve")
+def approve_submission(submission_id: int, force: bool = False, admin: dict = Depends(require_admin)):
+    """Crée la vraie transaction (from/to déduits de entité + contrepartie +
+    direction), re-lie les justificatifs, marque la soumission approuvée.
+    Tout est commité en une seule transaction SQLite."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM transaction_submissions WHERE id = ?", (submission_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Soumission {submission_id} introuvable")
+        if row["status"] != "pending":
+            raise HTTPException(status_code=409, detail="Seule une soumission en attente peut être approuvée")
+        if not force and _date_in_closed_period(conn, row["date"]):
+            raise HTTPException(status_code=409, detail="Exercice clôturé : approuver quand même ?")
+        # Les entités peuvent avoir disparu depuis la soumission (FK OFF).
+        for field in ("entity_id", "counterparty_entity_id"):
+            if conn.execute("SELECT 1 FROM entities WHERE id = ?", (row[field],)).fetchone() is None:
+                raise HTTPException(status_code=400, detail=f"L'entité référencée par {field} n'existe plus")
+        if row["direction"] == "expense":
+            from_id, to_id = row["entity_id"], row["counterparty_entity_id"]
+        else:
+            from_id, to_id = row["counterparty_entity_id"], row["entity_id"]
+        submitter = conn.execute(
+            "SELECT email FROM users WHERE id = ?", (row["submitted_by"],)
+        ).fetchone()
+        created_by = submitter["email"] if submitter else ""
+        now = _now()
+        cur = conn.execute(
+            """INSERT INTO transactions
+               (date, label, description, amount, category_id, contact_id, created_by,
+                from_entity_id, to_entity_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)""",
+            (row["date"], row["label"], row["description"], row["amount"],
+             row["category_id"], created_by, from_id, to_id, now, now),
+        )
+        tx_id = cur.lastrowid
+        # Justificatifs re-liés à la transaction, submission_id conservé (historique).
+        conn.execute(
+            "UPDATE attachments SET transaction_id = ? WHERE submission_id = ?",
+            (tx_id, submission_id),
+        )
+        conn.execute(
+            """UPDATE transaction_submissions
+               SET status = 'approved', reviewed_by = ?, reviewed_at = ?,
+                   transaction_id = ?, updated_at = ?
+               WHERE id = ?""",
+            (admin["id"], now, tx_id, now, submission_id),
+        )
+        data = _fetch_serialized(conn, submission_id)
+        conn.commit()
+        return data
+    finally:
+        conn.close()
+
+
+@router.post("/{submission_id}/reject")
+def reject_submission(submission_id: int, payload: RejectPayload, admin: dict = Depends(require_admin)):
+    comment = payload.comment.strip()
+    if not comment:
+        raise HTTPException(status_code=400, detail="Un commentaire est requis pour refuser une soumission")
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT status FROM transaction_submissions WHERE id = ?", (submission_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Soumission {submission_id} introuvable")
+        if row["status"] != "pending":
+            raise HTTPException(status_code=409, detail="Seule une soumission en attente peut être refusée")
+        now = _now()
+        conn.execute(
+            """UPDATE transaction_submissions
+               SET status = 'rejected', reviewed_by = ?, reviewed_at = ?,
+                   review_comment = ?, updated_at = ?
+               WHERE id = ?""",
+            (admin["id"], now, comment, now, submission_id),
+        )
+        data = _fetch_serialized(conn, submission_id)
+        conn.commit()
+        return data
+    finally:
+        conn.close()
+
+
 @router.post("/{submission_id}/cancel")
 def cancel_submission(submission_id: int, request: Request):
     """L'auteur (ou l'admin) annule une soumission encore en attente."""
