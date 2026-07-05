@@ -52,4 +52,6 @@ def test_non_admin_mutations_allowlist_is_minimal():
     }
     assert [p.pattern for p in NON_ADMIN_MUTATION_PATTERNS] == [
         r"^/api/submissions/\d+/cancel$",
+        r"^/api/attachments/submission/\d+$",
+        r"^/api/attachments/\d+$",
     ]

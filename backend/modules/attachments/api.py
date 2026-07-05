@@ -46,6 +46,34 @@ def _require_tx_access(conn, request: Request, tx_id: int) -> None:
     if tx is None or (tx["from_entity_id"] not in allowed and tx["to_entity_id"] not in allowed):
         raise HTTPException(status_code=403, detail="Accès refusé à cette pièce jointe")
 
+
+def _require_submission_access(conn, request: Request, submission_id: int) -> None:
+    """Accès à une soumission : son auteur ou l'admin."""
+    user = get_current_user(request)
+    if user["is_admin"]:
+        return
+    sub = conn.execute(
+        "SELECT submitted_by FROM transaction_submissions WHERE id = ?", (submission_id,)
+    ).fetchone()
+    if sub is None or sub["submitted_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Accès refusé à cette pièce jointe")
+
+
+def _require_attachment_access(conn, request: Request, attachment: dict) -> None:
+    """Une pièce liée à une transaction suit le périmètre de la transaction ;
+    une pièce liée seulement à une soumission suit l'auteur de la soumission."""
+    if attachment["transaction_id"] is not None:
+        _require_tx_access(conn, request, attachment["transaction_id"])
+        return
+    if attachment.get("submission_id") is not None:
+        _require_submission_access(conn, request, attachment["submission_id"])
+        return
+    # Pièce orpheline : admin uniquement.
+    user = get_current_user(request)
+    if not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Accès refusé à cette pièce jointe")
+
+
 @router.get("/transaction/{tx_id}")
 def list_attachments(tx_id: int, request: Request):
     conn = get_conn()
@@ -108,6 +136,69 @@ async def upload_attachment(tx_id: int, file: UploadFile = File(...)):
         conn.close()
 
 
+@router.get("/submission/{submission_id}")
+def list_submission_attachments(submission_id: int, request: Request):
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT id FROM transaction_submissions WHERE id = ?", (submission_id,)
+        ).fetchone()
+        if sub is None:
+            raise HTTPException(status_code=404, detail=f"Soumission {submission_id} introuvable")
+        _require_submission_access(conn, request, submission_id)
+        cur = conn.execute(
+            "SELECT * FROM attachments WHERE submission_id = ? ORDER BY created_at ASC",
+            (submission_id,),
+        )
+        return [row_to_dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+@router.post("/submission/{submission_id}", status_code=201)
+async def upload_submission_attachment(submission_id: int, request: Request, file: UploadFile = File(...)):
+    ensure_attachments_dir()
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT submitted_by, status FROM transaction_submissions WHERE id = ?",
+            (submission_id,),
+        ).fetchone()
+        if sub is None:
+            raise HTTPException(status_code=404, detail=f"Soumission {submission_id} introuvable")
+        user = get_current_user(request)
+        if not user["is_admin"] and sub["submitted_by"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Seul l'auteur peut joindre un justificatif")
+        if sub["status"] != "pending":
+            raise HTTPException(status_code=409, detail="La soumission n'est plus en attente")
+
+        content = await file.read(MAX_ATTACHMENT_SIZE + 1)
+        if len(content) > MAX_ATTACHMENT_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Fichier trop volumineux (max {MAX_ATTACHMENT_SIZE // (1024 * 1024)} Mo)",
+            )
+        original_name = _sanitize_filename(file.filename or "upload")
+        unique_filename = f"{uuid.uuid4()}_{original_name}"
+        file_path = ATTACHMENTS_DIR / unique_filename
+        if not file_path.resolve().is_relative_to(ATTACHMENTS_DIR.resolve()):
+            raise HTTPException(status_code=400, detail="Nom de fichier invalide")
+        file_path.write_bytes(content)
+
+        now = datetime.now(timezone.utc).isoformat()
+        cur = conn.execute(
+            "INSERT INTO attachments (transaction_id, submission_id, filename, original_name, mime_type, size, created_at) "
+            "VALUES (NULL, ?, ?, ?, ?, ?, ?)",
+            (submission_id, unique_filename, original_name, file.content_type or "", len(content), now),
+        )
+        row = conn.execute("SELECT * FROM attachments WHERE id = ?", (cur.lastrowid,)).fetchone()
+        data = row_to_dict(row)
+        conn.commit()
+        return data
+    finally:
+        conn.close()
+
+
 @router.get("/{id}/preview")
 def preview_attachment(id: int, request: Request):
     conn = get_conn()
@@ -116,7 +207,7 @@ def preview_attachment(id: int, request: Request):
         if row is None:
             raise HTTPException(status_code=404, detail=f"Attachment {id} not found")
         attachment = row_to_dict(row)
-        _require_tx_access(conn, request, attachment["transaction_id"])
+        _require_attachment_access(conn, request, attachment)
     finally:
         conn.close()
 
@@ -140,7 +231,7 @@ def download_attachment(id: int, request: Request):
         if row is None:
             raise HTTPException(status_code=404, detail=f"Attachment {id} not found")
         attachment = row_to_dict(row)
-        _require_tx_access(conn, request, attachment["transaction_id"])
+        _require_attachment_access(conn, request, attachment)
     finally:
         conn.close()
 
@@ -156,13 +247,30 @@ def download_attachment(id: int, request: Request):
 
 
 @router.delete("/{id}")
-def delete_attachment(id: int):
+def delete_attachment(id: int, request: Request):
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM attachments WHERE id = ?", (id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Attachment {id} not found")
         attachment = row_to_dict(row)
+
+        user = get_current_user(request)
+        if not user["is_admin"]:
+            # Un non-admin ne supprime que les pièces de SA soumission encore pending.
+            allowed = False
+            if attachment["transaction_id"] is None and attachment["submission_id"] is not None:
+                sub = conn.execute(
+                    "SELECT submitted_by, status FROM transaction_submissions WHERE id = ?",
+                    (attachment["submission_id"],),
+                ).fetchone()
+                allowed = (
+                    sub is not None
+                    and sub["submitted_by"] == user["id"]
+                    and sub["status"] == "pending"
+                )
+            if not allowed:
+                raise HTTPException(status_code=403, detail="Suppression réservée à l'administrateur")
 
         conn.execute("DELETE FROM attachments WHERE id = ?", (id,))
         conn.commit()

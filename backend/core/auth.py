@@ -102,6 +102,11 @@ NON_ADMIN_MUTATIONS = {
 # ici on ne fait qu'ouvrir le passage de la garde centrale.
 NON_ADMIN_MUTATION_PATTERNS = [
     re.compile(r"^/api/submissions/\d+/cancel$"),
+    # Upload d'un justificatif sur SA soumission pending (vérif fine dans l'endpoint).
+    re.compile(r"^/api/attachments/submission/\d+$"),
+    # Suppression d'un justificatif : l'endpoint n'autorise un non-admin QUE sur
+    # une pièce liée à sa propre soumission pending.
+    re.compile(r"^/api/attachments/\d+$"),
 ]
 
 
