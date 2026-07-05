@@ -224,6 +224,14 @@ def run_checks(db_path: Path) -> None:
             "entity_id": gastro, "counterparty_entity_id": fournisseur, "direction": "expense",
         })
         check("le viewer ne peut PAS soumettre (pas trésorier) -> 403", r.status_code == 403, f"(reçu {r.status_code})")
+        r = viewer.get("/api/config")
+        vcfg = r.json() if r.status_code == 200 else {}
+        check("le viewer NE voit PAS le chemin de sauvegarde (external_backup redacté)",
+              "external_backup" not in vcfg and "server" not in vcfg)
+        r = admin.get("/api/config")
+        acfg = r.json() if r.status_code == 200 else {}
+        check("l'admin voit bien server et external_backup dans /api/config",
+              "external_backup" in acfg and "server" in acfg)
 
         # [9] Durcissement (phase 3) sur le déploiement réel
         print("\n[9] Durcissement : deny-by-default, verrouillage, headers, ops admin")

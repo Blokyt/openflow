@@ -5,14 +5,13 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
-from slowapi import _rate_limit_exceeded_handler
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
-from backend.core.auth import require_session
+from backend.core.auth import get_current_user, require_session
 from backend.core.config import load_config, save_config
 from backend.core.database import init_db_pragmas, set_db_path
 from backend.core.module_loader import discover_modules, filter_active
@@ -112,16 +111,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "form-action 'self'; "
             "frame-ancestors 'none'"
         )
-        # Pas de HSTS tant qu'on est en HTTP local — à ajouter quand HTTPS sera en place
+        # Pas de HSTS tant qu'on est en HTTP local (à ajouter quand HTTPS sera en place)
         return response
 
 
 def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.db", bootstrap: bool = True) -> FastAPI:
     app = FastAPI(title="OpenFlow", version="0.1.0", dependencies=[Depends(require_session)])
 
-    # Item A — Rate limiting
+    # Rate limiting : message 429 en français, cohérent avec le message de
+    # verrouillage du login (backend/modules/users/lockout.py). On réinjecte
+    # les en-têtes de slowapi (dont Retry-After) comme le fait son handler par
+    # défaut, en ne remplaçant que le corps de la réponse.
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    def _french_rate_limit_handler(request: StarletteRequest, exc: RateLimitExceeded):
+        response = JSONResponse(
+            status_code=429,
+            content={"detail": "Trop de requêtes. Veuillez patienter avant de réessayer."},
+        )
+        return request.app.state.limiter._inject_headers(
+            response, request.state.view_rate_limit
+        )
+
+    app.add_exception_handler(RateLimitExceeded, _french_rate_limit_handler)
 
     project_root = Path(__file__).parent.parent
     config_file = project_root / config_path
@@ -170,8 +182,16 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
         return all_modules
 
     @app.get("/api/config")
-    def get_config():
-        return asdict(config)
+    def get_config(user: dict = Depends(get_current_user)):
+        data = asdict(config)
+        if not user["is_admin"]:
+            # Champs d'exploitation (écoute réseau, chemin de sauvegarde
+            # externe) réservés à l'admin : aucun usage côté UI non-admin, et
+            # le chemin de sauvegarde révélerait la topologie réseau du
+            # déploiement. Le frontend ne lit que entity, balance et modules.
+            data.pop("server", None)
+            data.pop("external_backup", None)
+        return data
 
     @app.put("/api/config/entity")
     def update_entity(entity: dict):

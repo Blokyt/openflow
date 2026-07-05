@@ -103,3 +103,19 @@ def test_login_rate_limited(client_and_db):
     assert r.status_code == 429
     # Le verrouillage par compte se déclenche avant le plafond slowapi (10/minute).
     assert "Trop de tentatives" in r.json()["detail"]
+
+
+def test_rate_limit_message_is_french(client_and_db):
+    """Au-delà du plafond volumétrique slowapi, le 429 porte un message français
+    cohérent avec le verrouillage. On utilise des emails distincts pour que ce
+    soit bien le plafond slowapi (10/minute) qui tombe, pas le verrouillage par
+    compte (seuil 5) : aucun email ne cumule assez d'échecs, et l'IP (seuil 15)
+    non plus."""
+    client, _ = client_and_db
+    client.cookies.clear()
+    last = None
+    for i in range(11):
+        last = client.post("/api/users/login",
+                           json={"email": f"inconnu{i}@nulle-part.fr", "password": "x"})
+    assert last.status_code == 429
+    assert last.json()["detail"] == "Trop de requêtes. Veuillez patienter avant de réessayer."

@@ -152,3 +152,26 @@ def test_public_get_routes_reachable_anonymous(client_and_db):
     client.cookies.clear()
     r = client.get("/api/users/invitations/preview?token=inexistant")
     assert r.status_code in (400, 404, 422)  # tout sauf 401/403
+
+
+def test_config_redacts_operational_fields_for_non_admin(client, login_as):
+    """GET /api/config expose server et external_backup à l'admin uniquement.
+
+    Le chemin de sauvegarde externe (external_backup.destination) et l'écoute
+    réseau (server) n'ont aucun usage côté UI non-admin et révéleraient la
+    topologie du déploiement : ils sont retirés de la réponse pour un connecté
+    non-admin. entity, balance et modules restent visibles (le frontend en a
+    besoin)."""
+    admin_cfg = client.get("/api/config")
+    assert admin_cfg.status_code == 200
+    assert "server" in admin_cfg.json()
+    assert "external_backup" in admin_cfg.json()
+
+    viewer = login_as("lecteur.config@test.fr", roles=[])
+    r = viewer.get("/api/config")
+    assert r.status_code == 200
+    body = r.json()
+    assert "server" not in body
+    assert "external_backup" not in body
+    # Les champs légitimes restent présents pour l'UI.
+    assert "entity" in body and "balance" in body and "modules" in body
