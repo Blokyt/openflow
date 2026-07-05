@@ -10,6 +10,9 @@ entity:
   siret: ''
   type: association
   vat_enabled: false
+external_backup:
+  destination: ''
+  retention: 14
 modules:
   attachments: true
   backup: true

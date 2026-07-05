@@ -31,6 +31,14 @@ class ServerConfig:
 
 
 @dataclass
+class ExternalBackupConfig:
+    # Dossier de destination des sauvegardes quotidiennes (partage réseau,
+    # NAS, dossier Drive monté). Vide = sauvegarde externe non configurée.
+    destination: str = ""
+    retention: int = 14
+
+
+@dataclass
 class AppConfig:
     entity: EntityConfig = field(default_factory=EntityConfig)
     balance: BalanceConfig = field(default_factory=BalanceConfig)
@@ -40,6 +48,7 @@ class AppConfig:
         "dashboard": True,
     })
     server: ServerConfig = field(default_factory=ServerConfig)
+    external_backup: ExternalBackupConfig = field(default_factory=ExternalBackupConfig)
 
 
 def load_config(path: str) -> AppConfig:
@@ -52,7 +61,9 @@ def load_config(path: str) -> AppConfig:
     balance = BalanceConfig(**raw.get("balance", {}))
     modules = raw.get("modules", {"transactions": True, "categories": True, "dashboard": True})
     server = ServerConfig(**raw.get("server", {}))
-    return AppConfig(entity=entity, balance=balance, modules=modules, server=server)
+    external_backup = ExternalBackupConfig(**raw.get("external_backup", {}))
+    return AppConfig(entity=entity, balance=balance, modules=modules, server=server,
+                      external_backup=external_backup)
 
 
 def save_config(config: AppConfig, path: str) -> None:
@@ -61,6 +72,7 @@ def save_config(config: AppConfig, path: str) -> None:
         "balance": asdict(config.balance),
         "modules": config.modules,
         "server": asdict(config.server),
+        "external_backup": asdict(config.external_backup),
     }
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
