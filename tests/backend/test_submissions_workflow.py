@@ -114,6 +114,39 @@ def test_approve_closed_fiscal_year_needs_force(client_and_db, login_as):
     assert r.status_code == 200
 
 
+def test_approve_fails_when_entity_deleted(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    sid = _submission(tres, gastro, fournisseur)
+    # L'entité interne disparaît après la soumission (FK OFF, pas de cascade).
+    conn = sqlite3.connect(str(db_path))
+    try:
+        tx_count_before = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        conn.execute("DELETE FROM entities WHERE id = ?", (gastro,))
+        conn.commit()
+    finally:
+        conn.close()
+    r = client.post(f"/api/submissions/{sid}/approve")
+    assert r.status_code == 400
+    # La soumission reste en attente et aucune transaction n'a été créée.
+    assert client.get(f"/api/submissions/{sid}").json()["status"] == "pending"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        tx_count_after = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+    finally:
+        conn.close()
+    assert tx_count_after == tx_count_before
+
+
+def test_approve_rejected_submission_409(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    sid = _submission(tres, gastro, fournisseur)
+    r = client.post(f"/api/submissions/{sid}/reject", json={"comment": "Montant incohérent"})
+    assert r.status_code == 200
+    assert client.post(f"/api/submissions/{sid}/approve").status_code == 409
+
+
 def test_reject_requires_comment(client_and_db, login_as):
     client, db_path = client_and_db
     gastro, fournisseur, tres = _env(db_path, login_as)
