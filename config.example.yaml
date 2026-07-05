@@ -21,6 +21,7 @@ modules:
   helloasso: true
   reimbursements: false
   reports: false
+  submissions: true
   system: true
   tiers: false
   transactions: true

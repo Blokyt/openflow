@@ -26,3 +26,4 @@ modules:
   helloasso: true
   direns: true
   users: true
+  submissions: true

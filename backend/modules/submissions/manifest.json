@@ -1,0 +1,15 @@
+{
+  "id": "submissions",
+  "name": "Soumissions",
+  "description": "Soumission de transactions par les trésoriers, validation par l'admin",
+  "help": "Les trésoriers de sous-entités soumettent leurs dépenses et recettes avec justificatif PDF. L'administrateur approuve (la transaction entre en comptabilité) ou refuse avec un commentaire. Une soumission en attente n'affecte jamais les soldes.",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "entities", "attachments", "users"],
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {},
+  "example": "Le trésorier de Gastronomine soumet 45,50 € de courses avec le ticket en PDF ; je valide et la transaction est créée."
+}
