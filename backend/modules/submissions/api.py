@@ -135,3 +135,30 @@ def get_submission(submission_id: int, request: Request):
         return data
     finally:
         conn.close()
+
+
+@router.post("/{submission_id}/cancel")
+def cancel_submission(submission_id: int, request: Request):
+    """L'auteur (ou l'admin) annule une soumission encore en attente."""
+    user = get_current_user(request)
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT submitted_by, status FROM transaction_submissions WHERE id = ?",
+            (submission_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Soumission {submission_id} introuvable")
+        if not user["is_admin"] and row["submitted_by"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Seul l'auteur peut annuler sa soumission")
+        if row["status"] != "pending":
+            raise HTTPException(status_code=409, detail="Seule une soumission en attente peut être annulée")
+        conn.execute(
+            "UPDATE transaction_submissions SET status = 'cancelled', updated_at = ? WHERE id = ?",
+            (_now(), submission_id),
+        )
+        data = _fetch_serialized(conn, submission_id)
+        conn.commit()
+        return data
+    finally:
+        conn.close()

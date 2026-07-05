@@ -168,3 +168,29 @@ def test_get_one_owner_or_admin(client_and_db, login_as):
     assert client.get(f"/api/submissions/{sid}").status_code == 200
     assert other.get(f"/api/submissions/{sid}").status_code == 403
     assert client.get("/api/submissions/99999").status_code == 404
+
+
+def test_owner_cancels_pending(client_and_db, login_as):
+    _, db_path = client_and_db
+    _, gastro, _, _, fournisseur = _setup_tree(db_path)
+    tres = login_as("g@test.local", roles=[(gastro, "treasurer")])
+    sid = tres.post("/api/submissions/", json=_payload(gastro, fournisseur)).json()["id"]
+    r = tres.post(f"/api/submissions/{sid}/cancel")
+    assert r.status_code == 200
+    assert r.json()["status"] == "cancelled"
+    # Une soumission annulée ne se ré-annule pas.
+    assert tres.post(f"/api/submissions/{sid}/cancel").status_code == 409
+
+
+def test_cancel_permissions(client_and_db, login_as):
+    client, db_path = client_and_db
+    _, gastro, _, ccmp, fournisseur = _setup_tree(db_path)
+    tres = login_as("h@test.local", roles=[(gastro, "treasurer")])
+    other = login_as("i@test.local", roles=[(ccmp, "treasurer")])
+    sid = tres.post("/api/submissions/", json=_payload(gastro, fournisseur)).json()["id"]
+    # Un autre treasurer ne peut pas annuler.
+    assert other.post(f"/api/submissions/{sid}/cancel").status_code == 403
+    # L'admin peut annuler.
+    assert client.post(f"/api/submissions/{sid}/cancel").status_code == 200
+    # 404 sur id inconnu.
+    assert client.post("/api/submissions/99999/cancel").status_code == 404
