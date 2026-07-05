@@ -45,6 +45,7 @@ export const api = {
     request<any>(`/users/${id}/roles`, { method: "PUT", body: JSON.stringify({ roles }) }),
   revokeUserSessions: (id: number) =>
     request<any>(`/users/${id}/sessions`, { method: "DELETE" }),
+  listLoginEvents: (limit = 100) => request<any[]>(`/users/login-events?limit=${limit}`),
   createInvitation: (data: { email: string; is_admin?: boolean; roles?: { entity_id: number; role: string }[] }) =>
     request<any>("/users/invitations", { method: "POST", body: JSON.stringify(data) }),
   listInvitations: () => request<any[]>("/users/invitations"),

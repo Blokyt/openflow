@@ -47,6 +47,15 @@ interface FlatEntity {
   depth: number;
 }
 
+interface LoginEvent {
+  id: number;
+  email: string;
+  ip: string;
+  success: number;
+  created_at: string;
+  user_agent: string;
+}
+
 const ROLE_LABELS: Record<RoleName, string> = { treasurer: "Trésorier", viewer: "Lecteur" };
 
 const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
@@ -149,6 +158,7 @@ export default function UsersAdmin() {
 
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -177,9 +187,12 @@ export default function UsersAdmin() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [u, inv] = await Promise.all([api.listUsers(), api.listInvitations()]);
+      const [u, inv, events] = await Promise.all([
+        api.listUsers(), api.listInvitations(), api.listLoginEvents(100),
+      ]);
       setUsers(u);
       setInvitations(inv);
+      setLoginEvents(events);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -455,6 +468,49 @@ export default function UsersAdmin() {
                         <Trash2 size={14} strokeWidth={1.5} />
                       </button>
                     )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-10 mb-4">
+        <h2 className="text-lg font-semibold text-white">Journal des connexions</h2>
+        {loginEvents.length > 0 && (
+          <span className="text-xs text-[#555]">{loginEvents.length} dernières tentatives</span>
+        )}
+      </div>
+      {!loading && loginEvents.length === 0 ? (
+        <p className="text-sm text-[#555] bg-[#111] border border-[#222] rounded-2xl p-6 text-center">
+          Aucune tentative de connexion enregistrée pour l'instant.
+        </p>
+      ) : !loading && (
+        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1a1a1a]">
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Adresse IP</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Résultat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loginEvents.map((ev, idx) => (
+                <tr key={ev.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
+                  <td className="px-5 py-3.5 text-[#B0B0B0] whitespace-nowrap">{formatDateTime(ev.created_at)}</td>
+                  <td className="px-5 py-3.5 text-white">{ev.email}</td>
+                  <td className="px-5 py-3.5 text-[#B0B0B0]">{ev.ip || "Inconnue"}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${
+                      ev.success
+                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                        : "bg-[#FF5252]/10 text-[#FF5252] border-[#FF5252]/30"
+                    }`}>
+                      {ev.success ? "Réussie" : "Échouée"}
+                    </span>
                   </td>
                 </tr>
               ))}
