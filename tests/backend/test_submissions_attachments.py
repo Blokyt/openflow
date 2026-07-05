@@ -1,6 +1,9 @@
 """Justificatifs liés à une soumission : upload, accès, suppression."""
 import io
 import sqlite3
+from pathlib import Path
+
+from tools.migrate import ensure_system_tables, load_migrations, apply_migrations
 
 NOW = "2026-01-01T00:00:00+00:00"
 PDF_BYTES = b"%PDF-1.4 test"
@@ -122,3 +125,47 @@ def test_delete_own_pending_submission_attachment(client_and_db, login_as):
     assert tres.delete(f"/api/attachments/{tx_att}").status_code == 403
     # L'admin garde tous les droits.
     assert client.delete(f"/api/attachments/{tx_att}").status_code == 200
+
+
+def test_migration_1_1_0_preserves_existing_rows(tmp_path):
+    """Un vrai upgrade 1.0.0 -> 1.1.0 (rebuild de table) ne perd aucune donnée
+    et n'intervertit aucune colonne dans l'INSERT SELECT."""
+    models_path = (
+        Path(__file__).resolve().parents[2]
+        / "backend" / "modules" / "attachments" / "models.py"
+    )
+    migrations = load_migrations(models_path)
+    conn = sqlite3.connect(str(tmp_path / "upgrade.db"))
+    conn.row_factory = sqlite3.Row
+    try:
+        ensure_system_tables(conn)
+        # Applique UNIQUEMENT 1.0.0 : apply_migrations n'a pas de borne haute,
+        # on restreint donc le dict au schéma d'origine.
+        apply_migrations(conn, "attachments", {"1.0.0": migrations["1.0.0"]}, None, "1.0.0")
+        conn.execute(
+            "INSERT INTO attachments (id, transaction_id, filename, original_name, mime_type, size, created_at) "
+            "VALUES (42, 7, 'abc_facture.pdf', 'facture.pdf', 'application/pdf', 1337, ?)",
+            (NOW,),
+        )
+        conn.commit()
+
+        # Upgrade réel vers 1.1.0 (rebuild attachments_v2 + copie + rename).
+        apply_migrations(conn, "attachments", migrations, "1.0.0", "1.1.0")
+
+        rows = conn.execute("SELECT * FROM attachments").fetchall()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["id"] == 42
+        assert row["transaction_id"] == 7
+        assert row["submission_id"] is None
+        assert row["filename"] == "abc_facture.pdf"
+        assert row["original_name"] == "facture.pdf"
+        assert row["mime_type"] == "application/pdf"
+        assert row["size"] == 1337
+        assert row["created_at"] == NOW
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(attachments)").fetchall()}
+        assert "submission_id" in info
+        # transaction_id est devenu nullable après le rebuild.
+        assert info["transaction_id"][3] == 0
+    finally:
+        conn.close()
