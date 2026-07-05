@@ -210,6 +210,59 @@ def test_import_snapshot_coherent_sous_wal(client_and_db):
 
 
 # --------------------------------------------------------------------------- #
+# Sauvegarde pre-migration : coherente sous WAL (tools/migrate.py)
+# --------------------------------------------------------------------------- #
+
+def test_migrate_backup_coherent_sous_wal(client_and_db):
+    """La sauvegarde de securite prise par tools/migrate.py avant chaque
+    migration doit inclure les donnees encore dans le journal WAL.
+
+    Avant correctif, `tools/migrate.py` faisait une copie brute
+    (shutil.copy2) du seul fichier .db : sous WAL, les transactions commitees
+    mais pas encore checkpointees dans le -wal etaient silencieusement
+    omises. C'est le meme risque que le snapshot d'import corrige plus haut
+    (test_import_snapshot_coherent_sous_wal) ; ce test verifie que
+    `backend.core.database.backup_database`, desormais utilisee par
+    migrate.py, s'en sort correctement.
+
+    Un lecteur avec transaction ouverte AVANT l'ecriture empeche le
+    checkpoint de fusionner le WAL dans le fichier .db (comme des requetes
+    concurrentes en production, ou le serveur qui tourne encore pendant
+    qu'un /repair lance migrate.py en sous-processus)."""
+    from backend.core.database import backup_database
+
+    client, db_path = client_and_db
+
+    # Lecteur ouvert avant l'écriture : bloque l'avancée du checkpoint.
+    reader = sqlite3.connect(str(db_path))
+    try:
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM entities").fetchone()
+
+        # Donnée écrite via l'API juste avant le backup (reste dans le -wal).
+        ext = _entity(client, "Fournisseur WAL Migrate", "external")
+
+        backup_path = db_path.parent / "openflow.db.backup.test"
+        backup_database(db_path, backup_path)
+    finally:
+        reader.rollback()
+        reader.close()
+
+    # La copie est une base SQLite valide et intègre, contenant la donnée
+    # pré-backup (celle qui n'était encore que dans le -wal).
+    snap = sqlite3.connect(str(backup_path))
+    try:
+        row = snap.execute(
+            "SELECT name FROM entities WHERE id = ?", (ext["id"],)
+        ).fetchone()
+        integrity = snap.execute("PRAGMA integrity_check").fetchone()[0]
+    finally:
+        snap.close()
+    assert row is not None and row[0] == "Fournisseur WAL Migrate"
+    assert integrity == "ok"
+
+
+# --------------------------------------------------------------------------- #
 # Cascade de suppression d'un exercice fiscal
 # --------------------------------------------------------------------------- #
 

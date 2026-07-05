@@ -3,11 +3,13 @@
 import argparse
 import importlib.util
 import json
-import shutil
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from backend.core.database import backup_database  # noqa: E402
 
 
 def version_tuple(version_str):
@@ -148,7 +150,11 @@ def main():
     if db_path.exists():
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
         backup_path = data_dir / f"openflow.db.backup.{timestamp}"
-        shutil.copy2(str(db_path), str(backup_path))
+        # Copie à chaud via l'API backup SQLite (cohérente sous WAL) : une
+        # copie brute du fichier .db omettrait les transactions commitées
+        # mais pas encore checkpointées dans le -wal (risque réel puisque
+        # /repair peut lancer cette migration pendant que le serveur tourne).
+        backup_database(db_path, backup_path)
         print(f"Backup created: {backup_path.name}")
 
         # Rotation: honour max_backups from system settings (default 5)

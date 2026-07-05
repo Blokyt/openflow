@@ -41,6 +41,33 @@ def init_db_pragmas() -> None:
         conn.close()
 
 
+def backup_database(src_path: str | Path, dest_path: str | Path) -> None:
+    """Copie à chaud et cohérente d'une base SQLite via l'API backup native.
+
+    Contrairement à une copie brute du fichier (shutil.copy2), l'API backup
+    de sqlite3 (`Connection.backup`) intègre les pages encore présentes dans
+    le journal WAL : le résultat reste cohérent même à chaud, pendant que le
+    serveur tourne et que d'autres connexions lisent ou écrivent en
+    concurrence. Une copie brute du seul fichier .db pourrait omettre des
+    transactions commitées mais pas encore checkpointées dans le -wal.
+
+    Fonction canonique : tout code qui doit sauvegarder la base (migrations,
+    import/export, backup externe) doit passer par elle plutôt que de
+    ré-implémenter la copie."""
+    src_path = Path(src_path)
+    dest_path = Path(dest_path)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    src = sqlite3.connect(str(src_path))
+    try:
+        dest = sqlite3.connect(str(dest_path))
+        try:
+            src.backup(dest)
+        finally:
+            dest.close()
+    finally:
+        src.close()
+
+
 def row_to_dict(row: sqlite3.Row) -> dict:
     """Convert a sqlite3.Row to a plain dict."""
     return dict(row)
