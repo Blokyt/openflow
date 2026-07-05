@@ -2,10 +2,10 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.auth import get_allowed_entity_ids, get_current_user
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -31,9 +31,9 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _fetch_serialized(conn, submission_id: int) -> dict:
+def _fetch_serialized(conn, submission_id: int):
     row = conn.execute(_SELECT + " WHERE s.id = ?", (submission_id,)).fetchone()
-    return row_to_dict(row)
+    return row_to_dict(row) if row is not None else None
 
 
 class SubmissionCreate(BaseModel):
@@ -84,6 +84,54 @@ def create_submission(sub: SubmissionCreate, request: Request):
         )
         data = _fetch_serialized(conn, cur.lastrowid)
         conn.commit()
+        return data
+    finally:
+        conn.close()
+
+
+@router.get("/mine")
+def list_my_submissions(request: Request):
+    """Suivi de ses propres soumissions (tous statuts)."""
+    user = get_current_user(request)
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            _SELECT + " WHERE s.submitted_by = ? ORDER BY s.created_at DESC, s.id DESC",
+            (user["id"],),
+        ).fetchall()
+        return [row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.get("/")
+def list_submissions(status: Optional[str] = None, admin: dict = Depends(require_admin)):
+    """File de validation : réservée à l'admin (GET non couvert par la garde centrale)."""
+    if status is not None and status not in VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Statut invalide : {status}")
+    conn = get_conn()
+    try:
+        sql = _SELECT
+        params = []
+        if status is not None:
+            sql += " WHERE s.status = ?"
+            params.append(status)
+        sql += " ORDER BY s.created_at DESC, s.id DESC"
+        return [row_to_dict(r) for r in conn.execute(sql, params).fetchall()]
+    finally:
+        conn.close()
+
+
+@router.get("/{submission_id}")
+def get_submission(submission_id: int, request: Request):
+    user = get_current_user(request)
+    conn = get_conn()
+    try:
+        data = _fetch_serialized(conn, submission_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail=f"Soumission {submission_id} introuvable")
+        if not user["is_admin"] and data["submitted_by"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Accès refusé à cette soumission")
         return data
     finally:
         conn.close()

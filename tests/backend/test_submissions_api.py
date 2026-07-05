@@ -124,3 +124,47 @@ def test_anonymous_401(client_and_db):
     client, _ = client_and_db
     anon = TestClient(client.app)
     assert anon.post("/api/submissions/", json={}).status_code == 401
+
+
+def test_mine_returns_only_own_submissions(client_and_db, login_as):
+    _, db_path = client_and_db
+    _, gastro, _, ccmp, fournisseur = _setup_tree(db_path)
+    tres_a = login_as("a@test.local", roles=[(gastro, "treasurer")])
+    tres_b = login_as("b@test.local", roles=[(ccmp, "treasurer")])
+    tres_a.post("/api/submissions/", json=_payload(gastro, fournisseur, label="De A"))
+    tres_b.post("/api/submissions/", json=_payload(ccmp, fournisseur, label="De B"))
+    mine = tres_a.get("/api/submissions/mine")
+    assert mine.status_code == 200
+    labels = [s["label"] for s in mine.json()]
+    assert labels == ["De A"]
+
+
+def test_admin_list_is_admin_only(client_and_db, login_as):
+    client, db_path = client_and_db
+    _, gastro, _, _, fournisseur = _setup_tree(db_path)
+    tres = login_as("c@test.local", roles=[(gastro, "treasurer")])
+    tres.post("/api/submissions/", json=_payload(gastro, fournisseur))
+    # Admin : 200, liste complète.
+    r = client.get("/api/submissions/")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    # Filtre par statut.
+    assert len(client.get("/api/submissions/?status=pending").json()) == 1
+    assert client.get("/api/submissions/?status=approved").json() == []
+    assert client.get("/api/submissions/?status=bidon").status_code == 400
+    # Treasurer et viewer : 403 (GET admin-only explicite).
+    assert tres.get("/api/submissions/").status_code == 403
+    viewer = login_as("d@test.local", roles=[(gastro, "viewer")])
+    assert viewer.get("/api/submissions/").status_code == 403
+
+
+def test_get_one_owner_or_admin(client_and_db, login_as):
+    client, db_path = client_and_db
+    _, gastro, _, ccmp, fournisseur = _setup_tree(db_path)
+    tres = login_as("e@test.local", roles=[(gastro, "treasurer")])
+    other = login_as("f@test.local", roles=[(ccmp, "treasurer")])
+    sid = tres.post("/api/submissions/", json=_payload(gastro, fournisseur)).json()["id"]
+    assert tres.get(f"/api/submissions/{sid}").status_code == 200
+    assert client.get(f"/api/submissions/{sid}").status_code == 200
+    assert other.get(f"/api/submissions/{sid}").status_code == 403
+    assert client.get("/api/submissions/99999").status_code == 404
