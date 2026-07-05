@@ -5,6 +5,7 @@ Couvre le point C4 de l'audit :
 - limite de taille d'upload (anti épuisement disque),
 - confinement du SPA fallback (anti lecture de fichiers arbitraires).
 """
+from tests.backend.conftest import MINIMAL_PDF
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@ def test_upload_within_limit_ok(client, monkeypatch):
     }).json()
     resp = client.post(
         f"/api/attachments/transaction/{tx['id']}",
-        files={"file": ("ok.txt", b"small", "text/plain")},
+        files={"file": ("ok.pdf", MINIMAL_PDF, "application/pdf")},
     )
     assert resp.status_code == 201
 
@@ -78,7 +79,7 @@ def test_upload_stores_sanitized_filename(client):
     }).json()
     resp = client.post(
         f"/api/attachments/transaction/{tx['id']}",
-        files={"file": ("../../evil.txt", b"data", "text/plain")},
+        files={"file": ("../../evil.pdf", MINIMAL_PDF, "application/pdf")},
     )
     assert resp.status_code == 201
     stored = resp.json()["filename"]

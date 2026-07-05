@@ -1,4 +1,5 @@
 """Shared fixtures for backend tests — isolated DB per test."""
+import base64
 import json
 import shutil
 import sqlite3
@@ -25,6 +26,20 @@ _ADMIN_HASH = _hash_password("admin-test-password")
 
 FAR_FUTURE = "2099-01-01T00:00:00+00:00"
 PAST = "2020-01-01T00:00:00+00:00"
+
+# Contenus binaires valides pour les tests d'upload : la validation par magic
+# bytes (backend/core/uploads.py) refuse tout ce qui n'est ni PDF ni image.
+MINIMAL_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\n"
+    b"trailer<</Size 3/Root 1 0 R>>\n"
+    b"%%EOF\n"
+)
+# PNG 1x1 transparent, réel et complet.
+MINIMAL_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 
 @pytest.fixture(autouse=True)

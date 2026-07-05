@@ -3,6 +3,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import pytest
 
+from tests.backend.conftest import MINIMAL_PDF, MINIMAL_PNG
+
 
 @pytest.fixture
 def transaction(client):
@@ -23,14 +25,14 @@ def test_upload_attachment(client, transaction):
     tx_id = transaction["id"]
     response = client.post(
         f"/api/attachments/transaction/{tx_id}",
-        files={"file": ("test.txt", b"hello world", "text/plain")},
+        files={"file": ("test.pdf", MINIMAL_PDF, "application/pdf")},
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["original_name"] == "test.txt"
+    assert body["original_name"] == "test.pdf"
     assert body["transaction_id"] == tx_id
-    assert body["mime_type"] == "text/plain"
-    assert body["size"] == len(b"hello world")
+    assert body["mime_type"] == "application/pdf"
+    assert body["size"] == len(MINIMAL_PDF)
     assert "id" in body
     assert "filename" in body
     assert "created_at" in body
@@ -40,38 +42,38 @@ def test_list_attachments(client, transaction):
     tx_id = transaction["id"]
     client.post(
         f"/api/attachments/transaction/{tx_id}",
-        files={"file": ("file_a.txt", b"content a", "text/plain")},
+        files={"file": ("file_a.pdf", MINIMAL_PDF, "application/pdf")},
     )
     client.post(
         f"/api/attachments/transaction/{tx_id}",
-        files={"file": ("file_b.txt", b"content b", "text/plain")},
+        files={"file": ("file_b.pdf", MINIMAL_PDF, "application/pdf")},
     )
     response = client.get(f"/api/attachments/transaction/{tx_id}")
     assert response.status_code == 200
     names = [a["original_name"] for a in response.json()]
-    assert "file_a.txt" in names
-    assert "file_b.txt" in names
+    assert "file_a.pdf" in names
+    assert "file_b.pdf" in names
 
 
 def test_download_attachment(client, transaction):
     tx_id = transaction["id"]
     upload = client.post(
         f"/api/attachments/transaction/{tx_id}",
-        files={"file": ("download_me.txt", b"file content here", "text/plain")},
+        files={"file": ("download_me.pdf", MINIMAL_PDF, "application/pdf")},
     )
     assert upload.status_code == 201
     att_id = upload.json()["id"]
 
     response = client.get(f"/api/attachments/{att_id}/download")
     assert response.status_code == 200
-    assert response.content == b"file content here"
+    assert response.content == MINIMAL_PDF
 
 
 def test_delete_attachment(client, transaction):
     tx_id = transaction["id"]
     upload = client.post(
         f"/api/attachments/transaction/{tx_id}",
-        files={"file": ("to_delete.txt", b"bye", "text/plain")},
+        files={"file": ("to_delete.pdf", MINIMAL_PDF, "application/pdf")},
     )
     assert upload.status_code == 201
     att_id = upload.json()["id"]

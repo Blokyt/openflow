@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user
 from backend.core.database import get_conn, row_to_dict
+from backend.core.uploads import require_allowed_upload
 
 router = APIRouter()
 
@@ -108,6 +109,9 @@ async def upload_attachment(tx_id: int, file: UploadFile = File(...)):
                 detail=f"Fichier trop volumineux (max {MAX_ATTACHMENT_SIZE // (1024 * 1024)} Mo)",
             )
 
+        # Liste blanche par magic bytes : le MIME stocké est celui détecté.
+        detected_mime = require_allowed_upload(content)
+
         # Assainissement du nom de fichier (anti path traversal).
         original_name = _sanitize_filename(file.filename or "upload")
         unique_filename = f"{uuid.uuid4()}_{original_name}"
@@ -118,7 +122,7 @@ async def upload_attachment(tx_id: int, file: UploadFile = File(...)):
 
         file_path.write_bytes(content)
 
-        mime_type = file.content_type or ""
+        mime_type = detected_mime
         size = len(content)
         now = datetime.now(timezone.utc).isoformat()
 
@@ -178,6 +182,10 @@ async def upload_submission_attachment(submission_id: int, request: Request, fil
                 status_code=413,
                 detail=f"Fichier trop volumineux (max {MAX_ATTACHMENT_SIZE // (1024 * 1024)} Mo)",
             )
+
+        # Liste blanche par magic bytes : le MIME stocké est celui détecté.
+        detected_mime = require_allowed_upload(content)
+
         original_name = _sanitize_filename(file.filename or "upload")
         unique_filename = f"{uuid.uuid4()}_{original_name}"
         file_path = ATTACHMENTS_DIR / unique_filename
@@ -189,7 +197,7 @@ async def upload_submission_attachment(submission_id: int, request: Request, fil
         cur = conn.execute(
             "INSERT INTO attachments (transaction_id, submission_id, filename, original_name, mime_type, size, created_at) "
             "VALUES (NULL, ?, ?, ?, ?, ?, ?)",
-            (submission_id, unique_filename, original_name, file.content_type or "", len(content), now),
+            (submission_id, unique_filename, original_name, detected_mime, len(content), now),
         )
         row = conn.execute("SELECT * FROM attachments WHERE id = ?", (cur.lastrowid,)).fetchone()
         data = row_to_dict(row)
