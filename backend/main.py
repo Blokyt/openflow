@@ -92,6 +92,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # CSP adaptée au SPA servi par FastAPI : tout vient de la même origine.
+        # 'unsafe-inline' UNIQUEMENT pour les styles (attributs style= de React
+        # et Recharts) ; les scripts restent strictement same-origin.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "object-src 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'"
+        )
         # Pas de HSTS tant qu'on est en HTTP local — à ajouter quand HTTPS sera en place
         return response
 

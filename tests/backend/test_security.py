@@ -25,3 +25,13 @@ def test_security_headers_no_hsts(client):
     """Pas de HSTS en HTTP local (sera ajouté quand HTTPS sera en place)."""
     resp = client.get("/api/modules")
     assert "Strict-Transport-Security" not in resp.headers
+
+
+def test_csp_header_present(client):
+    resp = client.get("/api/modules")
+    csp = resp.headers.get("Content-Security-Policy", "")
+    assert "default-src 'self'" in csp
+    assert "frame-ancestors 'none'" in csp
+    assert "object-src 'none'" in csp
+    # Les styles inline (attributs style= de React/Recharts) doivent rester permis.
+    assert "style-src 'self' 'unsafe-inline'" in csp
