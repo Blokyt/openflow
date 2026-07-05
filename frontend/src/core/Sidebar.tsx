@@ -274,7 +274,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeModules }: SidebarProps) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [pendingReimbursements, setPendingReimbursements] = useState(0);
 
   const reimbursementsActive = activeModules.some((m) => m.id === "reimbursements");
@@ -312,6 +312,17 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     return () => { cancelled = true; };
   }, [budgetActive, currentYear?.id]);
 
+  const [pendingSubmissions, setPendingSubmissions] = useState(0);
+  const submissionsActive = activeModules.some((m) => m.id === "submissions");
+  useEffect(() => {
+    if (!submissionsActive || !isAdmin) { setPendingSubmissions(0); return; }
+    let cancelled = false;
+    api.getSubmissions("pending")
+      .then((d) => { if (!cancelled) setPendingSubmissions(Array.isArray(d) ? d.length : 0); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [submissionsActive, isAdmin]);
+
   // Build core nav items (fixed, always shown)
   const coreManifests = CORE_IDS
     .map((id) => activeModules.find((m) => m.id === id))
@@ -340,10 +351,12 @@ export default function Sidebar({ activeModules }: SidebarProps) {
     badge:
       m.id === "reimbursements" ? pendingReimbursements :
       m.id === "budget" ? budgetBadge :
+      m.id === "submissions" ? pendingSubmissions :
       undefined,
     badgeTitle:
       m.id === "reimbursements" ? "Avances en attente de remboursement" :
       m.id === "budget" ? "Entités ayant atteint 95 % de leur budget alloué" :
+      m.id === "submissions" ? "Soumissions en attente de validation" :
       undefined,
   }));
 

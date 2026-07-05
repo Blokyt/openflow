@@ -214,6 +214,7 @@ function AttachmentLinks({ submissionId }: { submissionId: number }) {
 function MySubmissions({ refreshKey }: { refreshKey: number }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.getMySubmissions().then(setItems).catch(() => {}).finally(() => setLoading(false));
@@ -221,8 +222,13 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
   useEffect(load, [load, refreshKey]);
 
   async function cancel(id: number) {
-    await api.cancelSubmission(id);
-    load();
+    setError(null);
+    try {
+      await api.cancelSubmission(id);
+      load();
+    } catch (err: any) {
+      setError(err?.message || "Erreur lors de l'annulation.");
+    }
   }
 
   if (loading) return null;
@@ -234,7 +240,9 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
     );
   }
   return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+    <div className="space-y-2">
+      {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wider text-[#666] text-left">
@@ -275,13 +283,135 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
 
-// Rempli en Task 10 (file de validation admin).
 function AdminQueue() {
-  return null;
+  const [tab, setTab] = useState<"pending" | "all">("pending");
+  const [items, setItems] = useState<any[]>([]);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    const p = tab === "pending" ? api.getSubmissions("pending") : api.getSubmissions();
+    p.then(setItems).catch(() => {});
+  }, [tab]);
+  useEffect(load, [load]);
+
+  async function approve(id: number) {
+    setError(null);
+    try {
+      await api.approveSubmission(id);
+    } catch (err: any) {
+      // Verrou d'exercice clôturé : on propose de forcer.
+      if (String(err?.message || "").includes("Exercice clôturé")) {
+        if (window.confirm("Exercice clôturé : approuver quand même ?")) {
+          await api.approveSubmission(id, true);
+        }
+      } else {
+        setError(err?.message || "Erreur lors de l'approbation.");
+        return;
+      }
+    }
+    load();
+  }
+
+  async function reject(id: number) {
+    setError(null);
+    try {
+      await api.rejectSubmission(id, comment);
+      setRejectingId(null);
+      setComment("");
+      load();
+    } catch (err: any) {
+      setError(err?.message || "Erreur lors du refus.");
+    }
+  }
+
+  const tabCls = (active: boolean) =>
+    `px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+      active ? "bg-[#F2C48D] text-black" : "text-[#666] hover:text-white"
+    }`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <button className={tabCls(tab === "pending")} onClick={() => setTab("pending")}>
+          File de validation
+        </button>
+        <button className={tabCls(tab === "all")} onClick={() => setTab("all")}>
+          Historique
+        </button>
+      </div>
+      {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+      {items.length === 0 ? (
+        <p className="text-sm text-[#666]">
+          {tab === "pending"
+            ? "Aucune soumission en attente de validation."
+            : "Aucune soumission enregistrée."}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((s) => (
+            <div key={s.id} className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-2">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-white font-medium">{s.label}</p>
+                  <p className="text-xs text-[#666]">
+                    {s.date} · {s.entity_name} → {s.counterparty_name}
+                    {s.category_name ? ` · ${s.category_name}` : ""} · par {s.submitted_by_name || s.submitted_by_email}
+                  </p>
+                  {s.description && <p className="text-sm text-[#B0B0B0] mt-1">{s.description}</p>}
+                  <AttachmentLinks submissionId={s.id} />
+                  {s.status === "rejected" && s.review_comment && (
+                    <p className="text-xs text-[#FF5252] mt-1">Motif du refus : {s.review_comment}</p>
+                  )}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="font-semibold"
+                    style={{ color: s.direction === "income" ? "#00C853" : "#FF5252" }}>
+                    {s.direction === "income" ? "+" : "-"}{formatEuros(s.amount)}
+                  </p>
+                  <div className="mt-1"><StatusChip status={s.status} /></div>
+                </div>
+              </div>
+              {s.status === "pending" && (
+                rejectingId === s.id ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <input autoFocus value={comment} placeholder="Motif du refus (obligatoire)"
+                      className="flex-1 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2 text-sm text-white focus:border-[#F2C48D] focus:outline-none"
+                      onChange={(e) => setComment(e.target.value)} />
+                    <button onClick={() => reject(s.id)} disabled={!comment.trim()}
+                      className="rounded-full bg-[#FF5252] px-4 py-2 text-sm font-semibold text-black disabled:opacity-40">
+                      Refuser
+                    </button>
+                    <button onClick={() => { setRejectingId(null); setComment(""); }}
+                      className="text-sm text-[#666] hover:text-white">
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => approve(s.id)}
+                      className="rounded-full bg-[#F2C48D] px-4 py-2 text-sm font-semibold text-black hover:bg-[#e8b87a] transition-colors">
+                      Approuver
+                    </button>
+                    <button onClick={() => setRejectingId(s.id)}
+                      className="rounded-full border border-[#333] px-4 py-2 text-sm text-white hover:border-[#555] transition-colors">
+                      Refuser…
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function SubmissionsPage() {
