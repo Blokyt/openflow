@@ -460,14 +460,17 @@ function EditableBudget({
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   function start() {
     setVal(value ? String(centsToEuros(value)) : "");
+    setErr(null);
     setEditing(true);
   }
 
   async function save() {
     setBusy(true);
+    setErr(null);
     try {
       const cents = eurosToCents(val);
       if (allocId && cents === 0) {
@@ -482,6 +485,8 @@ function EditableBudget({
       }
       setEditing(false);
       onSaved();
+    } catch (e: any) {
+      setErr(e?.message || "Échec de l'enregistrement du budget.");
     } finally {
       setBusy(false);
     }
@@ -504,6 +509,7 @@ function EditableBudget({
           }}
           className="w-24 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[#F2C48D]"
         />
+        {err && <div className="mt-1 text-xs text-[#FF5252] whitespace-normal max-w-[140px] ml-auto">{err}</div>}
       </td>
     );
   }

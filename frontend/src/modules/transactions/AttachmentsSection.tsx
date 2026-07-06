@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Paperclip, Download, Trash2, Upload, Eye, X } from "lucide-react";
 import ConfirmDialog from "../../core/ConfirmDialog";
+import { useAuth } from "../../core/AuthContext";
 
 interface Attachment {
   id: number;
@@ -96,6 +97,7 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
 }
 
 export default function AttachmentsSection({ txId }: { txId: number }) {
+  const { isAdmin } = useAuth();
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -168,13 +170,15 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
           <Paperclip size={14} className="text-[#F2C48D]" />
           Pièces jointes {items.length > 0 && <span className="text-[#666] text-xs">({items.length})</span>}
         </h3>
-        <button
-          onClick={() => fileInput.current?.click()}
-          disabled={uploading}
-          className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border border-[#333] text-[#B0B0B0] hover:border-[#F2C48D] hover:text-[#F2C48D] disabled:opacity-50 transition-colors"
-        >
-          <Upload size={12} /> {uploading ? "Upload…" : "Ajouter"}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => fileInput.current?.click()}
+            disabled={uploading}
+            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border border-[#333] text-[#B0B0B0] hover:border-[#F2C48D] hover:text-[#F2C48D] disabled:opacity-50 transition-colors"
+          >
+            <Upload size={12} /> {uploading ? "Upload…" : "Ajouter"}
+          </button>
+        )}
         <input ref={fileInput} type="file" onChange={handleUpload} className="hidden" />
       </div>
       {error && (
@@ -211,13 +215,15 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
                 >
                   <Download size={14} strokeWidth={1.5} />
                 </a>
-                <button
-                  onClick={() => setAttachmentToDelete(a.id)}
-                  className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
-                  title="Supprimer"
-                >
-                  <Trash2 size={14} strokeWidth={1.5} />
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setAttachmentToDelete(a.id)}
+                    className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                    title="Supprimer"
+                  >
+                    <Trash2 size={14} strokeWidth={1.5} />
+                  </button>
+                )}
               </div>
             </div>
           ))}

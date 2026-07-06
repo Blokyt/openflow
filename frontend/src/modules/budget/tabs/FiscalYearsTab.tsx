@@ -3,8 +3,15 @@ import { useFiscalYear, FiscalYear } from "../../../core/FiscalYearContext";
 import { useAuth } from "../../../core/AuthContext";
 import { api } from "../../../api";
 import FiscalYearWizard from "../FiscalYearWizard";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { formatDate } from "../../../utils/format";
+
+interface EditForm {
+  name: string;
+  start_date: string;
+  president_name: string;
+  tresorier_name: string;
+}
 
 export default function FiscalYearsTab() {
   const { isAdmin } = useAuth();
@@ -15,6 +22,10 @@ export default function FiscalYearsTab() {
   const [closeDate, setCloseDate] = useState(new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", start_date: "", president_name: "", tresorier_name: "" });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const hasOpenMandate = years.some((y) => y.end_date === null);
   const previousYearId = years.length > 0 ? years[0].id : null;
@@ -37,6 +48,40 @@ export default function FiscalYearsTab() {
     await api.deleteFiscalYear(id);
     setConfirmDelete(null);
     await reload();
+  }
+
+  function startEdit(y: FiscalYear) {
+    setEditingId(y.id);
+    setEditError(null);
+    setEditForm({
+      name: y.name,
+      start_date: y.start_date,
+      president_name: y.president_name || "",
+      tresorier_name: y.tresorier_name || "",
+    });
+  }
+
+  async function doSaveEdit(id: number) {
+    if (!editForm.name.trim() || !editForm.start_date) {
+      setEditError("Le nom et la date de début sont obligatoires.");
+      return;
+    }
+    setEditSubmitting(true);
+    setEditError(null);
+    try {
+      await api.updateFiscalYear(id, {
+        name: editForm.name.trim(),
+        start_date: editForm.start_date,
+        president_name: editForm.president_name.trim(),
+        tresorier_name: editForm.tresorier_name.trim(),
+      });
+      setEditingId(null);
+      await reload();
+    } catch (e: any) {
+      setEditError(e.message);
+    } finally {
+      setEditSubmitting(false);
+    }
   }
 
   return (
@@ -82,6 +127,60 @@ export default function FiscalYearsTab() {
             </thead>
             <tbody>
               {years.map((y, idx) => (
+                editingId === y.id ? (
+                  <tr key={y.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
+                    <td colSpan={4} className="px-4 py-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                          <label className="block text-xs text-[#666] mb-1">Nom</label>
+                          <input
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-[#666] mb-1">Début</label>
+                          <input
+                            type="date"
+                            value={editForm.start_date}
+                            onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white [color-scheme:dark]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-[#666] mb-1">Président</label>
+                          <input
+                            value={editForm.president_name}
+                            onChange={(e) => setEditForm({ ...editForm, president_name: e.target.value })}
+                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-[#666] mb-1">Trésorier</label>
+                          <input
+                            value={editForm.tresorier_name}
+                            onChange={(e) => setEditForm({ ...editForm, tresorier_name: e.target.value })}
+                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <button
+                            onClick={() => doSaveEdit(y.id)}
+                            disabled={editSubmitting}
+                            className="text-[#F2C48D] font-semibold disabled:opacity-50"
+                          >
+                            Enregistrer
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="text-[#666] hover:text-white">
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                      {editError && <p className="mt-2 text-xs text-[#FF5252]">{editError}</p>}
+                    </td>
+                  </tr>
+                ) : (
                 <tr key={y.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
                   <td className="px-4 py-3 text-white font-medium">
                     {y.name}
@@ -101,6 +200,14 @@ export default function FiscalYearsTab() {
                   <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.start_date)}</td>
                   <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.end_date)}</td>
                   <td className="px-4 py-3 text-right">
+                    {isAdmin && closingId !== y.id && confirmDelete !== y.id && (
+                      <button
+                        onClick={() => startEdit(y)}
+                        className="text-xs text-[#B0B0B0] hover:text-white mr-3 border border-[#333] px-2.5 py-1 rounded-full inline-flex items-center gap-1"
+                      >
+                        <Pencil size={12} /> Modifier
+                      </button>
+                    )}
                     {isAdmin && y.end_date === null && closingId !== y.id && (
                       <button
                         onClick={() => { setClosingId(y.id); setCloseDate(new Date().toISOString().slice(0, 10)); }}
@@ -150,6 +257,7 @@ export default function FiscalYearsTab() {
                     )}
                   </td>
                 </tr>
+                )
               ))}
             </tbody>
           </table>

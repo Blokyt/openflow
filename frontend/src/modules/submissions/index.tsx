@@ -419,8 +419,9 @@ function AdminQueue() {
 }
 
 export default function SubmissionsPage() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasTreasurerRole = (user?.roles ?? []).some((r) => r.role === "treasurer");
 
   return (
     <div className="p-8 max-w-4xl space-y-6">
@@ -434,7 +435,14 @@ export default function SubmissionsPage() {
         <AdminQueue />
       ) : (
         <>
-          <SubmissionForm onCreated={() => setRefreshKey((k) => k + 1)} />
+          {hasTreasurerRole ? (
+            <SubmissionForm onCreated={() => setRefreshKey((k) => k + 1)} />
+          ) : (
+            <div className="bg-[#111] border border-[#222] rounded-2xl p-6 text-sm text-[#666]">
+              Vous n'êtes trésorier d'aucune entité. Vous ne pouvez pas créer de soumission.
+              Contactez un administrateur si cela vous semble incorrect.
+            </div>
+          )}
           <div className="space-y-2">
             <h2 className="text-xs uppercase tracking-wider text-[#666]">Mes soumissions</h2>
             <MySubmissions refreshKey={refreshKey} />

@@ -2,6 +2,18 @@ const BASE_URL = "/api";
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, { headers: { "Content-Type": "application/json" }, ...options });
   if (!response.ok) {
+    // Session expirée en cours d'usage : retour forcé à l'écran de connexion.
+    // On exclut les endpoints d'authentification eux-mêmes : /users/login (un
+    // 401 y signifie "mauvais identifiants") et /users/me (401 = simplement
+    // "pas connecté", déjà géré par AuthContext qui met user=null ; recharger
+    // ici bouclerait à l'infini sur l'écran de connexion).
+    if (
+      response.status === 401 &&
+      path !== "/users/login" &&
+      path !== "/users/me"
+    ) {
+      window.location.reload();
+    }
     const error = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(error.detail || response.statusText);
   }
