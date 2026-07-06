@@ -186,13 +186,24 @@ def get_summary(
         _require_scope(conn, user, entity_id)
         cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'")
         if cur.fetchone() is None:
-            return {"balance": 0.0, "total_income": 0.0, "total_expenses": 0.0, "transaction_count": 0}
+            return {
+                "balance": 0.0, "total_income": 0.0, "total_expenses": 0.0, "transaction_count": 0,
+                "reference_date": None, "reference_amount": None,
+            }
 
         if entity_id is not None:
+            # Référence de l'entité elle-même : même sémantique qu'en mode
+            # 'aggregate' (compute_consolidated_balance y lit la référence de
+            # entity_id, jamais celle d'un descendant), donc on l'utilise aussi
+            # pour le solde consolidé en mode 'own' (qui n'expose pas de
+            # référence unique agrégée sur le sous-arbre).
+            own = compute_entity_balance(conn, entity_id)
+            reference_date = own.get("reference_date")
+            reference_amount = own.get("reference_amount")
             if include_children:
                 balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
             else:
-                balance = compute_entity_balance(conn, entity_id)["balance"]
+                balance = own["balance"]
             scope = _scope_ids(conn, entity_id, include_children)
             ph = ",".join("?" * len(scope))
             conds, pp = _period_conds(date_from, date_to)
@@ -227,9 +238,16 @@ def get_summary(
             if root:
                 consolidated = compute_consolidated_balance(conn, root["id"])
                 balance = consolidated["consolidated_balance"]
+                # Référence de la racine elle-même (cf. remarque ci-dessus sur
+                # le mode 'own' : pas de référence unique agrégée sur le sous-arbre).
+                root_ref = compute_entity_balance(conn, root["id"])
+                reference_date = root_ref.get("reference_date")
+                reference_amount = root_ref.get("reference_amount")
             else:
                 bal = compute_legacy_balance(conn, str(CONFIG_PATH))
                 balance = bal["balance"]
+                reference_date = bal.get("reference_date")
+                reference_amount = bal.get("reference_amount")
             conds, pp = _period_conds(date_from, date_to, "t.date")
             period_and = ("" if not conds else " AND " + " AND ".join(conds))
             # Recettes globales : flux vers une entité interne venant d'une externe
@@ -259,6 +277,8 @@ def get_summary(
             "total_income": total_income,
             "total_expenses": total_expenses,
             "transaction_count": transaction_count,
+            "reference_date": reference_date,
+            "reference_amount": reference_amount,
         }
     finally:
         conn.close()
@@ -398,7 +418,7 @@ def top_categories(
                 f"(t.to_entity_id IS NULL OR t.to_entity_id NOT IN ({ph}))",
             ] + conds)
             rows = conn.execute(
-                f"""SELECT c.name AS name, c.color AS color, SUM(t.amount) AS total
+                f"""SELECT t.category_id AS category_id, c.name AS name, c.color AS color, SUM(t.amount) AS total
                    FROM transactions t
                    LEFT JOIN categories c ON t.category_id = c.id
                    WHERE {where}
@@ -409,14 +429,22 @@ def top_categories(
             base = "t.from_entity_id IN (SELECT id FROM entities WHERE type='internal')"
             where = " AND ".join([base] + conds)
             rows = conn.execute(
-                f"""SELECT c.name AS name, c.color AS color, SUM(t.amount) AS total
+                f"""SELECT t.category_id AS category_id, c.name AS name, c.color AS color, SUM(t.amount) AS total
                    FROM transactions t
                    LEFT JOIN categories c ON t.category_id = c.id
                    WHERE {where}
                    GROUP BY t.category_id ORDER BY total DESC LIMIT ?""",
                 (*pp, limit),
             ).fetchall()
-        return [{"name": r["name"] or "— Sans catégorie —", "color": r["color"] or "#6B7280", "total": r["total"]} for r in rows]
+        return [
+            {
+                "category_id": r["category_id"],
+                "name": r["name"] or "— Sans catégorie —",
+                "color": r["color"] or "#6B7280",
+                "total": r["total"],
+            }
+            for r in rows
+        ]
     finally:
         conn.close()
 

@@ -1049,12 +1049,23 @@ def get_compte_resultat_pdf(
     pdf.cell(50, 9, _fmt_eur(resultat, eur), border=1, fill=True, align="R",
              new_x="LMARGIN", new_y="NEXT")
 
+    engagement = data.get("engagement")
+    has_regularisations = bool(engagement) and any(
+        engagement.get(k) for k in ("creances", "dettes", "creances_n1", "dettes_n1")
+    )
+
     pdf.ln(8)
     pdf.set_font(font, "", 8)
-    pdf.multi_cell(0, 5,
-        "Méthode : comptabilité de trésorerie. Produits = encaissements depuis "
-        "l'extérieur vers l'association ; charges = décaissements vers l'extérieur ; "
-        "virements internes neutralisés.")
+    if has_regularisations:
+        pdf.multi_cell(0, 5,
+            "Méthode : comptabilité d'engagement (créances et dettes). Produits et "
+            "charges de trésorerie sont corrigés des créances et dettes de l'exercice, "
+            "avec extourne de celles de l'exercice précédent ; virements internes neutralisés.")
+    else:
+        pdf.multi_cell(0, 5,
+            "Méthode : comptabilité de trésorerie. Produits = encaissements depuis "
+            "l'extérieur vers l'association ; charges = décaissements vers l'extérieur ; "
+            "virements internes neutralisés.")
 
     return _pdf_response(pdf, f"compte-resultat_{start}_{end}.pdf")
 
@@ -1140,8 +1151,19 @@ def get_bilan_pdf(request: Request, fiscal_year_id: Optional[int] = None, entity
 
     pdf.set_font(font, "", 8)
     equ = "équilibré" if data["equilibre"] else "DÉSÉQUILIBRÉ"
-    pdf.multi_cell(0, 5,
-        f"Bilan {equ} (actif = passif). Méthode trésorerie : l'actif se résume aux "
-        "disponibilités ; le passif aux fonds associatifs et au résultat de l'exercice.")
+    has_regularisations = bool(actif["total_creances"]) or bool(passif["total_dettes"])
+    if has_regularisations:
+        methode = (
+            "Méthode trésorerie avec régularisations d'engagement : l'actif comprend "
+            "les disponibilités et les créances (produits à recevoir) ; le passif "
+            "comprend les fonds associatifs, le résultat de l'exercice et les dettes "
+            "(charges à payer)."
+        )
+    else:
+        methode = (
+            "Méthode trésorerie : l'actif se résume aux disponibilités ; le passif "
+            "aux fonds associatifs et au résultat de l'exercice."
+        )
+    pdf.multi_cell(0, 5, f"Bilan {equ} (actif = passif). {methode}")
 
     return _pdf_response(pdf, f"bilan_{data['arrete_le']}.pdf")

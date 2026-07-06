@@ -13,6 +13,8 @@ Convention : montants en CENTIMES entiers positifs ; sens via from/to.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
@@ -368,3 +370,101 @@ def test_bilan_pdf_avec_accruals(client):
     r = client.get("/api/reports/bilan/pdf", params={"fiscal_year_id": fy["id"]})
     assert r.status_code == 200, r.text
     assert r.content[:4] == b"%PDF"
+
+
+# ---------------------------------------------------------------------------
+# Pied de page du bilan : le texte méthode doit être cohérent avec les
+# créances/dettes réellement affichées (pas de "l'actif se résume aux
+# disponibilités" si des créances ou des dettes figurent au-dessus).
+# ---------------------------------------------------------------------------
+
+def _pdf_text(content: bytes) -> str:
+    pypdf = pytest.importorskip("pypdf")
+    import io
+    reader = pypdf.PdfReader(io.BytesIO(content))
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def test_bilan_pdf_texte_sans_regularisations(client):
+    """Sans créance ni dette, le pied de page peut affirmer que l'actif se
+    résume aux disponibilités : c'est vrai dans ce cas."""
+    bda = _make_entity(client, "BDA", "internal")
+    ext = _make_entity(client, "Ext", "external")
+    _make_tx(client, date="2025-03-01", label="Recette", amount=30000,
+             from_entity_id=ext["id"], to_entity_id=bda["id"])
+    fy = _make_fy(client, name="EX2025NoAcc", start="2025-01-01", end="2025-12-31")
+
+    r = client.get("/api/reports/bilan/pdf", params={"fiscal_year_id": fy["id"]})
+    assert r.status_code == 200, r.text
+    text = _pdf_text(r.content)
+    assert "l'actif se résume aux" in text or "l'actif se resume aux" in text.replace("é", "e")
+
+
+def test_bilan_pdf_texte_avec_creances_ne_pretend_pas_disponibilites_seules(client):
+    """Avec une créance (ou une dette), le texte ne doit plus prétendre que
+    l'actif se résume aux disponibilités : il doit mentionner les créances/dettes."""
+    bda = _make_entity(client, "BDA", "internal")
+    sub = _make_category(client, "Subvention")
+    fy = _make_fy(client, name="EX2025Acc", start="2025-01-01", end="2025-12-31")
+    client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "creance", "amount": 30000,
+        "label": "Subvention à recevoir", "category_id": sub["id"],
+    })
+
+    r = client.get("/api/reports/bilan/pdf", params={"fiscal_year_id": fy["id"]})
+    assert r.status_code == 200, r.text
+    text = _pdf_text(r.content)
+    # Le texte ne doit plus affirmer que l'actif se résume aux disponibilités.
+    assert "se résume aux" not in text
+    # Il doit en revanche évoquer les créances/dettes désormais présentes à l'actif.
+    assert "créances" in text.lower() or "creances" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Libellé de méthode du compte de résultat : trésorerie vs engagement.
+# ---------------------------------------------------------------------------
+
+def test_compte_resultat_pdf_texte_methode_tresorerie_sans_exercice(client):
+    """Sans fiscal_year_id (méthode trésorerie pure sur une période), le
+    libellé doit rester 'comptabilité de trésorerie'."""
+    bda = _make_entity(client, "BDA", "internal")
+    ext = _make_entity(client, "Ext", "external")
+    _make_tx(client, date="2025-03-01", label="Recette", amount=12345,
+             from_entity_id=ext["id"], to_entity_id=bda["id"])
+    r = client.get("/api/reports/compte-resultat/pdf",
+                   params={"start_date": "2025-01-01", "end_date": "2025-12-31"})
+    assert r.status_code == 200, r.text
+    text = _pdf_text(r.content)
+    assert "comptabilité de trésorerie" in text
+
+
+def test_compte_resultat_pdf_texte_methode_engagement_avec_regularisations(client):
+    """Avec fiscal_year_id ET des créances/dettes, le libellé doit annoncer
+    l'engagement, pas la trésorerie (la méthode réellement appliquée)."""
+    bda = _make_entity(client, "BDA", "internal")
+    sub = _make_category(client, "Subvention")
+    fy = _make_fy(client, name="EX2025Meth", start="2025-01-01", end="2025-12-31")
+    client.post("/api/reports/accruals", json={
+        "fiscal_year_id": fy["id"], "kind": "creance", "amount": 30000,
+        "label": "Subvention à recevoir", "category_id": sub["id"],
+    })
+    r = client.get("/api/reports/compte-resultat/pdf", params={"fiscal_year_id": fy["id"]})
+    assert r.status_code == 200, r.text
+    text = _pdf_text(r.content)
+    assert "comptabilité d'engagement" in text or "comptabilité d’engagement" in text
+    assert "comptabilité de trésorerie" not in text
+
+
+def test_compte_resultat_pdf_texte_methode_tresorerie_exercice_sans_regularisations(client):
+    """Avec fiscal_year_id mais SANS aucune créance/dette saisie, la méthode
+    réellement appliquée reste la trésorerie : le libellé ne doit pas
+    prétendre à tort qu'il y a de l'engagement."""
+    bda = _make_entity(client, "BDA", "internal")
+    ext = _make_entity(client, "Ext", "external")
+    _make_tx(client, date="2025-03-01", label="Recette", amount=20000,
+             from_entity_id=ext["id"], to_entity_id=bda["id"])
+    fy = _make_fy(client, name="EX2025NoReg", start="2025-01-01", end="2025-12-31")
+    r = client.get("/api/reports/compte-resultat/pdf", params={"fiscal_year_id": fy["id"]})
+    assert r.status_code == 200, r.text
+    text = _pdf_text(r.content)
+    assert "comptabilité de trésorerie" in text

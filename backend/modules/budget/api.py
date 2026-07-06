@@ -424,6 +424,8 @@ def update_allocation(alloc_id: int, body: AllocationUpdate):
         updates = body.model_dump(exclude_unset=True)
         if not updates:
             return old_data
+        if updates.get("amount") is not None and updates["amount"] <= 0:
+            raise HTTPException(400, "Le montant budgété doit être strictement positif (en centimes).")
         # Modifier le montant d'une allocation = la valider ce mandat -> passe en 'manual' (doré).
         if "amount" in updates:
             updates["origin"] = "manual"
@@ -1017,12 +1019,17 @@ def get_budget_category_view(request: Request, fiscal_year_id: int, entity_id: O
             ).fetchone()
             return row["net"] if row else 0.0
 
-        def sum_cat_allocated(cat_ids: list) -> float:
+        def sum_cat_allocated(cat_ids: list, direction: str) -> float:
+            """Alloué pour un sens donné ('expense' ou 'income'), jamais mélangé,
+            en cohérence avec /view (allocated_expense / allocated_income)."""
             if not cat_ids:
                 return 0.0
             ph = ",".join("?" * len(cat_ids))
-            sql = f"SELECT COALESCE(SUM(amount),0) AS t FROM budget_allocations WHERE fiscal_year_id=? AND category_id IN ({ph})"
-            params = [fiscal_year_id, *cat_ids]
+            sql = (
+                "SELECT COALESCE(SUM(amount),0) AS t FROM budget_allocations "
+                f"WHERE fiscal_year_id=? AND category_id IN ({ph}) AND direction=?"
+            )
+            params = [fiscal_year_id, *cat_ids, direction]
             if entity_id is not None:
                 ph_e = ",".join("?" * len(internal_ids))
                 sql += f" AND entity_id IN ({ph_e})"
@@ -1031,24 +1038,33 @@ def get_budget_category_view(request: Request, fiscal_year_id: int, entity_id: O
             return row["t"] if row else 0.0
 
         rows_out = []
-        total_realized = total_allocated = 0.0
+        total_realized = 0.0
+        total_allocated_expense = total_allocated_income = 0.0
 
         for root in root_cats:
             desc = get_descendants(root["id"])
             realized = sum_cat_realized(desc, fy["start_date"], end_date)
-            allocated = sum_cat_allocated(desc)
+            allocated_expense = sum_cat_allocated(desc, "expense")
+            allocated_income = sum_cat_allocated(desc, "income")
             realized_n1 = sum_cat_realized(desc, prev["start_date"], _fy_end(prev)) if prev else 0.0
-            pct = abs(realized) / allocated * 100.0 if allocated != 0 else 0.0
+            # Base de comparaison = alloué dépense (cohérent avec /view : le
+            # taux de consommation porte sur le budget de dépense).
+            pct = abs(realized) / allocated_expense * 100.0 if allocated_expense != 0 else 0.0
             rows_out.append({
                 "category_id": root["id"],
                 "category_name": root["name"],
-                "allocated": allocated,
+                # "allocated" = alias legacy de allocated_expense (rétro-compat
+                # frontend), plus les deux montants séparés par sens.
+                "allocated": allocated_expense,
+                "allocated_expense": allocated_expense,
+                "allocated_income": allocated_income,
                 "realized": realized,
                 "realized_n_minus_1": realized_n1,
                 "percent_consumed": round(pct, 1),
             })
             total_realized += realized
-            total_allocated += allocated
+            total_allocated_expense += allocated_expense
+            total_allocated_income += allocated_income
 
         if internal_ids:
             ph_e = ",".join("?" * len(internal_ids))
@@ -1067,6 +1083,8 @@ def get_budget_category_view(request: Request, fiscal_year_id: int, entity_id: O
                     "category_id": None,
                     "category_name": "— Sans catégorie —",
                     "allocated": 0.0,
+                    "allocated_expense": 0.0,
+                    "allocated_income": 0.0,
                     "realized": uncategorized,
                     "realized_n_minus_1": 0.0,
                     "percent_consumed": 0.0,
@@ -1076,7 +1094,13 @@ def get_budget_category_view(request: Request, fiscal_year_id: int, entity_id: O
         return {
             "fiscal_year": row_to_dict(fy),
             "categories": rows_out,
-            "totals": {"allocated": total_allocated, "realized": total_realized},
+            "totals": {
+                # "allocated" = alias legacy de allocated_expense (rétro-compat frontend).
+                "allocated": total_allocated_expense,
+                "allocated_expense": total_allocated_expense,
+                "allocated_income": total_allocated_income,
+                "realized": total_realized,
+            },
         }
     finally:
         conn.close()
