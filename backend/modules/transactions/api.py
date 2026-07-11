@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin, require_entity_access
@@ -80,8 +80,8 @@ def list_transactions(
     reimb_status: Optional[str] = None,
     amount_min: Optional[int] = None,
     amount_max: Optional[int] = None,
-    limit: Optional[int] = None,
-    offset: int = 0,
+    limit: Optional[int] = Query(None, ge=0),
+    offset: int = Query(0, ge=0),
     sort_by: str = "date",
     sort_dir: str = "desc",
 ):
