@@ -1,14 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, CheckCircle2, Clock, RotateCcw } from "lucide-react";
-import { api } from "../../api";
+import { api, rawFetch } from "../../api";
 import EmptyState from "../../core/EmptyState";
 import { useAuth } from "../../core/AuthContext";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 
-const BASE_URL = "/api";
-
 async function apiReimb<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}/reimbursements${path}`, {
+  const response = await rawFetch(`/reimbursements${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });

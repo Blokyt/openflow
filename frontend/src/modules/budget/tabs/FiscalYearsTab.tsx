@@ -45,9 +45,14 @@ export default function FiscalYearsTab() {
   }
 
   async function doDelete(id: number) {
-    await api.deleteFiscalYear(id);
-    setConfirmDelete(null);
-    await reload();
+    setError(null);
+    try {
+      await api.deleteFiscalYear(id);
+      setConfirmDelete(null);
+      await reload();
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
   function startEdit(y: FiscalYear) {

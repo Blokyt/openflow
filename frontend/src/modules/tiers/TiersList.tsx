@@ -2,13 +2,13 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users, GitMerge, AlertTriangle } from "lucide-react";
 import EmptyState from "../../core/EmptyState";
 import { useAuth } from "../../core/AuthContext";
+import { rawFetch } from "../../api";
 import { formatEuros, formatDate, txTone } from "../../utils/format";
 
-const BASE_URL = "/api";
 const PAGE_SIZE = 80;
 
 async function apiTiers<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}/tiers${path}`, {
+  const response = await rawFetch(`/tiers${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });

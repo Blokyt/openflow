@@ -108,6 +108,7 @@ function EntitySelectorOption({
 
 function EntitySelector() {
   const { entities, selectedEntityId, selectedEntity, setSelectedEntityId } = useEntity();
+  const { isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -150,13 +151,15 @@ function EntitySelector() {
 
       {open && (
         <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden">
-          <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
-            onClick={handleClear}
-          >
-            <span className="flex-1 text-[#666]">Toutes les entités</span>
-            {selectedEntityId === null && <Check size={12} className="text-[#F2C48D]" />}
-          </button>
+          {isAdmin && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
+              onClick={handleClear}
+            >
+              <span className="flex-1 text-[#666]">Toutes les entités</span>
+              {selectedEntityId === null && <Check size={12} className="text-[#F2C48D]" />}
+            </button>
+          )}
           <div className="max-h-48 overflow-y-auto py-1">
             {entities.map((e) => (
               <EntitySelectorOption

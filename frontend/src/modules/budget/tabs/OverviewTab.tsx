@@ -27,6 +27,7 @@ export default function OverviewTab({ year }: Props) {
   const { selectedEntityId, selectedEntity } = useEntity();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [touched, setTouched] = useState(false);
@@ -43,6 +44,7 @@ export default function OverviewTab({ year }: Props) {
   const reload = useCallback(async () => {
     if (!year) { setData(null); return; }
     setLoading(true);
+    setError(null);
     try {
       const d = await api.getBudgetView(year.id);
       setData(d);
@@ -50,6 +52,8 @@ export default function OverviewTab({ year }: Props) {
         // Déplie les groupes racines au premier affichage (catégories repliées).
         setExpanded(new Set(d.groups.map((g: any) => g.entity_id)));
       }
+    } catch (e: any) {
+      setError(e?.message || "Erreur inconnue");
     } finally {
       setLoading(false);
     }
@@ -69,6 +73,7 @@ export default function OverviewTab({ year }: Props) {
 
   if (!year) return <p className="text-sm text-[#666]">Crée un exercice pour voir le suivi.</p>;
   if (loading && !data) return <p className="text-sm text-[#666]">Chargement…</p>;
+  if (error && !data) return <p className="text-sm text-[#FF5252]">Impossible de charger le budget : {error}</p>;
   if (!data) return null;
 
   // Périmètre : le focus entité global limite la vue à son sous-arbre, avec des

@@ -20,6 +20,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
+// Variante de request() pour les réponses non-JSON (blobs de téléchargement,
+// uploads multipart) : renvoie la Response brute mais applique la MÊME détection
+// de session expirée (401 -> retour à l'écran de connexion) que request(), afin
+// qu'aucun appel ne laisse une bannière technique sur une page qui a l'air
+// encore connectée.
+export async function rawFetch(path: string, options?: RequestInit): Promise<Response> {
+  const response = await fetch(`${BASE_URL}${path}`, options);
+  if (response.status === 401 && path !== "/users/login" && path !== "/users/me") {
+    window.location.reload();
+  }
+  return response;
+}
+
 function reportQuery(params: { fiscal_year_id?: number; start_date?: string; end_date?: string; entity_id?: number }): string {
   const q = new URLSearchParams();
   if (params.fiscal_year_id != null) q.set("fiscal_year_id", String(params.fiscal_year_id));
@@ -218,7 +231,7 @@ export const api = {
   uploadSubmissionAttachment: async (id: number, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch(`${BASE_URL}/attachments/submission/${id}`, { method: "POST", body: formData });
+    const response = await rawFetch(`/attachments/submission/${id}`, { method: "POST", body: formData });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(error.detail || response.statusText);
@@ -229,7 +242,7 @@ export const api = {
   // Backup
   getBackupPreview: () => request<any>("/backup/preview"),
   exportBackup: async () => {
-    const response = await fetch(`${BASE_URL}/backup/export`);
+    const response = await rawFetch(`/backup/export`);
     if (!response.ok) throw new Error("Erreur lors de l'export");
     const blob = await response.blob();
     triggerBlobDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), "openflow-backup.zip"));
@@ -237,7 +250,7 @@ export const api = {
   importBackup: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch(`${BASE_URL}/backup/import`, { method: "POST", body: formData });
+    const response = await rawFetch(`/backup/import`, { method: "POST", body: formData });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(error.detail || response.statusText);
@@ -264,7 +277,7 @@ export const api = {
     kind: "compte-resultat" | "bilan",
     params: { fiscal_year_id?: number; start_date?: string; end_date?: string; entity_id?: number },
   ) => {
-    const response = await fetch(`${BASE_URL}/reports/${kind}/pdf?${reportQuery(params)}`);
+    const response = await rawFetch(`/reports/${kind}/pdf?${reportQuery(params)}`);
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(error.detail || response.statusText);
@@ -313,7 +326,7 @@ export const api = {
     q.set("bilan_fiscal_year_id", String(params.bilan_fiscal_year_id));
     if (params.budget_fiscal_year_id != null) q.set("budget_fiscal_year_id", String(params.budget_fiscal_year_id));
     if (params.assoc_name) q.set("assoc_name", params.assoc_name);
-    const response = await fetch(`${BASE_URL}/direns/export?${q.toString()}`);
+    const response = await rawFetch(`/direns/export?${q.toString()}`);
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(error.detail || response.statusText);

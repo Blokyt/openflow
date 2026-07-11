@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Paperclip, Download, Trash2, Upload, Eye, X } from "lucide-react";
 import ConfirmDialog from "../../core/ConfirmDialog";
 import { useAuth } from "../../core/AuthContext";
+import { rawFetch } from "../../api";
 
 interface Attachment {
   id: number;
@@ -109,7 +110,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
   async function fetchItems() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/attachments/transaction/${txId}`);
+      const res = await rawFetch(`/attachments/transaction/${txId}`);
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
       setItems(await res.json());
     } catch (e: any) {
@@ -132,7 +133,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(`/api/attachments/transaction/${txId}`, { method: "POST", body: fd });
+      const res = await rawFetch(`/attachments/transaction/${txId}`, { method: "POST", body: fd });
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
       await fetchItems();
     } catch (e: any) {
@@ -145,7 +146,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
 
   async function handleDelete(id: number) {
     try {
-      const res = await fetch(`/api/attachments/${id}`, { method: "DELETE" });
+      const res = await rawFetch(`/attachments/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
       await fetchItems();
     } catch (e: any) {
