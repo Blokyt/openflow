@@ -230,6 +230,11 @@ def delete_entity(entity_id: int):
 
         old_data = row_to_dict(existing)
 
+        # L'entité par défaut porte la vue globale du dashboard : la supprimer
+        # changerait silencieusement le calcul de solde. Refus explicite.
+        if old_data.get("is_default"):
+            raise HTTPException(400, "Impossible de supprimer l'entité par défaut.")
+
         # Reject if has children
         children = conn.execute("SELECT id FROM entities WHERE parent_id = ?", (entity_id,)).fetchone()
         if children:
@@ -249,11 +254,16 @@ def delete_entity(entity_id: int):
             pass
 
         conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
-        # Cascade vers le module budget (PRAGMA foreign_keys OFF). Ignorée si le
-        # module budget est désactivé (tables inexistantes -> pas de 500).
+        # Rôles utilisateurs visant cette entité : sinon rôle fantôme persistant.
+        conn.execute("DELETE FROM user_entity_roles WHERE entity_id = ?", (entity_id,))
+        # Cascade vers les modules optionnels (PRAGMA foreign_keys OFF). Ignorée si le
+        # module est désactivé (tables inexistantes -> pas de 500). report_accruals
+        # est DÉTACHÉ (entity_id NULL), pas supprimé, comme delete_category : sinon
+        # une créance/dette disparaîtrait silencieusement du bilan.
         for stmt in (
             "DELETE FROM fiscal_year_opening_balances WHERE entity_id = ?",
             "DELETE FROM budget_allocations WHERE entity_id = ?",
+            "UPDATE report_accruals SET entity_id = NULL WHERE entity_id = ?",
         ):
             try:
                 conn.execute(stmt, (entity_id,))

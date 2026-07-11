@@ -333,6 +333,12 @@ def accept_invitation(request: Request, payload: AcceptPayload, response: Respon
             raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
         user_id = cur.lastrowid
         for item in roles:
+            # L'entité a pu être supprimée entre l'invitation et l'acceptation :
+            # on ignore le rôle plutôt que de créer un rôle orphelin (mêmes
+            # garde-fous que set_user_roles, mais silencieux ici car l'invité
+            # n'a pas la main sur la liste de rôles).
+            if conn.execute("SELECT id FROM entities WHERE id = ?", (item["entity_id"],)).fetchone() is None:
+                continue
             conn.execute(
                 "INSERT INTO user_entity_roles (user_id, entity_id, role, created_at) VALUES (?, ?, ?, ?)",
                 (user_id, item["entity_id"], item["role"], now))
