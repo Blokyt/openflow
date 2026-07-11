@@ -385,25 +385,28 @@ def create_allocation(fy_id: int, body: AllocationCreate):
         if body.category_id is not None:
             if conn.execute("SELECT id FROM categories WHERE id = ?", (body.category_id,)).fetchone() is None:
                 raise HTTPException(400, f"Catégorie {body.category_id} introuvable")
-        if body.category_id is None:
-            dup = conn.execute(
-                "SELECT id FROM budget_allocations WHERE fiscal_year_id=? AND entity_id=? AND category_id IS NULL AND direction=?",
-                (fy_id, body.entity_id, body.direction),
-            ).fetchone()
-        else:
-            dup = conn.execute(
-                "SELECT id FROM budget_allocations WHERE fiscal_year_id=? AND entity_id=? AND category_id=? AND direction=?",
-                (fy_id, body.entity_id, body.category_id, body.direction),
-            ).fetchone()
-        if dup:
-            raise HTTPException(409, "Une allocation existe déjà pour ce triplet (entité, catégorie, sens)")
         now = _now()
+        # Anti-doublon ATOMIQUE : vérification + insertion en une seule
+        # instruction sous le verrou d'écriture SQLite. Un SELECT puis INSERT
+        # laisserait une fenêtre de course (deux trésoriers). La contrainte
+        # UNIQUE ne protège PAS le cas category_id IS NULL (NULL distinct en
+        # SQLite) : le WHERE NOT EXISTS ci-dessous couvre les deux cas.
         cur = conn.execute(
             """INSERT INTO budget_allocations
                (fiscal_year_id, entity_id, category_id, direction, amount, notes, origin, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (fy_id, body.entity_id, body.category_id, body.direction, body.amount, body.notes, body.origin, now, now),
+               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM budget_allocations
+                   WHERE fiscal_year_id = ? AND entity_id = ? AND direction = ?
+                     AND ((category_id IS NULL AND ? IS NULL) OR category_id = ?)
+               )""",
+            (fy_id, body.entity_id, body.category_id, body.direction, body.amount,
+             body.notes, body.origin, now, now,
+             fy_id, body.entity_id, body.direction, body.category_id, body.category_id),
         )
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(409, "Une allocation existe déjà pour ce triplet (entité, catégorie, sens)")
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM budget_allocations WHERE id = ?", (new_id,)).fetchone()
         new_data = row_to_dict(row)

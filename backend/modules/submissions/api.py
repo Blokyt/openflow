@@ -205,13 +205,21 @@ def approve_submission(submission_id: int, force: bool = False, admin: dict = De
             "UPDATE attachments SET transaction_id = ? WHERE submission_id = ?",
             (tx_id, submission_id),
         )
-        conn.execute(
+        # Garde CAS : le statut n'est basculé que s'il est ENCORE 'pending' au
+        # moment de l'écriture. Sous WAL + busy_timeout, le verrou d'écriture
+        # SQLite sérialise deux approbations concurrentes ; la perdante voit
+        # rowcount=0 et rollback, donc la transaction insérée ci-dessus est
+        # annulée (jamais de double écriture comptable).
+        cur = conn.execute(
             """UPDATE transaction_submissions
                SET status = 'approved', reviewed_by = ?, reviewed_at = ?,
                    transaction_id = ?, updated_at = ?
-               WHERE id = ?""",
+               WHERE id = ? AND status = 'pending'""",
             (admin["id"], now, tx_id, now, submission_id),
         )
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Cette soumission a déjà été traitée entretemps")
         data = _fetch_serialized(conn, submission_id)
         conn.commit()
         return data
@@ -234,13 +242,16 @@ def reject_submission(submission_id: int, payload: RejectPayload, admin: dict = 
         if row["status"] != "pending":
             raise HTTPException(status_code=409, detail="Seule une soumission en attente peut être refusée")
         now = _now()
-        conn.execute(
+        cur = conn.execute(
             """UPDATE transaction_submissions
                SET status = 'rejected', reviewed_by = ?, reviewed_at = ?,
                    review_comment = ?, updated_at = ?
-               WHERE id = ?""",
+               WHERE id = ? AND status = 'pending'""",
             (admin["id"], now, comment, now, submission_id),
         )
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Cette soumission a déjà été traitée entretemps")
         data = _fetch_serialized(conn, submission_id)
         conn.commit()
         return data
@@ -264,10 +275,14 @@ def cancel_submission(submission_id: int, request: Request):
             raise HTTPException(status_code=403, detail="Seul l'auteur peut annuler sa soumission")
         if row["status"] != "pending":
             raise HTTPException(status_code=409, detail="Seule une soumission en attente peut être annulée")
-        conn.execute(
-            "UPDATE transaction_submissions SET status = 'cancelled', updated_at = ? WHERE id = ?",
+        cur = conn.execute(
+            "UPDATE transaction_submissions SET status = 'cancelled', updated_at = ? "
+            "WHERE id = ? AND status = 'pending'",
             (_now(), submission_id),
         )
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Seule une soumission en attente peut être annulée")
         data = _fetch_serialized(conn, submission_id)
         conn.commit()
         return data
