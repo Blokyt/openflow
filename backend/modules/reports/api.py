@@ -444,11 +444,14 @@ def _prev_fy_id(conn, fiscal_year_id: int) -> Optional[int]:
 
 
 def _accruals_rows(conn, fiscal_year_id: Optional[int], kind: str,
-                   entity_filter: Optional[list] = None) -> list:
+                   entity_filter: Optional[list] = None, include_global: bool = True) -> list:
     """Régularisations groupées par catégorie : [{category_id, category_name, montant}].
 
-    Avec entity_filter (périmètre club), ne retient que les régularisations de ces
-    entités, plus celles sans entité (saisies au niveau global)."""
+    Avec entity_filter (périmètre), ne retient que les régularisations de ces
+    entités. include_global commande la prise en compte des régularisations sans
+    entité (saisies au niveau global) : True en vue association, False en vue
+    club. Sinon une régularisation globale serait additionnée dans le bilan de
+    CHAQUE club et la somme des bilans de clubs dépasserait le bilan global."""
     if fiscal_year_id is None:
         return []
     sql = """SELECT a.category_id,
@@ -460,7 +463,10 @@ def _accruals_rows(conn, fiscal_year_id: Optional[int], kind: str,
     params = [fiscal_year_id, kind]
     if entity_filter is not None:
         ph = ",".join("?" * len(entity_filter))
-        sql += f" AND (a.entity_id IN ({ph}) OR a.entity_id IS NULL)"
+        if include_global:
+            sql += f" AND (a.entity_id IN ({ph}) OR a.entity_id IS NULL)"
+        else:
+            sql += f" AND a.entity_id IN ({ph})"
         params.extend(entity_filter)
     sql += " GROUP BY a.category_id, c.name"
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -482,7 +488,8 @@ def _merge_by_category(*groups) -> list:
     return [v for v in acc.values() if v["montant"] != 0]
 
 
-def _compte_resultat_for_fy(conn, fiscal_year_id: int, perimeter: Optional[list] = None) -> dict:
+def _compte_resultat_for_fy(conn, fiscal_year_id: int, perimeter: Optional[list] = None,
+                            include_global: bool = True) -> dict:
     """Compte de résultat en engagement pour un exercice.
 
     Produits(E) = produits trésorerie(E) + créances(E) - créances(E-1)
@@ -502,10 +509,10 @@ def _compte_resultat_for_fy(conn, fiscal_year_id: int, perimeter: Optional[list]
     prev = _prev_fy_id(conn, fiscal_year_id)
 
     base_produits, base_charges = _cr_category_rows(conn, start, end, perimeter)
-    creances_e = _accruals_rows(conn, fiscal_year_id, "creance", perimeter)
-    dettes_e = _accruals_rows(conn, fiscal_year_id, "dette", perimeter)
-    creances_n1 = _accruals_rows(conn, prev, "creance", perimeter)
-    dettes_n1 = _accruals_rows(conn, prev, "dette", perimeter)
+    creances_e = _accruals_rows(conn, fiscal_year_id, "creance", perimeter, include_global)
+    dettes_e = _accruals_rows(conn, fiscal_year_id, "dette", perimeter, include_global)
+    creances_n1 = _accruals_rows(conn, prev, "creance", perimeter, include_global)
+    dettes_n1 = _accruals_rows(conn, prev, "dette", perimeter, include_global)
 
     produits = _merge_by_category((base_produits, 1), (creances_e, 1), (creances_n1, -1))
     charges = _merge_by_category((base_charges, 1), (dettes_e, 1), (dettes_n1, -1))
@@ -531,7 +538,8 @@ def _resolve_cr_data(conn, fiscal_year_id, start_date, end_date,
     entity_id restreint au périmètre d'un club (None = asso entière)."""
     perimeter = _entity_perimeter(conn, entity_id) if entity_id is not None else None
     if fiscal_year_id is not None:
-        return _compte_resultat_for_fy(conn, fiscal_year_id, perimeter=perimeter)
+        return _compte_resultat_for_fy(conn, fiscal_year_id, perimeter=perimeter,
+                                       include_global=(entity_id is None))
     start, end = _resolve_period(conn, None, start_date, end_date)
     return _aggregate_compte_resultat(conn, start, end, perimeter=perimeter)
 
@@ -649,9 +657,14 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
         total_disponibilites += closing
         tresorerie_ouverture += opening
 
+    # Vue association (entity_id None) : les régularisations globales comptent.
+    # Vue club : elles sont exclues (sinon doublées entre clubs, cf _accruals_rows).
+    include_global = entity_id is None
+
     # Couche engagement : un seul calcul du compte de résultat fournit le
     # résultat ET les totaux de créances/dettes (N et N-1).
-    cr = _compte_resultat_for_fy(conn, fiscal_year_id, perimeter=perimeter)
+    cr = _compte_resultat_for_fy(conn, fiscal_year_id, perimeter=perimeter,
+                                 include_global=include_global)
     resultat = cr["resultat"]
     eng = cr["engagement"]
     creances, dettes = eng["creances"], eng["dettes"]
@@ -659,11 +672,11 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
     # Détail par catégorie des créances/dettes de l'exercice (mêmes lignes que
     # celles dont la somme constitue les totaux ci-dessus) -> rapport lisible.
     creances_detail = sorted(
-        _accruals_rows(conn, fiscal_year_id, "creance", perimeter),
+        _accruals_rows(conn, fiscal_year_id, "creance", perimeter, include_global),
         key=lambda r: r["category_name"],
     )
     dettes_detail = sorted(
-        _accruals_rows(conn, fiscal_year_id, "dette", perimeter),
+        _accruals_rows(conn, fiscal_year_id, "dette", perimeter, include_global),
         key=lambda r: r["category_name"],
     )
 

@@ -177,6 +177,20 @@ def create_fiscal_year(body: FiscalYearCreate):
             )
         if conn.execute("SELECT id FROM fiscal_years WHERE name = ?", (body.name,)).fetchone():
             raise HTTPException(409, f"Un exercice nommé « {body.name} » existe déjà")
+        # Anti-chevauchement : la date de début doit être strictement postérieure
+        # à la fin de tout exercice déjà clos, sinon une transaction datée sur la
+        # frontière serait comptée dans les deux exercices (double comptage).
+        overlap = conn.execute(
+            "SELECT name, end_date FROM fiscal_years "
+            "WHERE end_date IS NOT NULL AND end_date >= ? ORDER BY end_date DESC LIMIT 1",
+            (body.start_date,),
+        ).fetchone()
+        if overlap:
+            raise HTTPException(
+                400,
+                f"La date de début doit être postérieure à la fin de l'exercice "
+                f"« {overlap['name']} » (clos le {overlap['end_date']}).",
+            )
         now = _now()
         # Trouve l'exercice précédent : le plus récent dont end_date < nouveau start_date.
         prev_row = conn.execute(
@@ -693,6 +707,54 @@ def get_budget_view(request: Request, fiscal_year_id: int):
             else:
                 roots.append(eid)
 
+        # Virements internes (interne -> interne) par période : pour un GROUPE,
+        # un virement dont les deux extrémités sont dans le sous-arbre est compté
+        # une fois en dépense (côté source) et une fois en recette (côté cible),
+        # ce qui gonfle les bruts. On le neutralise (méthode frontière, comme
+        # balance.py, dashboard et /view/categories). Le net est inchangé.
+        def _internal_transfers(start, end):
+            if not entity_ids_list:
+                return []
+            ph2 = ",".join("?" * len(entity_ids_list))
+            rows = conn.execute(
+                f"""SELECT from_entity_id AS f, to_entity_id AS t, SUM(amount) AS s
+                    FROM transactions
+                    WHERE date BETWEEN ? AND ?
+                      AND from_entity_id IN ({ph2}) AND to_entity_id IN ({ph2})
+                    GROUP BY from_entity_id, to_entity_id""",
+                [start, end] + entity_ids_list + entity_ids_list,
+            ).fetchall()
+            return [(r["f"], r["t"], r["s"]) for r in rows]
+
+        transfers_n = _internal_transfers(fy["start_date"], end_date)
+        transfers_n1 = _internal_transfers(prev["start_date"], _fy_end(prev)) if prev else []
+
+        # Sous-arbre + sommes BRUTES (propre + descendants) par entité, en une
+        # passe. build_node en déduira le réalisé frontière (brut - internes).
+        subtree_of: dict = {}
+        gross_n: dict = {}
+        gross_n1: dict = {}
+
+        def _accumulate(eid):
+            own = _split_from_lookup(lookup_n, eid, None)
+            own1 = _split_from_lookup(lookup_n1, eid, None) if prev else {"income": 0, "expense": 0}
+            sub = {eid}
+            gi, ge, gi1, ge1 = own["income"], own["expense"], own1["income"], own1["expense"]
+            for c in children_of.get(eid, []):
+                sub |= _accumulate(c)
+                gi += gross_n[c]["income"]; ge += gross_n[c]["expense"]
+                gi1 += gross_n1[c]["income"]; ge1 += gross_n1[c]["expense"]
+            subtree_of[eid] = sub
+            gross_n[eid] = {"income": gi, "expense": ge}
+            gross_n1[eid] = {"income": gi1, "expense": ge1}
+            return sub
+
+        for _root in roots:
+            _accumulate(_root)
+
+        def _internal_sum(subtree_set, transfers):
+            return sum(s for (f, t, s) in transfers if f in subtree_set and t in subtree_set)
+
         def opening_for(eid):
             ob = conn.execute(
                 "SELECT amount FROM fiscal_year_opening_balances WHERE fiscal_year_id = ? AND entity_id = ?",
@@ -853,17 +915,20 @@ def get_budget_view(request: Request, fiscal_year_id: int):
             allocs = allocs_by_entity.get(eid, [])
             own_alloc_exp = effective_alloc(allocs, "expense")
             own_alloc_inc = effective_alloc(allocs, "income")
-            own_n = _split_from_lookup(lookup_n, eid, None)
-            own_n1 = _split_from_lookup(lookup_n1, eid, None) if prev else {"income": 0, "expense": 0}
             cats = build_categories(eid, allocs)
             children = [build_node(c) for c in sorted(children_of.get(eid, []))]
 
             alloc_exp = own_alloc_exp + sum(ch["allocated_expense"] for ch in children)
             alloc_inc = own_alloc_inc + sum(ch["allocated_income"] for ch in children)
-            real_exp = own_n["expense"] + sum(ch["realized_expense"] for ch in children)
-            real_inc = own_n["income"] + sum(ch["realized_income"] for ch in children)
-            real_exp1 = own_n1["expense"] + sum(ch["realized_expense_n1"] for ch in children)
-            real_inc1 = own_n1["income"] + sum(ch["realized_income_n1"] for ch in children)
+            # Réalisé frontière : brut du sous-arbre moins les virements internes
+            # au sous-arbre (neutralise le double comptage dotation parent/enfant).
+            subtree = subtree_of[eid]
+            internal_n = _internal_sum(subtree, transfers_n)
+            internal_n1 = _internal_sum(subtree, transfers_n1)
+            real_exp = gross_n[eid]["expense"] - internal_n
+            real_inc = gross_n[eid]["income"] - internal_n
+            real_exp1 = gross_n1[eid]["expense"] - internal_n1
+            real_inc1 = gross_n1[eid]["income"] - internal_n1
             net = real_inc - real_exp
             net1 = real_inc1 - real_exp1
             cov = real_inc / real_exp * 100.0 if real_exp else 0.0
