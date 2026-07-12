@@ -28,14 +28,18 @@ export function EntityProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem("openflow_entity_id");
     return stored ? parseInt(stored, 10) : null;
   });
+  // Passe à true dès que l'arbre a été résolu une première fois pour l'utilisateur
+  // courant (voir la garde de rendu plus bas).
+  const [ready, setReady] = useState(false);
 
   async function reload() {
     try {
       const tree = await api.getEntityTree();
       setEntities(tree);
       // Si le focus stocké (localStorage) ne correspond plus à une entité de
-      // l'arbre reçu (ex : périmètre réduit d'un treasurer, focus fantôme),
-      // on retombe sur la première entité interne racine, ou null si l'arbre est vide.
+      // l'arbre reçu (ex : périmètre réduit d'un treasurer, focus fantôme laissé
+      // par une session admin précédente), on retombe sur la première entité
+      // interne racine, ou null si l'arbre est vide.
       setSelectedEntityId((current) => {
         if (current !== null && findEntity(tree, current)) return current;
         const firstRoot = tree.find((e) => e.type === "internal") || tree[0];
@@ -43,6 +47,8 @@ export function EntityProvider({ children }: { children: ReactNode }) {
       });
     } catch {
       setEntities([]);
+    } finally {
+      setReady(true);
     }
   }
 
@@ -55,6 +61,19 @@ export function EntityProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem("openflow_entity_id");
     }
   }, [selectedEntityId]);
+
+  // Tant que l'arbre n'a pas été résolu une première fois, on n'expose pas les
+  // enfants : cela évite qu'une page interroge le backend sans entité (400 "Une
+  // entité est requise pour ce rôle") ou avec une entité périmée d'une session
+  // précédente hors du périmètre courant (403 "Accès refusé à cette entité").
+  // reload() pose une entité légitime avant de libérer le rendu.
+  if (!ready) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
+      </div>
+    );
+  }
 
   const selectedEntity = selectedEntityId
     ? findEntity(entities, selectedEntityId)
