@@ -191,7 +191,7 @@ def test_delete_entity_with_children_rejected(client):
     _create_internal(client, name="Child", parent_id=parent["id"])
     resp = client.delete(f"/api/entities/{parent['id']}")
     assert resp.status_code == 400
-    assert "children" in resp.json()["detail"].lower()
+    assert "sous-entité" in resp.json()["detail"].lower()
 
 
 def test_delete_entity_not_found(client):

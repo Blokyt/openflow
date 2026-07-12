@@ -238,7 +238,7 @@ def delete_entity(entity_id: int):
         # Reject if has children
         children = conn.execute("SELECT id FROM entities WHERE parent_id = ?", (entity_id,)).fetchone()
         if children:
-            raise HTTPException(400, "Cannot delete entity with children. Delete children first.")
+            raise HTTPException(400, "Impossible de supprimer une entité qui a des sous-entités. Supprimez d'abord les sous-entités.")
 
         # Reject if has transactions (columns may not exist yet if Task 4 not applied)
         try:
