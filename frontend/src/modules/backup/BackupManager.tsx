@@ -232,7 +232,7 @@ export default function BackupManager() {
               : "border-[#444] hover:border-[#F2C48D] hover:bg-[#111]"
           }`}
         >
-          <Upload className="w-8 h-8 text-[#666]" />
+          <Upload className="w-8 h-8 text-[#8a8a8a]" />
           <span className="text-[#999] text-sm">
             {importing
               ? "Import en cours..."

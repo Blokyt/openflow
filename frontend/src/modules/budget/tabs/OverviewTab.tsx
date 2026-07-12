@@ -71,8 +71,8 @@ export default function OverviewTab({ year }: Props) {
     }
   }, [selectedEntityId, data]);
 
-  if (!year) return <p className="text-sm text-[#666]">Crée un exercice pour voir le suivi.</p>;
-  if (loading && !data) return <p className="text-sm text-[#666]">Chargement…</p>;
+  if (!year) return <p className="text-sm text-[#8a8a8a]">Crée un exercice pour voir le suivi.</p>;
+  if (loading && !data) return <p className="text-sm text-[#8a8a8a]">Chargement…</p>;
   if (error && !data) return <p className="text-sm text-[#FF5252]">Impossible de charger le budget : {error}</p>;
   if (!data) return null;
 
@@ -144,7 +144,7 @@ export default function OverviewTab({ year }: Props) {
         <td className="px-3 py-2 text-[#B0B0B0]" style={{ paddingLeft: 12 + depth * 18 + 18 }}>
           <div className="flex items-center gap-1.5">
             {hasKids ? (
-              <button onClick={() => toggleCat(key)} className="text-[#666] hover:text-white">
+              <button onClick={() => toggleCat(key)} className="text-[#8a8a8a] hover:text-white">
                 {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
             ) : (
@@ -187,7 +187,7 @@ export default function OverviewTab({ year }: Props) {
         <td className="px-3 py-2.5" style={{ paddingLeft: 12 + depth * 18 }}>
           <div className="flex items-center gap-1.5">
             {hasKids ? (
-              <button onClick={() => toggle(node.entity_id)} className="text-[#666] hover:text-white">
+              <button onClick={() => toggle(node.entity_id)} className="text-[#8a8a8a] hover:text-white">
                 {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
             ) : <span className="inline-block w-3.5" />}
@@ -229,7 +229,7 @@ export default function OverviewTab({ year }: Props) {
               ) : (
                 <button
                   onClick={() => setAddingEntityId(node.entity_id)}
-                  className="inline-flex items-center gap-1 text-xs text-[#666] hover:text-[#F2C48D]"
+                  className="inline-flex items-center gap-1 text-xs text-[#8a8a8a] hover:text-[#F2C48D]"
                 >
                   <Plus size={13} /> Ajouter une catégorie à budgéter
                 </button>
@@ -258,7 +258,7 @@ export default function OverviewTab({ year }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-[#666]">
+        <p className="text-xs text-[#8a8a8a]">
           {scopedNode && selectedEntity ? (
             <>Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités (totaux recalculés). </>
           ) : selectedEntityId && !scopedNode ? (
@@ -280,7 +280,7 @@ export default function OverviewTab({ year }: Props) {
             )}
             <button
               onClick={() => setShowN1((v) => !v)}
-              className="text-xs text-[#666] hover:text-white border border-[#222] rounded-full px-3 py-1"
+              className="text-xs text-[#8a8a8a] hover:text-white border border-[#222] rounded-full px-3 py-1"
             >
               {showN1 ? "Masquer l'exercice précédent" : "Comparer à l'exercice précédent"}
             </button>
@@ -315,7 +315,7 @@ export default function OverviewTab({ year }: Props) {
           </thead>
           <tbody>
             {rows.length > 0 ? rows : (
-              <tr><td colSpan={colCount} className="px-4 py-8 text-center text-[#666]">
+              <tr><td colSpan={colCount} className="px-4 py-8 text-center text-[#8a8a8a]">
                 Aucune entité interne. Crée des clubs dans le module Entités.
               </td></tr>
             )}
@@ -340,7 +340,7 @@ export default function OverviewTab({ year }: Props) {
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#666]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#8a8a8a]">
         <LegendDot color={COLOR_BUDGET_SEEDED} label="Budget hérité du mandat précédent" />
         <LegendDot color={COLOR_BUDGET_MODIFIED} label="Budget modifié ce mandat" />
         <LegendDot color={COLOR_EXPENSE} label="Dépense réelle" />
@@ -425,7 +425,7 @@ function AddCategoryForm({
       >
         {busy ? "…" : "Ajouter"}
       </button>
-      <button onClick={onCancel} className="text-[#666] hover:text-white" title="Annuler"><X size={14} /></button>
+      <button onClick={onCancel} className="text-[#8a8a8a] hover:text-white" title="Annuler"><X size={14} /></button>
       {err && <span className="text-xs text-[#FF5252]">{err}</span>}
     </div>
   );

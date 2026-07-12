@@ -49,7 +49,7 @@ export default function DirensPage() {
         <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
           DirENS
         </h1>
-        <p className="text-sm text-[#666] mt-1">
+        <p className="text-sm text-[#8a8a8a] mt-1">
           Génère le fichier Excel financier officiel demandé par la DirENS, entièrement pré-rempli
           à partir des données de l'app.
         </p>
@@ -129,7 +129,7 @@ export default function DirensPage() {
           </div>
 
           <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#888]">
-            <Table2 size={15} className="text-[#666] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+            <Table2 size={15} className="text-[#8a8a8a] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <p>
               Le solde de trésorerie est estimé à partir de l'app ; les lignes « Solde compte bancaire »
               affichent « à compléter » car l'app ne distingue pas encore compte courant, Livret A et

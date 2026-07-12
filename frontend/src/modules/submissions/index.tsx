@@ -116,7 +116,7 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
       <h2 className="text-sm font-semibold text-white">Soumettre une dépense ou une recette</h2>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs uppercase tracking-wider text-[#666]">Sens</label>
+          <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Sens</label>
           <select className={inputCls} value={form.direction}
             onChange={(e) => setForm({ ...form, direction: e.target.value })}>
             <option value="expense">Dépense</option>
@@ -124,30 +124,30 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
           </select>
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wider text-[#666]">Date</label>
+          <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Date</label>
           <input type="date" required className={inputCls} value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })} />
         </div>
       </div>
       <div>
-        <label className="text-xs uppercase tracking-wider text-[#666]">Libellé</label>
+        <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Libellé</label>
         <input required maxLength={200} className={inputCls} value={form.label}
           placeholder="Ex : courses pour l'atelier cuisine"
           onChange={(e) => setForm({ ...form, label: e.target.value })} />
       </div>
       <div>
-        <label className="text-xs uppercase tracking-wider text-[#666]">Description (facultatif)</label>
+        <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Description (facultatif)</label>
         <textarea rows={2} className={inputCls} value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs uppercase tracking-wider text-[#666]">Montant (€)</label>
+          <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Montant (€)</label>
           <input required inputMode="decimal" placeholder="45,50" className={inputCls} value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wider text-[#666]">Catégorie</label>
+          <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Catégorie</label>
           <select className={inputCls} value={form.category_id}
             onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
             <option value="">Aucune</option>
@@ -157,7 +157,7 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs uppercase tracking-wider text-[#666]">Entité</label>
+          <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Entité</label>
           <select required className={inputCls} value={form.entity_id}
             onChange={(e) => setForm({ ...form, entity_id: e.target.value })}>
             <option value="">Choisir…</option>
@@ -167,7 +167,7 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
           </select>
         </div>
         <div>
-          <label className="text-xs uppercase tracking-wider text-[#666]">Contrepartie (tiers)</label>
+          <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Contrepartie (tiers)</label>
           <select required className={inputCls} value={form.counterparty_entity_id}
             onChange={(e) => setForm({ ...form, counterparty_entity_id: e.target.value })}>
             <option value="">Choisir…</option>
@@ -176,12 +176,12 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
       <div>
-        <label className="text-xs uppercase tracking-wider text-[#666]">Justificatifs (PDF, images)</label>
+        <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Justificatifs (PDF, images)</label>
         <input type="file" multiple accept=".pdf,image/*"
           className="block w-full text-sm text-[#B0B0B0] file:mr-3 file:rounded-full file:border-0 file:bg-[#222] file:px-3 file:py-1.5 file:text-sm file:text-white"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
         {files.length > 0 && (
-          <p className="mt-1 text-xs text-[#666]">{files.length} fichier(s) sélectionné(s)</p>
+          <p className="mt-1 text-xs text-[#8a8a8a]">{files.length} fichier(s) sélectionné(s)</p>
         )}
       </div>
       {error && <p className="text-sm text-[#FF5252]">{error}</p>}
@@ -234,7 +234,7 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
   if (loading) return null;
   if (items.length === 0) {
     return (
-      <p className="text-sm text-[#666]">
+      <p className="text-sm text-[#8a8a8a]">
         Aucune soumission pour l'instant. Votre première demande apparaîtra ici avec son statut.
       </p>
     );
@@ -245,7 +245,7 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-xs uppercase tracking-wider text-[#666] text-left">
+          <tr className="text-xs uppercase tracking-wider text-[#8a8a8a] text-left">
             <th className="px-4 py-3">Date</th>
             <th className="px-4 py-3">Libellé</th>
             <th className="px-4 py-3">Entité</th>
@@ -274,7 +274,7 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
               <td className="px-4 py-3 text-right">
                 {s.status === "pending" && (
                   <button onClick={() => cancel(s.id)} title="Annuler cette soumission"
-                    className="text-[#666] hover:text-white transition-colors">
+                    className="text-[#8a8a8a] hover:text-white transition-colors">
                     <X size={15} />
                   </button>
                 )}
@@ -337,7 +337,7 @@ function AdminQueue() {
 
   const tabCls = (active: boolean) =>
     `px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-      active ? "bg-[#F2C48D] text-black" : "text-[#666] hover:text-white"
+      active ? "bg-[#F2C48D] text-black" : "text-[#8a8a8a] hover:text-white"
     }`;
 
   return (
@@ -352,7 +352,7 @@ function AdminQueue() {
       </div>
       {error && <p className="text-sm text-[#FF5252]">{error}</p>}
       {items.length === 0 ? (
-        <p className="text-sm text-[#666]">
+        <p className="text-sm text-[#8a8a8a]">
           {tab === "pending"
             ? "Aucune soumission en attente de validation."
             : "Aucune soumission enregistrée."}
@@ -364,7 +364,7 @@ function AdminQueue() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-white font-medium">{s.label}</p>
-                  <p className="text-xs text-[#666]">
+                  <p className="text-xs text-[#8a8a8a]">
                     {s.date} · {s.entity_name} → {s.counterparty_name}
                     {s.category_name ? ` · ${s.category_name}` : ""} · par {s.submitted_by_name || s.submitted_by_email}
                   </p>
@@ -393,7 +393,7 @@ function AdminQueue() {
                       Refuser
                     </button>
                     <button onClick={() => { setRejectingId(null); setComment(""); }}
-                      className="text-sm text-[#666] hover:text-white">
+                      className="text-sm text-[#8a8a8a] hover:text-white">
                       Annuler
                     </button>
                   </div>
@@ -438,13 +438,13 @@ export default function SubmissionsPage() {
           {hasTreasurerRole ? (
             <SubmissionForm onCreated={() => setRefreshKey((k) => k + 1)} />
           ) : (
-            <div className="bg-[#111] border border-[#222] rounded-2xl p-6 text-sm text-[#666]">
+            <div className="bg-[#111] border border-[#222] rounded-2xl p-6 text-sm text-[#8a8a8a]">
               Vous n'êtes trésorier d'aucune entité. Vous ne pouvez pas créer de soumission.
               Contactez un administrateur si cela vous semble incorrect.
             </div>
           )}
           <div className="space-y-2">
-            <h2 className="text-xs uppercase tracking-wider text-[#666]">Mes soumissions</h2>
+            <h2 className="text-xs uppercase tracking-wider text-[#8a8a8a]">Mes soumissions</h2>
             <MySubmissions refreshKey={refreshKey} />
           </div>
         </>

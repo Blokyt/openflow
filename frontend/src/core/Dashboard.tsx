@@ -33,7 +33,7 @@ function SummaryCard({
         <Icon size={20} strokeWidth={1.5} className="text-[#B0B0B0]" />
       </div>
       <div>
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-1">{label}</p>
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-1">{label}</p>
         <p className={`text-xl font-bold ${valueColor}`}>{value}</p>
       </div>
     </div>
@@ -79,8 +79,8 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
   if (series.length < 2) {
     return (
       <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-3">Évolution du solde</p>
-        <p className="text-sm text-[#666]">Pas assez de données pour afficher un graphique.</p>
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-3">Évolution du solde</p>
+        <p className="text-sm text-[#8a8a8a]">Pas assez de données pour afficher un graphique.</p>
       </div>
     );
   }
@@ -107,8 +107,8 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider">Évolution du solde</p>
-        <p className="text-xs text-[#666]">{series.length} mois</p>
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Évolution du solde</p>
+        <p className="text-xs text-[#8a8a8a]">{series.length} mois</p>
       </div>
       <ResponsiveContainer width="100%" height={180}>
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -158,7 +158,7 @@ function TopCategories({ cats }: { cats: TopCat[] }) {
   const max = Math.max(...cats.map((c) => c.total));
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
-      <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-4">Top dépenses par catégorie</p>
+      <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-4">Top dépenses par catégorie</p>
       <div className="space-y-3">
         {cats.map((c) => (
           <div key={c.name}>
@@ -183,20 +183,20 @@ function RecentTransactions({ txs }: { txs: RecentTx[] }) {
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider">Dernières transactions</p>
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Dernières transactions</p>
         <Link to="/transactions" className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5">
           Voir tout <ArrowRight size={11} />
         </Link>
       </div>
       {txs.length === 0 ? (
-        <p className="text-sm text-[#666]">Aucune transaction.</p>
+        <p className="text-sm text-[#8a8a8a]">Aucune transaction.</p>
       ) : (
         <div className="space-y-2">
           {txs.map((t) => (
             <div key={t.id} className="flex items-center justify-between gap-3 py-1.5">
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-white font-medium truncate">{t.label}</p>
-                <p className="text-xs text-[#666]">
+                <p className="text-xs text-[#8a8a8a]">
                   {formatDate(t.date)} · {t.from_entity_name || "—"} → {t.to_entity_name || "—"}
                 </p>
               </div>
@@ -282,7 +282,7 @@ export default function Dashboard() {
       {summary.transaction_count === 0 && <OnboardingChecklist />}
       <ModuleDiscoveryHint />
       <div>
-        <p className="text-sm font-medium text-[#666] uppercase tracking-wider mb-2">Solde actuel</p>
+        <p className="text-sm font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Solde actuel</p>
         <div className="relative inline-block">
           {/* Halo dans l'accent doré de la marque (l'ancien bleu était un vestige). */}
           <div className="absolute -inset-4 bg-[rgba(242,196,141,0.07)] rounded-3xl blur-xl pointer-events-none" />
@@ -294,14 +294,14 @@ export default function Dashboard() {
           </h1>
         </div>
         {selectedEntity && (
-          <p className="mt-3 text-sm text-[#666]">
+          <p className="mt-3 text-sm text-[#8a8a8a]">
             Périmètre : <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span>
             {selectedEntity.children && selectedEntity.children.length > 0 && " et sous-entités"}
             {" "}(solde consolidé)
           </p>
         )}
         {summary.reference_date && summary.reference_amount !== undefined && (
-          <p className="mt-3 text-sm text-[#666]">
+          <p className="mt-3 text-sm text-[#8a8a8a]">
             Référence au{" "}
             <span className="text-[#B0B0B0] font-medium">{formatDate(summary.reference_date)}</span>{" "}:{" "}
             <span className="text-[#B0B0B0] font-medium">{formatEuros(summary.reference_amount)}</span>
@@ -310,7 +310,7 @@ export default function Dashboard() {
       </div>
 
       {selectedYear && (
-        <p className="-mb-2 text-xs text-[#666]">
+        <p className="-mb-2 text-xs text-[#8a8a8a]">
           Activité de l'exercice <span className="text-[#F2C48D] font-medium">{selectedYear.name}</span>
         </p>
       )}

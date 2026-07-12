@@ -234,7 +234,7 @@ export default function TiersList() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Contacts</h1>
-          <p className="text-sm text-[#666] mt-1">Clients, fournisseurs, membres, sponsors.</p>
+          <p className="text-sm text-[#8a8a8a] mt-1">Clients, fournisseurs, membres, sponsors.</p>
         </div>
         {isAdmin && (
           <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
@@ -252,7 +252,7 @@ export default function TiersList() {
 
       <div className="mb-5 flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8a8a]" />
           <input
             type="text"
             value={search}
@@ -274,7 +274,7 @@ export default function TiersList() {
           <option value="other">Autre</option>
         </select>
         {(search || typeFilter) && (
-          <button onClick={() => { setSearch(""); setTypeFilter(""); }} className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors">
+          <button onClick={() => { setSearch(""); setTypeFilter(""); }} className="text-sm text-[#8a8a8a] hover:text-white flex items-center gap-1 transition-colors">
             <X size={14} /> Effacer
           </button>
         )}
@@ -347,11 +347,11 @@ export default function TiersList() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#1a1a1a]">
-                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Nom</th>
-                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Type</th>
-                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
-                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Téléphone</th>
-                    <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Nom</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Type</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Email</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Téléphone</th>
+                    <th className="px-5 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -372,16 +372,16 @@ export default function TiersList() {
                       <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         {!isAdmin ? null : confirmDelete === c.id ? (
                           <span className="inline-flex items-center gap-2">
-                            <span className="text-xs text-[#666]">Supprimer ?</span>
+                            <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
                             <button onClick={() => handleDelete(c.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
-                            <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#666] hover:text-white">Non</button>
+                            <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#8a8a8a] hover:text-white">Non</button>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1">
-                            <button onClick={() => openEdit(c)} className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors" title="Modifier">
+                            <button onClick={() => openEdit(c)} className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors" title="Modifier">
                               <Pencil size={14} strokeWidth={1.5} />
                             </button>
-                            <button onClick={() => setConfirmDelete(c.id)} className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
+                            <button onClick={() => setConfirmDelete(c.id)} className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
                               <Trash2 size={14} strokeWidth={1.5} />
                             </button>
                           </span>
@@ -420,25 +420,25 @@ export default function TiersList() {
                   {TYPE_LABELS[selected.type] || selected.type}
                 </span>
               </div>
-              <button onClick={() => setSelected(null)} className="text-[#666] hover:text-white p-1"><X size={18} /></button>
+              <button onClick={() => setSelected(null)} className="text-[#8a8a8a] hover:text-white p-1"><X size={18} /></button>
             </div>
 
             <div className="space-y-3 mb-6">
               {selected.email && (
                 <div className="flex items-center gap-2 text-sm text-[#B0B0B0]">
-                  <Mail size={14} className="text-[#666]" />
+                  <Mail size={14} className="text-[#8a8a8a]" />
                   <a href={`mailto:${selected.email}`} className="hover:text-[#F2C48D]">{selected.email}</a>
                 </div>
               )}
               {selected.phone && (
                 <div className="flex items-center gap-2 text-sm text-[#B0B0B0]">
-                  <Phone size={14} className="text-[#666]" />
+                  <Phone size={14} className="text-[#8a8a8a]" />
                   {selected.phone}
                 </div>
               )}
               {selected.address && (
                 <div className="flex items-start gap-2 text-sm text-[#B0B0B0]">
-                  <MapPin size={14} className="text-[#666] mt-0.5" />
+                  <MapPin size={14} className="text-[#8a8a8a] mt-0.5" />
                   <span>{selected.address}</span>
                 </div>
               )}
@@ -450,16 +450,16 @@ export default function TiersList() {
             <div className="border-t border-[#1a1a1a] pt-4 mb-6">
               <h3 className="text-sm font-semibold text-white mb-3">Transactions liées ({txns.length})</h3>
               {txnsLoading ? (
-                <div className="py-4 text-center text-[#666] text-sm">Chargement…</div>
+                <div className="py-4 text-center text-[#8a8a8a] text-sm">Chargement…</div>
               ) : txns.length === 0 ? (
-                <div className="py-4 text-center text-[#666] text-sm">Aucune transaction liée.</div>
+                <div className="py-4 text-center text-[#8a8a8a] text-sm">Aucune transaction liée.</div>
               ) : (
                 <div className="space-y-2">
                   {txns.map((t) => (
                     <div key={t.id} className="bg-[#111] border border-[#222] rounded-xl p-3 flex items-center justify-between">
                       <div>
                         <div className="text-sm text-white">{t.label || "—"}</div>
-                        <div className="text-xs text-[#666]">{formatDate(t.date)}</div>
+                        <div className="text-xs text-[#8a8a8a]">{formatDate(t.date)}</div>
                       </div>
                       {(() => {
                         const { color, sign } = txTone(t);
@@ -478,7 +478,7 @@ export default function TiersList() {
             {isAdmin && (
             <div className="border-t border-[#1a1a1a] pt-4">
               {!mergeMode ? (
-                <button onClick={openMergeMode} className="flex items-center gap-2 text-sm text-[#666] hover:text-[#F2C48D] transition-colors">
+                <button onClick={openMergeMode} className="flex items-center gap-2 text-sm text-[#8a8a8a] hover:text-[#F2C48D] transition-colors">
                   <GitMerge size={14} /> Fusionner avec un autre contact…
                 </button>
               ) : mergeTarget ? (
@@ -493,16 +493,16 @@ export default function TiersList() {
                     <button onClick={handleMerge} disabled={merging} className="flex-1 px-4 py-2 text-sm font-semibold text-black bg-amber-400 rounded-full hover:bg-amber-300 disabled:opacity-50 transition-colors">
                       {merging ? "Fusion..." : "Confirmer la fusion"}
                     </button>
-                    <button onClick={() => setMergeTarget(null)} className="px-4 py-2 text-sm text-[#666] border border-[#333] rounded-full hover:text-white transition-colors">
+                    <button onClick={() => setMergeTarget(null)} className="px-4 py-2 text-sm text-[#8a8a8a] border border-[#333] rounded-full hover:text-white transition-colors">
                       Changer
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-xs text-[#666] mb-2">Fusionner <span className="text-white">{selected.name}</span> dans :</p>
+                  <p className="text-xs text-[#8a8a8a] mb-2">Fusionner <span className="text-white">{selected.name}</span> dans :</p>
                   <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666]" />
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8a8a]" />
                     <input
                       type="text"
                       value={mergeSearch}

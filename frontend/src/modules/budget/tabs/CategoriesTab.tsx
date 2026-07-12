@@ -24,8 +24,8 @@ export default function CategoriesTab({ year }: Props) {
     return () => { cancelled = true; };
   }, [year?.id, selectedEntityId]);
 
-  if (!year) return <p className="text-sm text-[#666]">Crée un exercice pour voir le suivi.</p>;
-  if (loading) return <p className="text-sm text-[#666]">Chargement…</p>;
+  if (!year) return <p className="text-sm text-[#8a8a8a]">Crée un exercice pour voir le suivi.</p>;
+  if (loading) return <p className="text-sm text-[#8a8a8a]">Chargement…</p>;
   if (!data) return null;
 
   const hasNMinus1 = data.categories.some((c: any) => c.realized_n_minus_1 !== 0);
@@ -33,14 +33,14 @@ export default function CategoriesTab({ year }: Props) {
   return (
     <div>
       {selectedEntity && (
-        <p className="mb-3 text-xs text-[#666]">
+        <p className="mb-3 text-xs text-[#8a8a8a]">
           Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités.
         </p>
       )}
     <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[#1a1a1a] text-[#666]">
+          <tr className="border-b border-[#1a1a1a] text-[#8a8a8a]">
             <th className="px-4 py-3 text-left text-xs font-medium uppercase">Catégorie</th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase">Alloué</th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase">Réalisé</th>

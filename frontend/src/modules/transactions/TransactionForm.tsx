@@ -190,7 +190,7 @@ function ContactCombobox({
                 <button
                   type="button"
                   onMouseDown={() => setCreating(false)}
-                  className="px-3 py-1.5 text-xs text-[#666] border border-[#333] rounded-full hover:text-white transition-colors"
+                  className="px-3 py-1.5 text-xs text-[#8a8a8a] border border-[#333] rounded-full hover:text-white transition-colors"
                 >
                   Annuler
                 </button>
@@ -390,7 +390,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
       </div>
 
       {flowSense ? (
-        <p className="-mt-1 text-xs text-[#666]">
+        <p className="-mt-1 text-xs text-[#8a8a8a]">
           Sens détecté : <span className="font-semibold" style={{ color: flowSense.color }}>{flowSense.label}</span>
         </p>
       ) : (

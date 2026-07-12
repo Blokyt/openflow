@@ -240,7 +240,7 @@ export default function TransactionList() {
             Transactions
           </h1>
           {selectedEntity && (
-            <p className="text-sm text-[#666] mt-1">
+            <p className="text-sm text-[#8a8a8a] mt-1">
               Filtrées pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités
             </p>
           )}
@@ -291,7 +291,7 @@ export default function TransactionList() {
       {/* Filters */}
       <div className="mb-5 flex flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-48 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 focus-within:border-[#F2C48D] transition-colors">
-          <Search size={15} className="text-[#666]" />
+          <Search size={15} className="text-[#8a8a8a]" />
           <input
             type="text"
             value={search}
@@ -301,7 +301,7 @@ export default function TransactionList() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-[#666]">Du</label>
+          <label className="text-sm text-[#8a8a8a]">Du</label>
           <input
             type="date"
             value={dateFrom}
@@ -310,7 +310,7 @@ export default function TransactionList() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-[#666]">Au</label>
+          <label className="text-sm text-[#8a8a8a]">Au</label>
           <input
             type="date"
             value={dateTo}
@@ -370,7 +370,7 @@ export default function TransactionList() {
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="text-sm text-[#666] hover:text-white flex items-center gap-1 transition-colors"
+            className="text-sm text-[#8a8a8a] hover:text-white flex items-center gap-1 transition-colors"
           >
             <X size={14} /> Effacer
           </button>
@@ -379,7 +379,7 @@ export default function TransactionList() {
 
       {/* Count */}
       {!loading && total > 0 && (
-        <p className="mb-3 text-xs text-[#666]">
+        <p className="mb-3 text-xs text-[#8a8a8a]">
           {transactions.length === total
             ? `${total} transaction${total > 1 ? "s" : ""}`
             : `${transactions.length} sur ${total} transactions`}
@@ -393,7 +393,7 @@ export default function TransactionList() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
           </div>
         ) : transactions.length === 0 ? (
-          <div className="text-center py-12 text-[#666] text-sm">
+          <div className="text-center py-12 text-[#8a8a8a] text-sm">
             Aucune transaction trouvée.
             {hasActiveFilters && (
               <button onClick={clearFilters} className="ml-2 text-[#F2C48D] hover:underline">
@@ -405,29 +405,29 @@ export default function TransactionList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-3 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider w-12">#</th>
+                <th className="px-3 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider w-12">#</th>
                 <th
                   onClick={() => toggleSort("date")}
-                  className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
+                  className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider cursor-pointer select-none hover:text-white"
                 >
                   Date {sortBy === "date" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </th>
                 <th
                   onClick={() => toggleSort("label")}
-                  className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
+                  className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider cursor-pointer select-none hover:text-white"
                 >
                   Libellé {sortBy === "label" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </th>
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Flux</th>
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Catégorie</th>
-                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Avance de frais</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Flux</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Catégorie</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Avance de frais</th>
                 <th
                   onClick={() => toggleSort("amount")}
-                  className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider cursor-pointer select-none hover:text-white"
+                  className="px-4 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider cursor-pointer select-none hover:text-white"
                 >
                   Montant {sortBy === "amount" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </th>
-                <th className="px-4 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -510,7 +510,7 @@ export default function TransactionList() {
                   <td className="px-4 py-3.5 text-right">
                     {confirmDelete === tx.id ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-[#666]">Supprimer ?</span>
+                        <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
                         <button
                           onClick={() => handleDelete(tx.id)}
                           disabled={deletingId === tx.id}
@@ -520,7 +520,7 @@ export default function TransactionList() {
                         </button>
                         <button
                           onClick={() => setConfirmDelete(null)}
-                          className="text-xs font-medium text-[#666] hover:text-white"
+                          className="text-xs font-medium text-[#8a8a8a] hover:text-white"
                         >
                           Non
                         </button>
@@ -530,7 +530,7 @@ export default function TransactionList() {
                         {hasAttachments && (
                           <button
                             onClick={() => setDetailTx(tx)}
-                            className="p-1.5 text-[#666] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
+                            className="p-1.5 text-[#8a8a8a] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
                             title="Voir les détails"
                           >
                             <Eye size={14} strokeWidth={1.5} />
@@ -540,14 +540,14 @@ export default function TransactionList() {
                           <>
                             <button
                               onClick={() => { setEditingTx(tx); setShowForm(false); }}
-                              className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+                              className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                               title="Modifier"
                             >
                               <Pencil size={14} strokeWidth={1.5} />
                             </button>
                             <button
                               onClick={() => setConfirmDelete(tx.id)}
-                              className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                              className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                               title="Supprimer"
                             >
                               <Trash2 size={14} strokeWidth={1.5} />
@@ -588,7 +588,7 @@ export default function TransactionList() {
           </button>
           <button
             onClick={() => setUndoTx(null)}
-            className="text-[#666] hover:text-white"
+            className="text-[#8a8a8a] hover:text-white"
             aria-label="Fermer"
           >
             <X size={14} />
@@ -610,7 +610,7 @@ export default function TransactionList() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setPendingForceAction(null)}
-                className="px-4 py-2 text-sm text-[#666] border border-[#333] rounded-xl hover:text-white transition-colors"
+                className="px-4 py-2 text-sm text-[#8a8a8a] border border-[#333] rounded-xl hover:text-white transition-colors"
               >
                 Annuler
               </button>
@@ -646,7 +646,7 @@ export default function TransactionList() {
                   <span className="text-xs font-mono text-[#555] bg-[#1a1a1a] px-1.5 py-0.5 rounded">#{detailTx.id}</span>
                   <h2 className="text-xl font-bold text-white break-words">{detailTx.label}</h2>
                 </div>
-                <div className="text-sm text-[#666] mt-1">{formatDate(detailTx.date)}</div>
+                <div className="text-sm text-[#8a8a8a] mt-1">{formatDate(detailTx.date)}</div>
                 {(() => {
                   const { color, sign } = txTone(detailTx);
                   return (
@@ -668,7 +668,7 @@ export default function TransactionList() {
               </div>
               <button
                 onClick={() => setDetailTx(null)}
-                className="text-[#666] hover:text-white p-1 flex-shrink-0"
+                className="text-[#8a8a8a] hover:text-white p-1 flex-shrink-0"
               >
                 <X size={18} />
               </button>
@@ -683,7 +683,7 @@ export default function TransactionList() {
             <div className="space-y-4">
               {hasAttachments && <AttachmentsSection txId={detailTx.id} />}
               {!hasAttachments && (
-                <div className="text-sm text-[#666]">
+                <div className="text-sm text-[#8a8a8a]">
                   Active le module « Pièces jointes » dans Paramètres
                   pour enrichir le détail des transactions.
                 </div>

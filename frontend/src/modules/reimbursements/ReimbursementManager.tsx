@@ -223,7 +223,7 @@ export default function ReimbursementManager() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
             Remboursements
           </h1>
-          <p className="text-sm text-[#666] mt-1">
+          <p className="text-sm text-[#8a8a8a] mt-1">
             Avances de frais et remboursements membres.
           </p>
         </div>
@@ -248,15 +248,15 @@ export default function ReimbursementManager() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Total en attente</div>
+          <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Total en attente</div>
           <div className="text-2xl font-bold text-[#F2C48D]">{formatEuros(totalPending)}</div>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Avances ouvertes</div>
+          <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Avances ouvertes</div>
           <div className="text-2xl font-bold text-white">{countPending}</div>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Personnes concernées</div>
+          <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Personnes concernées</div>
           <div className="text-2xl font-bold text-white">{summary.length}</div>
         </div>
       </div>
@@ -278,7 +278,7 @@ export default function ReimbursementManager() {
       )}
 
       <div className="mb-5 flex items-center gap-3">
-        <label className="text-sm text-[#666]">Statut</label>
+        <label className="text-sm text-[#8a8a8a]">Statut</label>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -407,11 +407,11 @@ export default function ReimbursementManager() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Personne</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Statut</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Transaction</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Montant</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Personne</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Statut</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Transaction</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Montant</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -447,30 +447,30 @@ export default function ReimbursementManager() {
                   <td className="px-5 py-3.5 text-right">
                     {!isAdmin ? null : confirmDelete === r.id ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-[#666]">Supprimer ?</span>
+                        <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
                         <button onClick={() => handleDelete(r.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
-                        <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#666] hover:text-white">Non</button>
+                        <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#8a8a8a] hover:text-white">Non</button>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
                         <button
                           onClick={() => toggleReimbursed(r)}
                           disabled={togglingId === r.id}
-                          className="p-1.5 text-[#666] hover:text-emerald-400 rounded-lg hover:bg-[#222] transition-colors disabled:opacity-50"
+                          className="p-1.5 text-[#8a8a8a] hover:text-emerald-400 rounded-lg hover:bg-[#222] transition-colors disabled:opacity-50"
                           title={r.status === "pending" ? "Marquer remboursé" : "Remettre en attente"}
                         >
                           <CheckCircle2 size={14} strokeWidth={1.5} />
                         </button>
                         <button
                           onClick={() => openEdit(r)}
-                          className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+                          className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                           title="Modifier"
                         >
                           <Pencil size={14} strokeWidth={1.5} />
                         </button>
                         <button
                           onClick={() => setConfirmDelete(r.id)}
-                          className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                          className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                           title="Supprimer"
                         >
                           <Trash2 size={14} strokeWidth={1.5} />

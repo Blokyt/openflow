@@ -20,7 +20,7 @@ export default function EmptyState({
       <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
       <p className="text-sm text-[#B0B0B0] mb-4 max-w-md mx-auto leading-relaxed">{description}</p>
       {examples && examples.length > 0 && (
-        <ul className="text-xs text-[#666] mb-6 space-y-1 inline-block text-left">
+        <ul className="text-xs text-[#8a8a8a] mb-6 space-y-1 inline-block text-left">
           {examples.map((ex, i) => (
             <li key={i} className="before:content-['•'] before:text-[#F2C48D] before:mr-2">{ex}</li>
           ))}

@@ -58,7 +58,7 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
             </a>
             <button
               onClick={onClose}
-              className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+              className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
               title="Fermer"
             >
               <X size={16} strokeWidth={1.5} />
@@ -81,7 +81,7 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
               title={item.original_name}
             />
           ) : (
-            <div className="text-center text-[#666] text-sm p-8">
+            <div className="text-center text-[#8a8a8a] text-sm p-8">
               <p className="mb-4">Aperçu non disponible pour ce type de fichier.</p>
               <a
                 href={downloadUrl}
@@ -169,7 +169,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2">
           <Paperclip size={14} className="text-[#F2C48D]" />
-          Pièces jointes {items.length > 0 && <span className="text-[#666] text-xs">({items.length})</span>}
+          Pièces jointes {items.length > 0 && <span className="text-[#8a8a8a] text-xs">({items.length})</span>}
         </h3>
         {isAdmin && (
           <button
@@ -188,22 +188,22 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
         </div>
       )}
       {loading ? (
-        <div className="text-xs text-[#666] py-2">Chargement…</div>
+        <div className="text-xs text-[#8a8a8a] py-2">Chargement…</div>
       ) : items.length === 0 ? (
-        <div className="text-xs text-[#666] py-2">Aucune pièce jointe.</div>
+        <div className="text-xs text-[#8a8a8a] py-2">Aucune pièce jointe.</div>
       ) : (
         <div className="space-y-2">
           {items.map((a) => (
             <div key={a.id} className="bg-[#111] border border-[#222] rounded-xl p-3 flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate">{a.original_name}</div>
-                <div className="text-xs text-[#666]">{formatSize(a.size)}</div>
+                <div className="text-xs text-[#8a8a8a]">{formatSize(a.size)}</div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {isPreviewable(a.mime_type) && (
                   <button
                     onClick={() => setPreviewItem(a)}
-                    className="p-1.5 text-[#666] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
+                    className="p-1.5 text-[#8a8a8a] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
                     title="Aperçu"
                   >
                     <Eye size={14} strokeWidth={1.5} />
@@ -211,7 +211,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
                 )}
                 <a
                   href={`/api/attachments/${a.id}/download`}
-                  className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+                  className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
                   title="Télécharger"
                 >
                   <Download size={14} strokeWidth={1.5} />
@@ -219,7 +219,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
                 {isAdmin && (
                   <button
                     onClick={() => setAttachmentToDelete(a.id)}
-                    className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                    className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
                     title="Supprimer"
                   >
                     <Trash2 size={14} strokeWidth={1.5} />

@@ -103,7 +103,7 @@ export default function HelloAssoPage() {
     return (
       <div className="p-8">
         <h1 className="text-3xl font-bold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>HelloAsso</h1>
-        <p className="text-sm text-[#666]">Sélectionne ou crée un exercice fiscal pour suivre tes campagnes.</p>
+        <p className="text-sm text-[#8a8a8a]">Sélectionne ou crée un exercice fiscal pour suivre tes campagnes.</p>
       </div>
     );
   }
@@ -112,7 +112,7 @@ export default function HelloAssoPage() {
     return (
       <div className="p-8">
         <h1 className="text-3xl font-bold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>HelloAsso</h1>
-        <p className="text-sm text-[#666] mb-8">Connecte ton compte pour suivre tes campagnes et billetteries.</p>
+        <p className="text-sm text-[#8a8a8a] mb-8">Connecte ton compte pour suivre tes campagnes et billetteries.</p>
         <ConfigForm onSaved={load} />
       </div>
     );
@@ -128,7 +128,7 @@ export default function HelloAssoPage() {
       <div className="flex items-start justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>HelloAsso</h1>
-          <p className="text-sm text-[#666] mt-1">
+          <p className="text-sm text-[#8a8a8a] mt-1">
             Associe les transactions de ta compta à chaque campagne. Tant que le collecté n'est pas couvert, le reste s'affiche.
           </p>
         </div>
@@ -151,15 +151,15 @@ export default function HelloAssoPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Reste à associer</div>
+          <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Reste à associer</div>
           <div className={`text-2xl font-bold ${totalPending > 0 ? "text-[#FF8A5B]" : "text-[#00C853]"}`}>{formatEuros(totalPending)}</div>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Campagnes à traiter</div>
+          <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Campagnes à traiter</div>
           <div className="text-2xl font-bold text-white">{toTreat.length}</div>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
-          <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Collecté (exercice)</div>
+          <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Collecté (exercice)</div>
           <div className="text-2xl font-bold text-[#F2C48D]">{formatEuros(totalCollected)}</div>
         </div>
       </div>
@@ -176,17 +176,17 @@ export default function HelloAssoPage() {
         <>
           {toTreat.length > 0 ? (
             <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-[#1a1a1a] text-xs font-medium text-[#666] uppercase tracking-wider">À prendre en compte</div>
+              <div className="px-5 py-3 border-b border-[#1a1a1a] text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">À prendre en compte</div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#1a1a1a]">
-                      <th className="px-5 py-3 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Campagne</th>
-                      <th className="px-5 py-3 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Type</th>
-                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Collecté</th>
-                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Associé</th>
-                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Reste</th>
-                      <th className="px-5 py-3 text-right text-xs font-medium text-[#666] uppercase tracking-wider"></th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Campagne</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Type</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Collecté</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Associé</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Reste</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -215,7 +215,7 @@ export default function HelloAssoPage() {
             <div className="bg-[#111] border border-[#222] rounded-2xl p-8 text-center">
               <CheckCircle2 size={28} className="mx-auto text-[#00C853] mb-3" />
               <p className="text-white font-semibold">Tout est à jour</p>
-              <p className="text-sm text-[#666] mt-1">Chaque campagne est entièrement couverte par des transactions. Clique sur Rafraîchir pour vérifier les nouveaux encaissements.</p>
+              <p className="text-sm text-[#8a8a8a] mt-1">Chaque campagne est entièrement couverte par des transactions. Clique sur Rafraîchir pour vérifier les nouveaux encaissements.</p>
             </div>
           )}
 
@@ -223,7 +223,7 @@ export default function HelloAssoPage() {
             <div className="mt-4">
               <button
                 onClick={() => setShowDone((v) => !v)}
-                className="text-sm text-[#666] hover:text-[#B0B0B0] transition-colors"
+                className="text-sm text-[#8a8a8a] hover:text-[#B0B0B0] transition-colors"
               >
                 {showDone ? "Masquer" : "Voir"} les {done.length} campagne{done.length > 1 ? "s" : ""} déjà à jour
               </button>
@@ -245,7 +245,7 @@ export default function HelloAssoPage() {
                             <td className="px-5 py-3 text-right">
                               <button
                                 onClick={() => setLinking(c)}
-                                className="inline-flex items-center gap-1.5 text-xs text-[#666] hover:text-white transition-colors"
+                                className="inline-flex items-center gap-1.5 text-xs text-[#8a8a8a] hover:text-white transition-colors"
                                 title="Voir et gérer les transactions associées"
                               >
                                 <Link2 size={12} /> Gérer
@@ -350,22 +350,22 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
         <div className="sticky top-0 bg-[#111] border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-white">{campaign.title || campaign.form_slug}</h2>
-            <p className="text-xs text-[#666] mt-0.5">{typeLabel(campaign.form_type)} · associe les recettes correspondantes</p>
+            <p className="text-xs text-[#8a8a8a] mt-0.5">{typeLabel(campaign.form_type)} · associe les recettes correspondantes</p>
           </div>
-          <button onClick={onClose} className="text-[#666] hover:text-white"><X size={18} /></button>
+          <button onClick={onClose} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
         </div>
 
         <div className="px-6 py-4 grid grid-cols-3 gap-3">
           <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
-            <div className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Collecté</div>
+            <div className="text-[10px] font-medium text-[#8a8a8a] uppercase tracking-wider">Collecté</div>
             <div className="text-base font-bold text-[#F2C48D]">{formatEuros(collected)}</div>
           </div>
           <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
-            <div className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Associé</div>
+            <div className="text-[10px] font-medium text-[#8a8a8a] uppercase tracking-wider">Associé</div>
             <div className="text-base font-bold text-white">{formatEuros(linked)}</div>
           </div>
           <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
-            <div className="text-[10px] font-medium text-[#666] uppercase tracking-wider">Reste</div>
+            <div className="text-[10px] font-medium text-[#8a8a8a] uppercase tracking-wider">Reste</div>
             <div className={`text-base font-bold ${pending > 0 ? "text-[#FF8A5B]" : "text-[#00C853]"}`}>{formatEuros(pending)}</div>
           </div>
         </div>
@@ -381,7 +381,7 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
         ) : (
           <>
             <div className="px-6 pb-2">
-              <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2">Transactions associées</div>
+              <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Transactions associées</div>
               {links.length === 0 ? (
                 <p className="text-sm text-[#555] py-2">Aucune transaction associée pour l'instant.</p>
               ) : (
@@ -390,14 +390,14 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
                     <div key={tx.transaction_id} className="flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5">
                       <div className="min-w-0">
                         <div className="text-sm text-white truncate">{tx.label}</div>
-                        <div className="text-xs text-[#666] truncate">{txMeta(tx)}</div>
+                        <div className="text-xs text-[#8a8a8a] truncate">{txMeta(tx)}</div>
                       </div>
                       <div className="flex items-center gap-3 whitespace-nowrap">
                         <span className="text-sm font-semibold text-[#00C853]">{formatEuros(tx.amount)}</span>
                         <button
                           onClick={() => dissociate(tx)}
                           disabled={busy === tx.transaction_id}
-                          className="text-[#666] hover:text-[#FF5252] disabled:opacity-40"
+                          className="text-[#8a8a8a] hover:text-[#FF5252] disabled:opacity-40"
                           title="Dissocier"
                         >
                           <Trash2 size={15} />
@@ -410,7 +410,7 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
             </div>
 
             <div className="px-6 py-4">
-              <div className="text-xs font-medium text-[#666] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Search size={12} /> Recettes du mandat suggérées
               </div>
               {suggestions.length === 0 ? (
@@ -423,7 +423,7 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
                     <div key={tx.transaction_id} className="flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 hover:border-[#2a2a2a]">
                       <div className="min-w-0">
                         <div className="text-sm text-white truncate">{tx.label}</div>
-                        <div className="text-xs text-[#666] truncate">{txMeta(tx)}</div>
+                        <div className="text-xs text-[#8a8a8a] truncate">{txMeta(tx)}</div>
                       </div>
                       <div className="flex items-center gap-3 whitespace-nowrap">
                         <span className="text-sm font-semibold text-[#B0B0B0]">{formatEuros(tx.amount)}</span>
@@ -474,7 +474,7 @@ function ConfigForm({ onSaved }: { onSaved: () => void }) {
         </div>
         <div>
           <h2 className="text-base font-semibold text-white">Clé API HelloAsso</h2>
-          <p className="text-xs text-[#666]">Espace admin de ton organisation, rubrique API / Intégrations.</p>
+          <p className="text-xs text-[#8a8a8a]">Espace admin de ton organisation, rubrique API / Intégrations.</p>
         </div>
       </div>
       {error && <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{error}</div>}

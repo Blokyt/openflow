@@ -23,7 +23,7 @@ export default function BudgetManager() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
             Budget
           </h1>
-          <p className="text-sm text-[#666] mt-1">
+          <p className="text-sm text-[#8a8a8a] mt-1">
             Allocations, suivi du réalisé, comparaison à l'exercice précédent.
           </p>
         </div>
@@ -50,7 +50,7 @@ export default function BudgetManager() {
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
                 ? "border-[#F2C48D] text-white"
-                : "border-transparent text-[#666] hover:text-white"
+                : "border-transparent text-[#8a8a8a] hover:text-white"
             }`}
           >
             {t.label}

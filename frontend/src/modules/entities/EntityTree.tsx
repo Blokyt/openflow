@@ -69,14 +69,14 @@ function EntityNode({
         {isAdmin && (
           <>
             <button
-              className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity ml-1"
+              className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-white transition-opacity ml-1"
               onClick={(e) => { e.stopPropagation(); onEdit(entity); }}
               title="Modifier"
             >
               <Pencil size={13} />
             </button>
             <button
-              className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
+              className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-[#FF5252] transition-opacity"
               onClick={(e) => { e.stopPropagation(); onDelete(entity.id); }}
               title="Supprimer"
             >
@@ -168,7 +168,7 @@ function EntityModal({
           <h2 className="text-base font-semibold text-white">
             {isEdit ? "Modifier l'entité" : "Nouvelle entité"} {type === "internal" ? "interne" : "externe"}
           </h2>
-          <button onClick={onClose} className="text-[#666] hover:text-white">
+          <button onClick={onClose} className="text-[#8a8a8a] hover:text-white">
             <X size={18} />
           </button>
         </div>
@@ -223,7 +223,7 @@ function EntityModal({
                 onChange={(e) => setColor(e.target.value)}
                 className="w-10 h-10 rounded-lg border border-[#333] bg-[#1a1a1a] cursor-pointer"
               />
-              <span className="text-sm text-[#666]">{color}</span>
+              <span className="text-sm text-[#8a8a8a]">{color}</span>
             </div>
           </div>
 
@@ -237,7 +237,7 @@ function EntityModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-lg border border-[#333] text-sm text-[#666] hover:text-white hover:border-[#444] transition-colors"
+              className="flex-1 px-4 py-2 rounded-lg border border-[#333] text-sm text-[#8a8a8a] hover:text-white hover:border-[#444] transition-colors"
             >
               Annuler
             </button>
@@ -378,7 +378,7 @@ function EntityBalancePanel({
           >
             Transactions <ArrowRight size={11} />
           </button>
-          <button onClick={onClose} className="text-[#666] hover:text-white">
+          <button onClick={onClose} className="text-[#8a8a8a] hover:text-white">
             <X size={16} />
           </button>
         </div>
@@ -393,13 +393,13 @@ function EntityBalancePanel({
           {balance && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-[#666] uppercase tracking-wider">
+                <p className="text-xs text-[#8a8a8a] uppercase tracking-wider">
                   {isAggregate ? "Solde propre (calculé)" : "Solde propre"}
                 </p>
                 {isAdmin && !isAggregate && !editingRef && (
                   <button
                     onClick={openEditForm}
-                    className="text-[#666] hover:text-[#F2C48D] transition-colors"
+                    className="text-[#8a8a8a] hover:text-[#F2C48D] transition-colors"
                     title="Modifier le solde de référence"
                   >
                     <Pencil size={13} />
@@ -463,7 +463,7 @@ function EntityBalancePanel({
                     <button
                       type="button"
                       onClick={() => setEditingRef(false)}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-[#333] text-sm text-[#666] hover:text-white hover:border-[#444] transition-colors"
+                      className="flex-1 px-3 py-1.5 rounded-lg border border-[#333] text-sm text-[#8a8a8a] hover:text-white hover:border-[#444] transition-colors"
                     >
                       Annuler
                     </button>
@@ -475,7 +475,7 @@ function EntityBalancePanel({
 
           {hasChildren && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-              <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Solde consolidé</p>
+              <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Solde consolidé</p>
               <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-[#F2C48D]" : "text-[#FF5252]"}`}>
                 {formatEuros(consolidated!.consolidated_balance)}
               </p>
@@ -497,8 +497,8 @@ function EntityBalancePanel({
 
           {isAdmin && hasChildren && !isAggregate && (
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-              <p className="text-xs text-[#666] uppercase tracking-wider mb-2">Calculer le solde propre</p>
-              <p className="text-xs text-[#666] mb-3 leading-relaxed">
+              <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Calculer le solde propre</p>
+              <p className="text-xs text-[#8a8a8a] mb-3 leading-relaxed">
                 Si tu connais le total du compte bancaire, le solde propre se déduit automatiquement.
               </p>
               <input
@@ -511,7 +511,7 @@ function EntityBalancePanel({
               />
               {calculatedOwn !== null && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-xs text-[#666]">
+                  <p className="text-xs text-[#8a8a8a]">
                     Solde propre calculé ={" "}
                     <span className="text-[#B0B0B0]">{formatEuros(bankTotalCents!)}</span>
                     {" − "}
@@ -540,7 +540,7 @@ function EntityBalancePanel({
           )}
 
           {!balance && !consolidated && (
-            <p className="text-sm text-[#666] text-center py-2">Aucune donnée disponible</p>
+            <p className="text-sm text-[#8a8a8a] text-center py-2">Aucune donnée disponible</p>
           )}
         </div>
       )}
@@ -617,7 +617,7 @@ export default function EntityTree() {
           ta structure et ses <em>sous-clubs, pôles, sections</em>, ainsi que les{" "}
           <em>tiers externes</em> (banque, fournisseurs).
         </p>
-        <p className="text-xs text-[#666] mt-1 leading-relaxed">
+        <p className="text-xs text-[#8a8a8a] mt-1 leading-relaxed">
           Pour classer <span className="text-[#B0B0B0]">la nature</span> des dépenses (matériel,
           transport…), utilise plutôt{" "}
           <a href="/categories" className="text-[#F2C48D] hover:underline">Catégories</a>.
@@ -721,14 +721,14 @@ export default function EntityTree() {
                     {isAdmin && (
                       <>
                         <button
-                          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-white transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-white transition-opacity"
                           onClick={(e2) => { e2.stopPropagation(); setEditingEntity(e); }}
                           title="Modifier"
                         >
                           <Pencil size={13} />
                         </button>
                         <button
-                          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#FF5252] transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-[#FF5252] transition-opacity"
                           onClick={(e2) => { e2.stopPropagation(); requestDelete(e.id); }}
                           title="Supprimer"
                         >

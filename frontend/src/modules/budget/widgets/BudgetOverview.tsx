@@ -39,8 +39,8 @@ export default function BudgetOverview() {
   if (!selectedYear) {
     return (
       <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-3">Budget</p>
-        <p className="text-sm text-[#666]">
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-3">Budget</p>
+        <p className="text-sm text-[#8a8a8a]">
           <Link to="/budget" className="text-[#F2C48D] hover:underline">Crée un exercice</Link> pour activer le suivi.
         </p>
       </div>
@@ -49,9 +49,9 @@ export default function BudgetOverview() {
   if (!view) {
     return (
       <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-3">Budget</p>
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-3">Budget</p>
         <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden mb-3 animate-pulse" />
-        <p className="text-sm text-[#666]">Chargement…</p>
+        <p className="text-sm text-[#8a8a8a]">Chargement…</p>
       </div>
     );
   }
@@ -79,18 +79,18 @@ export default function BudgetOverview() {
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-3 gap-2">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider truncate min-w-0">{title}</p>
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider truncate min-w-0">{title}</p>
         <Link to="/budget" className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5 flex-shrink-0">
           Détail <ArrowRight size={11} />
         </Link>
       </div>
       {selectedEntityId && !scopedNode && (
-        <p className="text-xs text-[#666] mb-2">
+        <p className="text-xs text-[#8a8a8a] mb-2">
           Aucune ligne budgétaire pour cette entité : chiffres globaux affichés.
         </p>
       )}
       {allocated === 0 ? (
-        <p className="text-sm text-[#666] mb-3">
+        <p className="text-sm text-[#8a8a8a] mb-3">
           {formatEuros(realized)} dépensés — aucun budget alloué sur ce périmètre.{" "}
           <Link to="/budget" className="text-[#F2C48D] hover:underline">Budgéter</Link>
         </p>
@@ -105,13 +105,13 @@ export default function BudgetOverview() {
           {allocated - realized < 0 ? (
             <p className="text-xs text-[#FF5252] mb-3">Dépassement {formatEuros(realized - allocated)}</p>
           ) : (
-            <p className="text-xs text-[#666] mb-3">Reste {formatEuros(allocated - realized)}</p>
+            <p className="text-xs text-[#8a8a8a] mb-3">Reste {formatEuros(allocated - realized)}</p>
           )}
         </>
       )}
       {overspending.length > 0 && (
         <div className="mt-2 pt-3 border-t border-[#1a1a1a]">
-          <p className="text-xs text-[#666] uppercase tracking-wider mb-1.5">Top dépassements</p>
+          <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-1.5">Top dépassements</p>
           <div className="space-y-1">
             {overspending.map((e: any) => (
               <div key={e.entity_id} className="flex items-center justify-between text-xs gap-2">

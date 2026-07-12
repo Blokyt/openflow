@@ -35,7 +35,7 @@ export default function ModuleDiscoveryHint() {
     <div className="bg-gradient-to-br from-[#F2C48D]/10 to-transparent border border-[#F2C48D]/20 rounded-2xl p-5 mb-6 relative">
       <button
         onClick={handleDismiss}
-        className="absolute top-3 right-3 text-[#666] hover:text-white p-1"
+        className="absolute top-3 right-3 text-[#8a8a8a] hover:text-white p-1"
         aria-label="Fermer"
       >
         <X size={14} />

@@ -23,7 +23,7 @@ export default function ContextBar() {
     <div className="flex flex-wrap items-center gap-2 px-6 py-2 bg-[#0a0a0a] border-b border-[#1a1a1a] text-xs">
       {selectedEntity && (
         <span className="flex items-center gap-1.5 bg-[#111] border border-[#222] rounded-full px-3 py-1 text-[#B0B0B0]">
-          <span className="text-[#666]">Entité :</span>
+          <span className="text-[#8a8a8a]">Entité :</span>
           <span className="text-white font-medium">{selectedEntity.name}</span>
           {isAdmin && (
             <button
@@ -38,7 +38,7 @@ export default function ContextBar() {
       )}
       {selectedYear && (
         <span className="flex items-center gap-1.5 bg-[#111] border border-[#222] rounded-full px-3 py-1 text-[#B0B0B0]">
-          <span className="text-[#666]">Exercice :</span>
+          <span className="text-[#8a8a8a]">Exercice :</span>
           <span className="text-white font-medium">{selectedYear.name}</span>
           <button
             onClick={() => setSelectedYearId(null)}

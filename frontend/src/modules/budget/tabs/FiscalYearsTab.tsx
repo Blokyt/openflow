@@ -117,17 +117,17 @@ export default function FiscalYearsTab() {
 
       <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
         {years.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[#666]">
+          <div className="py-8 text-center text-sm text-[#8a8a8a]">
             Aucun exercice. Crée le premier pour activer le suivi budgétaire.
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#666] uppercase">Nom</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#666] uppercase">Début</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#666] uppercase">Fin</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-[#666] uppercase">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[#8a8a8a] uppercase">Nom</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[#8a8a8a] uppercase">Début</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[#8a8a8a] uppercase">Fin</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-[#8a8a8a] uppercase">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -137,7 +137,7 @@ export default function FiscalYearsTab() {
                     <td colSpan={4} className="px-4 py-3">
                       <div className="flex flex-wrap items-end gap-3">
                         <div>
-                          <label className="block text-xs text-[#666] mb-1">Nom</label>
+                          <label className="block text-xs text-[#8a8a8a] mb-1">Nom</label>
                           <input
                             value={editForm.name}
                             onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -145,7 +145,7 @@ export default function FiscalYearsTab() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-[#666] mb-1">Début</label>
+                          <label className="block text-xs text-[#8a8a8a] mb-1">Début</label>
                           <input
                             type="date"
                             value={editForm.start_date}
@@ -154,7 +154,7 @@ export default function FiscalYearsTab() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-[#666] mb-1">Président</label>
+                          <label className="block text-xs text-[#8a8a8a] mb-1">Président</label>
                           <input
                             value={editForm.president_name}
                             onChange={(e) => setEditForm({ ...editForm, president_name: e.target.value })}
@@ -162,7 +162,7 @@ export default function FiscalYearsTab() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-[#666] mb-1">Trésorier</label>
+                          <label className="block text-xs text-[#8a8a8a] mb-1">Trésorier</label>
                           <input
                             value={editForm.tresorier_name}
                             onChange={(e) => setEditForm({ ...editForm, tresorier_name: e.target.value })}
@@ -177,7 +177,7 @@ export default function FiscalYearsTab() {
                           >
                             Enregistrer
                           </button>
-                          <button onClick={() => setEditingId(null)} className="text-[#666] hover:text-white">
+                          <button onClick={() => setEditingId(null)} className="text-[#8a8a8a] hover:text-white">
                             Annuler
                           </button>
                         </div>
@@ -195,7 +195,7 @@ export default function FiscalYearsTab() {
                       </span>
                     )}
                     {(y.president_name || y.tresorier_name) && (
-                      <div className="text-xs text-[#666] font-normal mt-0.5">
+                      <div className="text-xs text-[#8a8a8a] font-normal mt-0.5">
                         {y.president_name && <>Prés. {y.president_name}</>}
                         {y.president_name && y.tresorier_name && " · "}
                         {y.tresorier_name && <>Trés. {y.tresorier_name}</>}
@@ -236,7 +236,7 @@ export default function FiscalYearsTab() {
                         >
                           Confirmer
                         </button>
-                        <button onClick={() => setClosingId(null)} className="text-[#666]">
+                        <button onClick={() => setClosingId(null)} className="text-[#8a8a8a]">
                           Annuler
                         </button>
                       </span>
@@ -244,15 +244,15 @@ export default function FiscalYearsTab() {
                     {isAdmin && (
                       confirmDelete === y.id ? (
                         <span className="inline-flex items-center gap-2 text-xs">
-                          <span className="text-[#666]">Supprimer ?</span>
+                          <span className="text-[#8a8a8a]">Supprimer ?</span>
                           <button onClick={() => doDelete(y.id)} className="text-[#FF5252] font-semibold">Oui</button>
-                          <button onClick={() => setConfirmDelete(null)} className="text-[#666]">Non</button>
+                          <button onClick={() => setConfirmDelete(null)} className="text-[#8a8a8a]">Non</button>
                         </span>
                       ) : (
                         closingId !== y.id && (
                           <button
                             onClick={() => setConfirmDelete(y.id)}
-                            className="p-1.5 text-[#666] hover:text-[#FF5252]"
+                            className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252]"
                             title="Supprimer"
                           >
                             <Trash2 size={14} strokeWidth={1.5} />

@@ -88,7 +88,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
           <h2 className="text-base font-semibold text-white">
             Nouvel exercice — étape {step}/2
           </h2>
-          <button onClick={onClose} className="text-[#666] hover:text-white">
+          <button onClick={onClose} className="text-[#8a8a8a] hover:text-white">
             <X size={18} />
           </button>
         </div>
@@ -169,17 +169,17 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
                       />
                       <span>
                         <span className="text-white">{opt.label}</span>
-                        <span className="block text-xs text-[#666]">{opt.hint}</span>
+                        <span className="block text-xs text-[#8a8a8a]">{opt.hint}</span>
                       </span>
                     </label>
                   ))}
                 </fieldset>
               ) : (
-                <p className="text-sm text-[#666]">
+                <p className="text-sm text-[#8a8a8a]">
                   Aucun exercice précédent : tu partiras d'un budget vide.
                 </p>
               )}
-              <p className="text-sm text-[#666]">
+              <p className="text-sm text-[#8a8a8a]">
                 Tu pourras affiner les allocations à tout moment depuis l'onglet Catégories.
               </p>
             </div>

@@ -101,13 +101,13 @@ function RolesEditor({
   }
 
   if (entities.length === 0) {
-    return <p className="text-xs text-[#666]">Aucune entité disponible : crée d'abord une entité.</p>;
+    return <p className="text-xs text-[#8a8a8a]">Aucune entité disponible : crée d'abord une entité.</p>;
   }
 
   return (
     <div className="space-y-2">
       {rows.length === 0 && (
-        <p className="text-xs text-[#666] mb-1">Aucun rôle attribué pour l'instant.</p>
+        <p className="text-xs text-[#8a8a8a] mb-1">Aucun rôle attribué pour l'instant.</p>
       )}
       {rows.map((r, idx) => (
         <div key={idx} className="flex items-center gap-2">
@@ -133,7 +133,7 @@ function RolesEditor({
           <button
             type="button"
             onClick={() => removeRow(idx)}
-            className="p-2 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+            className="p-2 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
             title="Retirer ce rôle"
           >
             <Trash2 size={14} strokeWidth={1.5} />
@@ -316,7 +316,7 @@ export default function UsersAdmin() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Utilisateurs</h1>
-          <p className="text-sm text-[#666] mt-1">Comptes, connexions et rôles par entité.</p>
+          <p className="text-sm text-[#8a8a8a] mt-1">Comptes, connexions et rôles par entité.</p>
         </div>
         <button onClick={openInvite} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
           <Plus size={15} /> Inviter
@@ -347,12 +347,12 @@ export default function UsersAdmin() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Nom</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Rôles</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Dernière connexion</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Statut</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Email</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Nom</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Rôles</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Dernière connexion</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Statut</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -438,10 +438,10 @@ export default function UsersAdmin() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Rôle prévu</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Expire le</th>
-                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#666] uppercase tracking-wider">Actions</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Email</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Rôle prévu</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Expire le</th>
+                <th className="px-5 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -459,12 +459,12 @@ export default function UsersAdmin() {
                   <td className="px-5 py-3.5 text-right">
                     {confirmDeleteInvite === inv.id ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-[#666]">Supprimer ?</span>
+                        <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
                         <button onClick={() => handleDeleteInvitation(inv.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
-                        <button onClick={() => setConfirmDeleteInvite(null)} className="text-xs font-medium text-[#666] hover:text-white">Non</button>
+                        <button onClick={() => setConfirmDeleteInvite(null)} className="text-xs font-medium text-[#8a8a8a] hover:text-white">Non</button>
                       </span>
                     ) : (
-                      <button onClick={() => setConfirmDeleteInvite(inv.id)} className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
+                      <button onClick={() => setConfirmDeleteInvite(inv.id)} className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
                         <Trash2 size={14} strokeWidth={1.5} />
                       </button>
                     )}
@@ -491,10 +491,10 @@ export default function UsersAdmin() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Date</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Email</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Adresse IP</th>
-                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#666] uppercase tracking-wider">Résultat</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Date</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Email</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Adresse IP</th>
+                <th className="px-5 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Résultat</th>
               </tr>
             </thead>
             <tbody>
@@ -526,9 +526,9 @@ export default function UsersAdmin() {
             <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Modifier les rôles</h2>
-                <p className="text-xs text-[#666] mt-0.5">{rolesUser.email}</p>
+                <p className="text-xs text-[#8a8a8a] mt-0.5">{rolesUser.email}</p>
               </div>
-              <button onClick={closeRoles} className="text-[#666] hover:text-white"><X size={18} /></button>
+              <button onClick={closeRoles} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
             </div>
             {rolesError && (
               <div className="mx-6 mt-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{rolesError}</div>
@@ -553,9 +553,9 @@ export default function UsersAdmin() {
             <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Inviter un utilisateur</h2>
-                <p className="text-xs text-[#666] mt-0.5">Génère un lien d'invitation à usage unique.</p>
+                <p className="text-xs text-[#8a8a8a] mt-0.5">Génère un lien d'invitation à usage unique.</p>
               </div>
-              <button onClick={closeInvite} className="text-[#666] hover:text-white"><X size={18} /></button>
+              <button onClick={closeInvite} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
             </div>
 
             {inviteError && (
@@ -615,7 +615,7 @@ export default function UsersAdmin() {
                     <button type="button" onClick={() => setInviteIsAdmin(true)} className={segBtnClass(inviteIsAdmin)}>Oui</button>
                     <button type="button" onClick={() => setInviteIsAdmin(false)} className={segBtnClass(!inviteIsAdmin)}>Non</button>
                   </div>
-                  <p className="text-xs text-[#666] mt-1.5">Un administrateur a accès à toutes les entités et à toutes les fonctionnalités.</p>
+                  <p className="text-xs text-[#8a8a8a] mt-1.5">Un administrateur a accès à toutes les entités et à toutes les fonctionnalités.</p>
                 </div>
                 {!inviteIsAdmin && (
                   <div>

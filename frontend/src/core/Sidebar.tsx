@@ -156,7 +156,7 @@ function EntitySelector() {
               className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
               onClick={handleClear}
             >
-              <span className="flex-1 text-[#666]">Toutes les entités</span>
+              <span className="flex-1 text-[#8a8a8a]">Toutes les entités</span>
               {selectedEntityId === null && <Check size={12} className="text-[#F2C48D]" />}
             </button>
           )}
@@ -245,7 +245,7 @@ function NavItem({ to, label, icon: Icon, badge, badgeTitle }: { to: string; lab
         `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
           isActive
             ? "text-white bg-[#111]"
-            : "text-[#666] hover:bg-[#111] hover:text-white"
+            : "text-[#8a8a8a] hover:bg-[#111] hover:text-white"
         }`
       }
     >

@@ -61,7 +61,7 @@ export default function Reports() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
             Rapports comptables
           </h1>
-          <p className="text-sm text-[#666] mt-1">
+          <p className="text-sm text-[#8a8a8a] mt-1">
             {scoped && scopeName
               ? `Périmètre « ${scopeName} » : le club et ses sous-entités (les dotations reçues comptent comme produits).`
               : "Compte de résultat et bilan de l'exercice, sur le périmètre consolidé de l'association."}
@@ -104,7 +104,7 @@ export default function Reports() {
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
                 ? "border-[#F2C48D] text-white"
-                : "border-transparent text-[#666] hover:text-white"
+                : "border-transparent text-[#8a8a8a] hover:text-white"
             }`}
           >
             {t.label}
@@ -230,7 +230,7 @@ function ResultatSection({
         <tbody>
           {(!postes || postes.length === 0) && (
             <tr>
-              <td className="px-5 py-4 text-[#666]" colSpan={2}>Aucun montant sur l'exercice.</td>
+              <td className="px-5 py-4 text-[#8a8a8a]" colSpan={2}>Aucun montant sur l'exercice.</td>
             </tr>
           )}
           {postes?.map((p) => (
@@ -242,7 +242,7 @@ function ResultatSection({
                 {p.categories?.length > 0 && (
                   <div className="mt-1 space-y-0.5">
                     {p.categories.map((c: any) => (
-                      <div key={`${c.category_id}`} className="flex justify-between text-xs text-[#666] pl-6">
+                      <div key={`${c.category_id}`} className="flex justify-between text-xs text-[#8a8a8a] pl-6">
                         <span>{c.category_name}</span>
                         <span>{formatEuros(c.montant)}</span>
                       </div>
@@ -348,7 +348,7 @@ function BilanRow({
       {detail && detail.length > 0 && (
         <div className="px-5 pb-3 -mt-1 space-y-0.5">
           {detail.map((d: any) => (
-            <div key={d.category_id ?? d.category_name} className="flex justify-between text-xs text-[#666] pl-6">
+            <div key={d.category_id ?? d.category_name} className="flex justify-between text-xs text-[#8a8a8a] pl-6">
               <span>{d.category_name}</span>
               <span>{formatEuros(d.montant)}</span>
             </div>
@@ -467,7 +467,7 @@ function PlanComptableTab() {
         <div className="rounded-2xl border border-[#222] bg-[#111] overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[#666] text-xs font-medium uppercase border-b border-[#222]">
+              <tr className="text-[#8a8a8a] text-xs font-medium uppercase border-b border-[#222]">
                 <th className="px-5 py-3 text-left">Catégorie</th>
                 <th className="px-5 py-3 text-left">Compte comptable</th>
               </tr>
@@ -686,7 +686,7 @@ function AccrualList({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white">{title}</h2>
       </div>
       {items.length === 0 ? (
-        <div className="px-5 py-4 text-sm text-[#666]">Aucune saisie.</div>
+        <div className="px-5 py-4 text-sm text-[#8a8a8a]">Aucune saisie.</div>
       ) : (
         <table className="w-full text-sm">
           <tbody>
@@ -695,7 +695,7 @@ function AccrualList({
                 <td className="px-5 py-3 text-white">
                   {a.label}
                   {(a.category_name || a.entity_name) && (
-                    <span className="text-xs text-[#666] ml-2">
+                    <span className="text-xs text-[#8a8a8a] ml-2">
                       {[a.category_name, a.entity_name].filter(Boolean).join(" · ")}
                     </span>
                   )}
@@ -704,7 +704,7 @@ function AccrualList({
                 <td className="px-3 py-3 text-right">
                   <button
                     onClick={() => onDelete(a.id)}
-                    className="text-[#666] hover:text-[#FF5252] transition"
+                    className="text-[#8a8a8a] hover:text-[#FF5252] transition"
                     title="Supprimer"
                   >
                     <Trash2 size={15} strokeWidth={1.5} />

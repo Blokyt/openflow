@@ -224,7 +224,7 @@ export default function BalanceRefsSection() {
               className={`${idx > 0 ? "border-t border-[#1a1a1a]" : ""} px-5 py-3 hover:bg-[#1a1a1a] transition-colors`}
             >
               {/* Mobile label */}
-              <div className="md:hidden text-xs text-[#666] mb-2 font-medium">{entity.name}</div>
+              <div className="md:hidden text-xs text-[#8a8a8a] mb-2 font-medium">{entity.name}</div>
 
               <div className="grid grid-cols-1 md:grid-cols-[1fr_110px_130px_160px_130px_44px] gap-x-3 gap-y-2 items-center">
 

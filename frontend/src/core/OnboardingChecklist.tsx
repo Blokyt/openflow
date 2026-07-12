@@ -37,7 +37,7 @@ export default function OnboardingChecklist() {
           localStorage.setItem(DISMISS_KEY, "true");
           setDismissed(true);
         }}
-        className="absolute top-3 right-3 text-[#666] hover:text-white p-1"
+        className="absolute top-3 right-3 text-[#8a8a8a] hover:text-white p-1"
         aria-label="Fermer"
       >
         <X size={14} />
@@ -63,7 +63,7 @@ export default function OnboardingChecklist() {
                   </span>
                   <span className="block text-xs text-[#888]">{s.desc}</span>
                 </span>
-                <ArrowRight size={13} className="text-[#666] group-hover:text-[#F2C48D] flex-shrink-0" />
+                <ArrowRight size={13} className="text-[#8a8a8a] group-hover:text-[#F2C48D] flex-shrink-0" />
               </Link>
             ))}
           </div>

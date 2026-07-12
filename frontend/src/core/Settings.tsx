@@ -54,7 +54,7 @@ function MyAccountSection() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-white">{user?.display_name}</p>
-            <p className="text-xs text-[#666]">{user?.email}</p>
+            <p className="text-xs text-[#8a8a8a]">{user?.email}</p>
           </div>
           <button
             onClick={handleLogout}
@@ -66,7 +66,7 @@ function MyAccountSection() {
 
         <div className="border-t border-[#1a1a1a] pt-5">
           <form onSubmit={onSubmit} className="space-y-3 max-w-sm">
-            <p className="text-xs text-[#666]">Changer de mot de passe</p>
+            <p className="text-xs text-[#8a8a8a]">Changer de mot de passe</p>
             <input
               type="password"
               required
@@ -169,7 +169,7 @@ function EditableField({
   if (editing) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-[#666] text-sm w-40 flex-shrink-0">{label}</span>
+        <span className="text-[#8a8a8a] text-sm w-40 flex-shrink-0">{label}</span>
         {type === "select" && options ? (
           <select
             value={draft}
@@ -205,12 +205,12 @@ function EditableField({
 
   return (
     <div className="flex items-center justify-between group">
-      <span className="text-[#666] text-sm">{label}</span>
+      <span className="text-[#8a8a8a] text-sm">{label}</span>
       <div className="flex items-center gap-2">
         <span className="font-medium text-white text-sm">{displayValue ?? (value || "—")}</span>
         <button
           onClick={() => setEditing(true)}
-          className="opacity-0 group-hover:opacity-100 text-[#666] hover:text-[#F2C48D] transition-opacity p-1"
+          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-[#F2C48D] transition-opacity p-1"
         >
           <Pencil size={14} />
         </button>
@@ -350,7 +350,7 @@ export default function Settings() {
               {mod.help && (
                 <button
                   onClick={() => setExpandedHelp(isExpanded ? null : mod.id)}
-                  className="text-[#666] hover:text-[#F2C48D] p-0.5"
+                  className="text-[#8a8a8a] hover:text-[#F2C48D] p-0.5"
                   aria-label={`Aide pour ${mod.name}`}
                 >
                   <Info size={14} />
@@ -358,7 +358,7 @@ export default function Settings() {
               )}
             </div>
             {isCore ? (
-              <span className="text-xs text-[#666] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full">
+              <span className="text-xs text-[#8a8a8a] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full">
                 Toujours actif
               </span>
             ) : (
@@ -378,7 +378,7 @@ export default function Settings() {
 
           {location && (
             <div className="flex items-center gap-1.5 text-xs text-[#B0B0B0]">
-              <MapPin size={11} className="text-[#666]" />
+              <MapPin size={11} className="text-[#8a8a8a]" />
               <span>{location}</span>
             </div>
           )}
@@ -388,7 +388,7 @@ export default function Settings() {
           )}
 
           {mod.example && (
-            <p className="text-xs text-[#666] italic leading-relaxed">
+            <p className="text-xs text-[#8a8a8a] italic leading-relaxed">
               Exemple : {mod.example}
             </p>
           )}
@@ -486,7 +486,7 @@ export default function Settings() {
 
               <section className="space-y-6">
                 <h2 className="text-base font-semibold text-white">Modules</h2>
-                <p className="text-xs text-[#666] -mt-4">
+                <p className="text-xs text-[#8a8a8a] -mt-4">
                   Active un module pour le voir apparaître dans la barre latérale à gauche.
                   Chaque module activé = un onglet fonctionnel.
                 </p>
@@ -501,9 +501,9 @@ export default function Settings() {
                   return (
                     <div key={catKey}>
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">{label}</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8a8a8a]">{label}</h3>
                         <div className="flex items-center gap-3">
-                          <span className="text-xs text-[#666]">{activeCount}/{catModules.length} actifs</span>
+                          <span className="text-xs text-[#8a8a8a]">{activeCount}/{catModules.length} actifs</span>
                           {isCoreGroup && (
                             <button
                               onClick={() => setShowCoreModules((v) => !v)}
@@ -530,8 +530,8 @@ export default function Settings() {
                   return (
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#666]">Autre</h3>
-                        <span className="text-xs text-[#666]">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8a8a8a]">Autre</h3>
+                        <span className="text-xs text-[#8a8a8a]">
                           {orphans.filter((m) => m.active).length}/{orphans.length} actifs
                         </span>
                       </div>

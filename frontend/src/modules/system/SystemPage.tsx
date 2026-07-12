@@ -191,29 +191,29 @@ export default function SystemPage() {
       {/* Health overview */}
       <section className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-          <div className="flex items-center gap-2 text-[#666] text-xs uppercase tracking-wider mb-2">
+          <div className="flex items-center gap-2 text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">
             <Database size={13} /> Données utilisateur
           </div>
           <p className="text-2xl font-bold text-white">{status.totals.user_data_human}</p>
-          <p className="text-xs text-[#666] mt-1">
+          <p className="text-xs text-[#8a8a8a] mt-1">
             DB + attachments + backups
           </p>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-          <div className="flex items-center gap-2 text-[#666] text-xs uppercase tracking-wider mb-2">
+          <div className="flex items-center gap-2 text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">
             <FileUp size={13} /> Temporaire
           </div>
           <p className="text-2xl font-bold text-white">{status.totals.temp_human}</p>
-          <p className="text-xs text-[#666] mt-1">
+          <p className="text-xs text-[#8a8a8a] mt-1">
             {status.temp_imports.length} fichier(s) import en attente
           </p>
         </div>
         <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-          <div className="flex items-center gap-2 text-[#666] text-xs uppercase tracking-wider mb-2">
+          <div className="flex items-center gap-2 text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">
             <HardDrive size={13} /> Code
           </div>
           <p className="text-2xl font-bold text-white">{status.totals.code_human}</p>
-          <p className="text-xs text-[#666] mt-1">
+          <p className="text-xs text-[#8a8a8a] mt-1">
             backend + frontend (sans node_modules)
           </p>
         </div>
@@ -226,9 +226,9 @@ export default function SystemPage() {
         </h2>
         {status.db.connected ? (
           <div className="grid grid-cols-3 gap-3 text-sm">
-            <div><span className="text-[#666]">Tables</span><p className="text-white font-medium">{status.db.tables_count}</p></div>
-            <div><span className="text-[#666]">Transactions</span><p className="text-white font-medium">{status.db.transactions}</p></div>
-            <div><span className="text-[#666]">Entités</span><p className="text-white font-medium">{status.db.entities}</p></div>
+            <div><span className="text-[#8a8a8a]">Tables</span><p className="text-white font-medium">{status.db.tables_count}</p></div>
+            <div><span className="text-[#8a8a8a]">Transactions</span><p className="text-white font-medium">{status.db.transactions}</p></div>
+            <div><span className="text-[#8a8a8a]">Entités</span><p className="text-white font-medium">{status.db.entities}</p></div>
           </div>
         ) : (
           <p className="text-red-400 text-sm">Connexion impossible: {status.db.error}</p>
@@ -244,7 +244,7 @@ export default function SystemPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-white">Aucun snapshot de référence</p>
-              <p className="text-xs text-[#666] mt-1">
+              <p className="text-xs text-[#8a8a8a] mt-1">
                 Créez un snapshot de l'état actuel pour pouvoir réparer plus tard.
               </p>
             </div>
@@ -314,10 +314,10 @@ export default function SystemPage() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
             <Archive size={15} /> Sauvegardes automatiques
-            <span className="text-xs text-[#666] font-normal">({status.backups.length})</span>
+            <span className="text-xs text-[#8a8a8a] font-normal">({status.backups.length})</span>
           </h2>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-[#666]">Garder max</span>
+            <span className="text-[#8a8a8a]">Garder max</span>
             {editingBackups ? (
               <>
                 <input
@@ -341,14 +341,14 @@ export default function SystemPage() {
         </div>
 
         {status.backups.length === 0 ? (
-          <p className="text-xs text-[#666] text-center py-4">Aucune sauvegarde</p>
+          <p className="text-xs text-[#8a8a8a] text-center py-4">Aucune sauvegarde</p>
         ) : (
           <div className="space-y-1.5">
             {status.backups.slice().reverse().map((b) => (
               <div key={b.name} className="flex items-center justify-between bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg px-3 py-2 text-xs">
                 <div className="flex-1 min-w-0">
                   <p className="text-[#ccc] truncate">{b.name}</p>
-                  <p className="text-[#666] mt-0.5">
+                  <p className="text-[#8a8a8a] mt-0.5">
                     {new Date(b.mtime).toLocaleString("fr-FR")} · il y a {formatAge(b.age_seconds)}
                   </p>
                 </div>
@@ -377,14 +377,14 @@ export default function SystemPage() {
             {status.temp_imports.map((t) => (
               <div key={t.name} className="flex items-center justify-between bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg px-3 py-2 text-xs">
                 <span className="text-[#ccc] truncate flex-1">{t.name}</span>
-                <span className="text-[#666] mx-3">{t.size_human}</span>
-                <span className={t.age_hours > status.settings.temp_max_age_hours ? "text-red-400" : "text-[#666]"}>
+                <span className="text-[#8a8a8a] mx-3">{t.size_human}</span>
+                <span className={t.age_hours > status.settings.temp_max_age_hours ? "text-red-400" : "text-[#8a8a8a]"}>
                   il y a {formatAge(t.age_hours * 3600)}
                 </span>
               </div>
             ))}
           </div>
-          <p className="text-xs text-[#666] mt-2">
+          <p className="text-xs text-[#8a8a8a] mt-2">
             Les fichiers de plus de {status.settings.temp_max_age_hours}h sont supprimés au nettoyage.
           </p>
         </section>
@@ -402,7 +402,7 @@ export default function SystemPage() {
             <div className="flex items-center gap-2 text-white font-medium text-sm">
               <Trash2 size={14} /> Nettoyer les temporaires
             </div>
-            <p className="text-xs text-[#666]">
+            <p className="text-xs text-[#8a8a8a]">
               Supprime les imports non commités &gt; {status.settings.temp_max_age_hours}h et purge les backups au-delà de {status.settings.max_backups}.
             </p>
           </button>
@@ -414,7 +414,7 @@ export default function SystemPage() {
             <div className="flex items-center gap-2 text-white font-medium text-sm">
               <Wrench size={14} /> Réparer l'application
             </div>
-            <p className="text-xs text-[#666]">
+            <p className="text-xs text-[#8a8a8a]">
               Restaure le code depuis le snapshot initial. Tes données et config sont préservées.
             </p>
           </button>

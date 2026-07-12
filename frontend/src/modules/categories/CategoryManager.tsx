@@ -51,7 +51,7 @@ function CategoryNode({
           )
         ) : (
           (cat.tx_count ?? 0) > 0 && (
-            <span className="text-xs text-[#666] mr-1">
+            <span className="text-xs text-[#8a8a8a] mr-1">
               {cat.tx_count} · {formatEuros(cat.tx_total ?? 0)}
             </span>
           )
@@ -60,14 +60,14 @@ function CategoryNode({
           <span className="hidden group-hover:inline-flex items-center gap-1">
             <button
               onClick={() => onEdit(cat)}
-              className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
+              className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors"
               title="Modifier"
             >
               <Pencil size={12} strokeWidth={1.5} />
             </button>
             <button
               onClick={() => onDelete(cat.id)}
-              className="p-1.5 text-[#666] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+              className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
               title="Supprimer"
             >
               <Trash2 size={12} strokeWidth={1.5} />
@@ -139,7 +139,7 @@ function EditRow({
       >
         <Check size={14} strokeWidth={1.5} />
       </button>
-      <button onClick={onCancel} className="p-1.5 text-[#666] hover:text-white rounded-lg hover:bg-[#222] transition-colors">
+      <button onClick={onCancel} className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors">
         <X size={14} strokeWidth={1.5} />
       </button>
     </div>
@@ -257,7 +257,7 @@ export default function CategoryManager() {
             </button>
             <button
               onClick={() => setConfirmDelete(null)}
-              className="text-xs font-medium text-[#666] hover:text-white"
+              className="text-xs font-medium text-[#8a8a8a] hover:text-white"
             >
               Non
             </button>
@@ -286,13 +286,13 @@ export default function CategoryManager() {
         Les catégories décrivent <span className="text-white font-medium">la nature</span> d'une
         transaction (ex&nbsp;: <em>matériel, transport, cotisations, sponsoring</em>).
       </p>
-      <p className="text-xs text-[#666] mb-2 leading-relaxed">
+      <p className="text-xs text-[#8a8a8a] mb-2 leading-relaxed">
         Pour modéliser <span className="text-[#B0B0B0]">qui gère le budget</span> (sous-clubs,
         pôles, sections), utilise plutôt{" "}
         <a href="/entities" className="text-[#F2C48D] hover:underline">Entités</a>.
       </p>
       {(selectedEntity || selectedYear) && (
-        <p className="text-xs text-[#666] mb-8">
+        <p className="text-xs text-[#8a8a8a] mb-8">
           Statistiques comptées pour{" "}
           {selectedEntity ? (
             <span className="text-[#F2C48D] font-medium">{selectedEntity.name} et sous-entités</span>
@@ -358,7 +358,7 @@ export default function CategoryManager() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
           </div>
         ) : tree.length === 0 ? (
-          <p className="text-center text-[#666] text-sm py-8">
+          <p className="text-center text-[#8a8a8a] text-sm py-8">
             Aucune catégorie. Créez-en une ci-dessus.
           </p>
         ) : (
