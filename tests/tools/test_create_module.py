@@ -128,3 +128,39 @@ def test_create_module_snake_case_component_name(tmp_path):
     index_path = project / "frontend" / "src" / "modules" / "my_cool_module" / "index.tsx"
     content = index_path.read_text()
     assert "MyCoolModule" in content
+
+
+# ---------------------------------------------------------------------------
+# Validation stricte de l'id de module (FIX 8) : un id avec tiret générerait
+# du Python invalide (`def list_mon-module():` -> SyntaxError).
+# ---------------------------------------------------------------------------
+
+def test_create_module_rejects_hyphenated_id(tmp_path):
+    """Un id avec tiret est refusé avant toute création de fichier (exit code 1)."""
+    project = make_project(tmp_path)
+    result = run_create("mon-module", project)
+    assert result.returncode != 0
+    assert "invalide" in result.stderr.lower()
+    # Aucun fichier ne doit avoir été créé pour un id refusé.
+    assert not (project / "backend" / "modules" / "mon-module").exists()
+
+
+def test_create_module_rejects_uppercase_id(tmp_path):
+    """Un id avec majuscules est refusé (convention snake_case stricte)."""
+    project = make_project(tmp_path)
+    result = run_create("MonModule", project)
+    assert result.returncode != 0
+
+
+def test_create_module_rejects_id_starting_with_digit(tmp_path):
+    """Un id commençant par un chiffre est refusé (invalide comme nom de fonction Python)."""
+    project = make_project(tmp_path)
+    result = run_create("1module", project)
+    assert result.returncode != 0
+
+
+def test_create_module_accepts_valid_snake_case_id(tmp_path):
+    """Un id valide (minuscules, chiffres, underscores, commence par une lettre) passe."""
+    project = make_project(tmp_path)
+    result = run_create("mon_module_2", project)
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"

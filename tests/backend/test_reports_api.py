@@ -211,6 +211,33 @@ def test_bilan_tresorerie(client):
     assert entities[int_e["id"]]["solde"] == 15000  # 20000 - 5000
 
 
+def test_bilan_tresorerie_total_actif_est_une_somme_signee(client):
+    """Une entité racine en découvert réduit le total_actif au lieu de contribuer 0
+    (régression : l'ancien code ne sommait que les soldes strictement positifs)."""
+    int_ok = _make_entity(client, "BDA", "internal")
+    int_deficit = _make_entity(client, "Gastronomine", "internal")
+    ext_e = _make_entity(client, "Ext", "external")
+
+    # Racine bénéficiaire : +300 € = 30000 c
+    _make_tx(client, date="2025-06-01", label="Recette", amount=30000,
+             from_entity_id=ext_e["id"], to_entity_id=int_ok["id"])
+    # Racine en découvert : dépense de 100 € sans recette -> solde = -10000 c
+    _make_tx(client, date="2025-06-10", label="Dépense sans recette", amount=10000,
+             from_entity_id=int_deficit["id"], to_entity_id=ext_e["id"])
+
+    r = client.get("/api/reports/bilan")
+    assert r.status_code == 200, r.text
+    data = r.json()
+
+    entities = {e["entity_id"]: e for e in data["tresorerie_par_entite"]}
+    assert entities[int_ok["id"]]["solde"] == 30000
+    assert entities[int_deficit["id"]]["solde"] == -10000
+    # Somme signée : 30000 + (-10000) = 20000 (et non 30000 si le découvert
+    # avait été ignoré).
+    assert data["total_actif"] == 20000
+    assert "positifs" not in data["hypotheses"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Guard d'autorisation (simplifié : plus d'auth, accès toujours ouvert)
 # ---------------------------------------------------------------------------

@@ -29,6 +29,18 @@ def test_list_contacts_empty(client):
     assert r.json()["items"] == []
 
 
+def test_list_contacts_negative_limit_rejected(client):
+    """limit négatif → 422 (même quirk SQLite que sur /api/transactions)."""
+    r = client.get("/api/tiers/?limit=-1")
+    assert r.status_code == 422
+
+
+def test_list_contacts_negative_offset_rejected(client):
+    """offset négatif → 422."""
+    r = client.get("/api/tiers/?offset=-1")
+    assert r.status_code == 422
+
+
 def test_pagination_limit_offset(client):
     for i in range(5):
         _create(client, name=f"Contact {i:02d}")

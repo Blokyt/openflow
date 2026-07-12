@@ -2,7 +2,7 @@
   "id": "direns",
   "name": "DirENS",
   "description": "Export Excel pré-rempli au format DirENS (bilan financier réalisé + budget prévisionnel)",
-  "help": "Génère le fichier Excel officiel demandé par la DirENS à partir des données de l'app. Les deux premiers onglets (bilan financier et budget prévisionnel) sont remplis automatiquement : un club par colonne, les dépenses ventilées par catégorie et affichées en NET (déduites des recettes d'activité directement associées, comme la billetterie ou les ventes). Une recette part en section financement (jamais déduite) si sa catégorie est une ressource du plan comptable (subvention, cotisation, don) OU si elle dépasse la dépense associée : ainsi aucune dépense n'apparaît jamais en négatif. Le 3e onglet (demande de subventions) reste vierge.",
+  "help": "Génère le fichier Excel officiel demandé par la DirENS à partir des données de l'app. Les deux premiers onglets (bilan financier et budget prévisionnel) sont remplis automatiquement : un club par colonne, les dépenses ventilées par catégorie. Pour chaque couple club/catégorie, le solde net (recettes moins dépenses) détermine l'affectation : net positif, la catégorie part en section financement, sous son propre nom ; net négatif, elle reste en dépense réelle, pour son montant absolu. Aucune distinction entre subvention, cotisation ou don, aucun plan comptable : une catégorie qui rapporte plus qu'elle ne coûte va en financement, une catégorie qui coûte plus qu'elle ne rapporte va en dépense. Le 3e onglet (demande de subventions) reste vierge.",
   "version": "1.0.0",
   "origin": "builtin",
   "category": "standard",
@@ -17,5 +17,5 @@
   "db_models": ["models.py"],
   "dashboard_widgets": [],
   "settings_schema": {},
-  "example": "J'exporte le bilan DirENS 2025-2026 : dépenses nettes par catégorie (soirée à 800 € moins 600 € de billetterie = 200 €), seules les subventions en financement."
+  "example": "J'exporte le bilan DirENS 2025-2026 : dépenses nettes par catégorie (soirée à 800 € moins 600 € de billetterie = 200 €) ; une catégorie ne bascule en financement que si son solde net est positif."
 }

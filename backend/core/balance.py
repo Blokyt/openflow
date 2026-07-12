@@ -92,11 +92,21 @@ def _get_balance_mode(conn: sqlite3.Connection, entity_id: int) -> str:
 
 
 def _subtree_ids(conn: sqlite3.Connection, entity_id: int) -> list:
-    """IDs de l'entité et de tous ses descendants internes (CTE récursive)."""
+    """IDs de l'entité et de tous ses descendants internes (CTE récursive).
+
+    Garde anti-cycle : `UNION` (et non `UNION ALL`) déduplique les lignes déjà
+    produites. Un id déjà présent n'est pas remis en file d'attente : un cycle
+    parent_id (import/migration/correction manuelle) ne boucle donc jamais
+    indéfiniment. Note : `WHERE e.id NOT IN (SELECT id FROM tree)` provoquerait
+    une erreur SQLite ("multiple recursive references: tree") car `tree` est
+    déjà référencée par le JOIN de ce même terme récursif ; `UNION` seul suffit
+    et reste sémantiquement équivalent ici (chaque entité n'a qu'un seul parent,
+    donc aucune ligne légitime n'est jamais dupliquée hors cycle).
+    """
     return [
         row[0] for row in conn.execute(
             """WITH RECURSIVE tree(id) AS (
-                   SELECT ? UNION ALL
+                   SELECT ? UNION
                    SELECT e.id FROM entities e JOIN tree t ON e.parent_id = t.id
                    WHERE e.type = 'internal'
                ) SELECT id FROM tree""",

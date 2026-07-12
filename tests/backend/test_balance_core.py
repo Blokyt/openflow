@@ -186,3 +186,25 @@ def test_entity_balance_as_of_before_reference_date(client_and_db):
         assert compute_entity_balance(conn, ent["id"], as_of_date="2026-05-15")["balance"] == 96836
     finally:
         conn.close()
+
+
+def test_subtree_ids_guards_against_parent_cycle(tmp_path):
+    """Un cycle parent_id (A.parent=B, B.parent=A) créé par erreur en base ne doit
+    jamais faire boucler indéfiniment le calcul de solde consolidé (FIX 3 :
+    garde anti-cycle `e.id NOT IN (SELECT id FROM tree)` dans la CTE récursive)."""
+    from backend.core.balance import get_subtree_ids, compute_consolidated_balance
+
+    conn = _make_db(tmp_path)
+    conn.execute("INSERT INTO entities (id, name, type, parent_id) VALUES (1, 'A', 'internal', 2)")
+    conn.execute("INSERT INTO entities (id, name, type, parent_id) VALUES (2, 'B', 'internal', 1)")
+    conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (1, '2025-01-01', 100, '2025-01-01')")
+    conn.execute("INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at) VALUES (2, '2025-01-01', 200, '2025-01-01')")
+    conn.commit()
+
+    # Termine sans boucle infinie et ne renvoie chaque id qu'une seule fois.
+    ids = get_subtree_ids(conn, 1)
+    assert sorted(ids) == [1, 2]
+
+    result = compute_consolidated_balance(conn, 1)
+    conn.close()
+    assert result["consolidated_balance"] == pytest.approx(300.0)

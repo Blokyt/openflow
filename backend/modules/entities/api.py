@@ -15,6 +15,14 @@ router = APIRouter()
 VALID_TYPES = {"internal", "external"}
 
 
+def _validate_internal_parent(conn, parent_id: int):
+    """Vérifie qu'un parent existe et qu'il est de type 'internal'."""
+    parent = conn.execute("SELECT type FROM entities WHERE id = ?", (parent_id,)).fetchone()
+    if not parent:
+        raise HTTPException(404, f"Parent entity {parent_id} not found")
+    if parent["type"] != "internal":
+        raise HTTPException(400, "Parent must be an internal entity")
+
 
 class EntityCreate(BaseModel):
     name: str
@@ -88,11 +96,7 @@ def create_entity(entity: EntityCreate):
 
         # Validate parent exists and is internal
         if entity.parent_id is not None:
-            parent = conn.execute("SELECT type FROM entities WHERE id = ?", (entity.parent_id,)).fetchone()
-            if not parent:
-                raise HTTPException(404, f"Parent entity {entity.parent_id} not found")
-            if parent["type"] != "internal":
-                raise HTTPException(400, "Parent must be an internal entity")
+            _validate_internal_parent(conn, entity.parent_id)
 
         # Only root entities (parent_id IS NULL) can use 'aggregate' mode
         balance_mode = entity.balance_mode or "own"
@@ -199,6 +203,11 @@ def update_entity(entity_id: int, update: EntityUpdate):
             new_parent = fields["parent_id"]
             if new_parent == entity_id:
                 raise HTTPException(400, "Entity cannot be its own parent")
+            # parent_id explicitement null = détacher vers la racine, toujours
+            # autorisé sans validation. Sinon, le nouveau parent doit exister
+            # et être 'internal' (même contrainte qu'à la création).
+            if new_parent is not None:
+                _validate_internal_parent(conn, new_parent)
             # Walk up from proposed parent to check for cycles
             current = new_parent
             while current:

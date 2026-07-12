@@ -2,6 +2,7 @@
 """Scaffold a new OpenFlow module."""
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -64,6 +65,12 @@ def main():
         "--origin", default="custom", choices=["builtin", "custom"]
     )
     args = parser.parse_args()
+
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", args.module_id):
+        print(f"Erreur : id de module invalide '{args.module_id}'. "
+              "Utilise uniquement des minuscules, chiffres et underscores, "
+              "en commençant par une lettre (ex: mon_module).", file=sys.stderr)
+        sys.exit(1)
 
     project = Path(args.project_dir)
     backend_dir = project / "backend" / "modules" / args.module_id

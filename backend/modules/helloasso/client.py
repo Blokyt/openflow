@@ -45,7 +45,10 @@ class HelloAssoClient:
             raise HelloAssoError(f"Connexion à HelloAsso impossible : {e}")
         if resp.status_code != 200:
             raise HelloAssoError(f"Authentification HelloAsso échouée ({resp.status_code})")
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            raise HelloAssoError("Réponse d'authentification HelloAsso illisible")
         token = data.get("access_token")
         if not token:
             raise HelloAssoError("Réponse d'authentification HelloAsso invalide")
@@ -64,7 +67,10 @@ class HelloAssoClient:
             raise HelloAssoError("Accès refusé (403) : vérifie les droits de ta clé API HelloAsso")
         if resp.status_code != 200:
             raise HelloAssoError(f"Erreur API HelloAsso ({resp.status_code})")
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError:
+            raise HelloAssoError("Réponse HelloAsso illisible")
 
     def _paginate(self, path: str, base_params: dict) -> list:
         results = []

@@ -602,13 +602,12 @@ def _bilan_instantane(conn) -> dict:
         bal = compute_consolidated_balance(conn, eid)
         solde = bal.get("consolidated_balance", bal.get("balance", 0))
         tresorerie.append({"entity_id": eid, "name": ename, "solde": solde})
-        if solde > 0:
-            total_actif += solde
+        total_actif += solde
     return {
         "tresorerie_par_entite": tresorerie,
         "total_actif": total_actif,
         "hypotheses": (
-            "Actif = soldes consolidés positifs des entités internes racines. "
+            "Actif = somme des soldes consolidés des entités internes racines (découverts inclus, comptés négativement). "
             "Montants en centimes. Virements internes neutralisés dans le consolidé."
         ),
     }

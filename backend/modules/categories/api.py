@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
+from backend.core.balance import get_subtree_ids
 from backend.core.database import get_conn, row_to_dict
 
 router = APIRouter()
@@ -72,13 +73,7 @@ def get_tree(
         params: list = []
         if entity_id is not None:
             if include_children:
-                scope = [r[0] for r in conn.execute(
-                    """WITH RECURSIVE tree(id) AS (
-                           SELECT ? UNION ALL
-                           SELECT e.id FROM entities e JOIN tree t ON e.parent_id = t.id
-                       ) SELECT id FROM tree""",
-                    (entity_id,),
-                ).fetchall()]
+                scope = get_subtree_ids(conn, entity_id)
             else:
                 scope = [entity_id]
             ph = ",".join("?" * len(scope))

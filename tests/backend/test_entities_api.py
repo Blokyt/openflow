@@ -175,6 +175,30 @@ def test_update_entity_not_found(client):
     assert resp.status_code == 404
 
 
+def test_update_entity_parent_not_found(client):
+    """PUT /{id} avec un parent_id inexistant → 404 (même contrainte qu'à la création)."""
+    entity = _create_internal(client, name="Orphelin").json()
+    resp = client.put(f"/api/entities/{entity['id']}", json={"parent_id": 999999})
+    assert resp.status_code == 404
+
+
+def test_update_entity_parent_external_rejected(client):
+    """PUT /{id} avec un parent_id pointant sur une entité 'external' → 400."""
+    entity = _create_internal(client, name="Enfant").json()
+    ext = _create_external(client, name="Fournisseur").json()
+    resp = client.put(f"/api/entities/{entity['id']}", json={"parent_id": ext["id"]})
+    assert resp.status_code == 400
+
+
+def test_update_entity_parent_null_detaches_without_validation(client):
+    """parent_id explicitement null = détacher vers la racine, toujours autorisé."""
+    parent = _create_internal(client, name="Parent").json()
+    child = _create_internal(client, name="Enfant2", parent_id=parent["id"]).json()
+    resp = client.put(f"/api/entities/{child['id']}", json={"parent_id": None})
+    assert resp.status_code == 200
+    assert resp.json()["parent_id"] is None
+
+
 def test_delete_entity(client):
     """DELETE /{id} removes the entity → 200."""
     entity = _create_internal(client, name="ToDelete").json()

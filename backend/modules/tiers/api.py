@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user
@@ -36,8 +36,8 @@ class ContactUpdate(BaseModel):
 def list_contacts(
     type: Optional[str] = None,
     search: Optional[str] = None,
-    limit: int = 80,
-    offset: int = 0,
+    limit: int = Query(80, ge=1),
+    offset: int = Query(0, ge=0),
 ):
     conn = get_conn()
     try:

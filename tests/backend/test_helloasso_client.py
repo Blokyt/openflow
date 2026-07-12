@@ -4,11 +4,14 @@ from backend.modules.helloasso.client import HelloAssoClient, asso_share_cents, 
 
 
 class FakeResp:
-    def __init__(self, status_code, payload):
+    def __init__(self, status_code, payload=None, raise_on_json=False):
         self.status_code = status_code
         self._payload = payload
+        self._raise_on_json = raise_on_json
 
     def json(self):
+        if self._raise_on_json:
+            raise ValueError("corps non-JSON (page de maintenance, proxy, etc.)")
         return self._payload
 
 
@@ -69,6 +72,25 @@ def test_get_token_malformed_body_raises():
     c = _client(http)
     with pytest.raises(HelloAssoError):
         c._get_token()
+
+
+def test_get_token_non_json_body_raises():
+    """Réponse 200 dont .json() lève ValueError (corps non-JSON) -> HelloAssoError,
+    pas un JSONDecodeError brut remontant en 500."""
+    http = FakeHttp(FakeResp(200, raise_on_json=True), [])
+    c = _client(http)
+    with pytest.raises(HelloAssoError):
+        c._get_token()
+
+
+def test_get_non_json_body_raises():
+    """Même garde côté _get : un corps non-JSON sur l'API elle-même lève HelloAssoError."""
+    token = FakeResp(200, {"access_token": "tok", "expires_in": 1800})
+    bad = FakeResp(200, raise_on_json=True)
+    http = FakeHttp(token, [bad])
+    c = _client(http)
+    with pytest.raises(HelloAssoError):
+        c._get("/organizations/bda-ens/forms", {})
 
 
 def test_fetch_forms_paginates():
