@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import zipfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
@@ -52,16 +53,28 @@ def _export_table(conn, table_name, existing: set[str]):
 
 
 def _restore_table(conn, table_name: str, rows: list[dict], existing: set[str]):
-    """Delete all rows from table and re-insert from dicts. Skips missing tables."""
-    if not rows or table_name not in existing:
+    """Vide la table puis ré-insère depuis les dicts. Saute les tables absentes.
+
+    - Toujours vider la table si elle existe (même si `rows` est vide), pour que
+      la restauration soit réellement complète (« replacing all existing data »).
+    - Les noms de colonnes du fichier importé sont validés contre les colonnes
+      réelles de la table (allowlist via PRAGMA table_info) pour empêcher toute
+      injection SQL par identifiant, et quotés en identifiants SQLite.
+    """
+    if table_name not in existing:
         return
     conn.execute(f"DELETE FROM {table_name}")
-    columns = list(rows[0].keys())
+    if not rows:
+        return
+    valid_cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    columns = [c for c in rows[0].keys() if c in valid_cols]
+    if not columns:
+        return
+    col_names = ", ".join(f'"{c}"' for c in columns)
     placeholders = ", ".join(["?"] * len(columns))
-    col_names = ", ".join(columns)
     for row in rows:
         values = [row.get(c) for c in columns]
-        conn.execute(f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})", values)
+        conn.execute(f'INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})', values)
 
 
 def _snapshot_db(src_path: str, dest_path: str) -> None:
@@ -102,7 +115,7 @@ def export_backup():
         conn.close()
 
     # Read config.yaml
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
+    config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
     config_content = ""
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
@@ -185,7 +198,7 @@ async def import_backup(file: UploadFile = File(...)):
     # Restore config.yaml if present
     if "config.yaml" in zf.namelist():
         config_content = zf.read("config.yaml").decode("utf-8")
-        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
+        config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
         with open(config_path, "w", encoding="utf-8") as f:
             f.write(config_content)
 

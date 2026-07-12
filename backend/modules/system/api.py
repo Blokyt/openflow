@@ -407,7 +407,10 @@ def repair(body: RepairRequest):
                     # NEVER restore config.yaml or anything in data/
                     if info.filename.startswith("data/") or info.filename == "config.yaml":
                         continue
-                    target = PROJECT_ROOT / info.filename
+                    target = (PROJECT_ROOT / info.filename).resolve()
+                    if not target.is_relative_to(PROJECT_ROOT.resolve()):
+                        # Zip-slip : une entrée qui sortirait de la racine est ignorée.
+                        continue
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(info) as src, open(target, "wb") as dst:
                         shutil.copyfileobj(src, dst)
