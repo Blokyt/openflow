@@ -183,14 +183,16 @@ def test_import_snapshot_coherent_sous_wal(client_and_db):
         # Donnée écrite via l'API juste avant l'import (reste dans le -wal).
         ext = _entity(client, "Fournisseur WAL", "external")
 
-        # Import valide minimal (data.json vide : aucune table réécrite).
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w") as zf:
-            zf.writestr("metadata.json", json.dumps({"tables": {}}))
-            zf.writestr("data.json", json.dumps({}))
+        # Import valide : on réimporte un export complet de l'état courant. Il
+        # inclut les utilisateurs, requis par la garde anti-verrouillage de
+        # l'import (un backup sans utilisateurs est refusé en 400 pour ne pas
+        # verrouiller l'accès). Le test ne vérifie de toute façon que la
+        # cohérence du snapshot pris AVANT la restauration.
+        exp = client.get("/api/backup/export")
+        assert exp.status_code == 200, exp.text
         r = client.post(
             "/api/backup/import",
-            files={"file": ("b.zip", buffer.getvalue(), "application/zip")},
+            files={"file": ("b.zip", exp.content, "application/zip")},
         )
         assert r.status_code == 200, r.text
         backup_path = r.json()["backup_created"]
