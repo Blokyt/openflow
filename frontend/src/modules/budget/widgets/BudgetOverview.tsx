@@ -46,7 +46,15 @@ export default function BudgetOverview() {
       </div>
     );
   }
-  if (!view) return null;
+  if (!view) {
+    return (
+      <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
+        <p className="text-xs font-medium text-[#666] uppercase tracking-wider mb-3">Budget</p>
+        <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden mb-3 animate-pulse" />
+        <p className="text-sm text-[#666]">Chargement…</p>
+      </div>
+    );
+  }
 
   // Périmètre : si une entité est sélectionnée globalement, le widget se limite
   // à son sous-arbre (mêmes chiffres que la page Budget filtrée). Sinon, total global.
@@ -70,9 +78,9 @@ export default function BudgetOverview() {
 
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-medium text-[#666] uppercase tracking-wider">{title}</p>
-        <Link to="/budget" className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <p className="text-xs font-medium text-[#666] uppercase tracking-wider truncate min-w-0">{title}</p>
+        <Link to="/budget" className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5 flex-shrink-0">
           Détail <ArrowRight size={11} />
         </Link>
       </div>
@@ -106,9 +114,9 @@ export default function BudgetOverview() {
           <p className="text-xs text-[#666] uppercase tracking-wider mb-1.5">Top dépassements</p>
           <div className="space-y-1">
             {overspending.map((e: any) => (
-              <div key={e.entity_id} className="flex items-center justify-between text-xs">
-                <span className="text-white">{e.entity_name}</span>
-                <span className="text-[#FF5252] font-medium">
+              <div key={e.entity_id} className="flex items-center justify-between text-xs gap-2">
+                <span className="text-white truncate min-w-0">{e.entity_name}</span>
+                <span className="text-[#FF5252] font-medium flex-shrink-0">
                   {((e.realized_expense / e.allocated_expense) * 100).toFixed(0)} %
                 </span>
               </div>

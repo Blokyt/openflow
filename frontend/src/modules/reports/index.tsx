@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FileDown, AlertTriangle, Plus, Trash2, Sparkles } from "lucide-react";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import { useEntity } from "../../core/EntityContext";
+import ConfirmDialog from "../../core/ConfirmDialog";
 import { api } from "../../api";
 import { formatEuros, eurosToCents } from "../../utils/format";
 
@@ -220,7 +221,7 @@ function ResultatSection({
   titre, postes, total, accent, totalLabel,
 }: { titre: string; postes: any[]; total: number; accent: string; totalLabel: string }) {
   return (
-    <div className="rounded-2xl border border-[#222] bg-[#111] overflow-hidden">
+    <div className="rounded-2xl border border-[#222] bg-[#111] overflow-x-auto">
       <div className="px-5 py-3 border-b border-[#222] flex items-center gap-2">
         <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white">{titre}</h2>
@@ -463,7 +464,7 @@ function PlanComptableTab() {
       )}
 
       {rows.length > 0 && (
-        <div className="rounded-2xl border border-[#222] bg-[#111] overflow-hidden">
+        <div className="rounded-2xl border border-[#222] bg-[#111] overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[#666] text-xs font-medium uppercase border-b border-[#222]">
@@ -531,6 +532,8 @@ function ClotureTab({ year }: { year: any }) {
   const [entityId, setEntityId] = useState("");
   const [saving, setSaving] = useState(false);
   const [clotureError, setClotureError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   function reload() {
     if (!year) return;
@@ -575,9 +578,19 @@ function ClotureTab({ year }: { year: any }) {
     }
   }
 
-  async function remove(id: number) {
-    await api.deleteAccrual(id);
-    reload();
+  async function confirmRemove() {
+    if (pendingDelete == null) return;
+    setDeleting(true);
+    try {
+      await api.deleteAccrual(pendingDelete);
+      setPendingDelete(null);
+      reload();
+    } catch (e: any) {
+      setClotureError(e?.message || "Erreur lors de la suppression");
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const creances = accruals.filter((a) => a.kind === "creance");
@@ -646,8 +659,19 @@ function ClotureTab({ year }: { year: any }) {
         </div>
       </div>
 
-      <AccrualList title="Restes à recevoir (créances)" items={creances} onDelete={remove} accent={COLOR_OK} />
-      <AccrualList title="Restes à payer (dettes)" items={dettes} onDelete={remove} accent={COLOR_KO} />
+      <AccrualList title="Restes à recevoir (créances)" items={creances} onDelete={(id) => setPendingDelete(id)} accent={COLOR_OK} />
+      <AccrualList title="Restes à payer (dettes)" items={dettes} onDelete={(id) => setPendingDelete(id)} accent={COLOR_KO} />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        danger
+        title="Supprimer cette écriture ?"
+        message="Cette écriture de clôture (créance ou dette) sera définitivement supprimée et le bilan de l'exercice recalculé."
+        confirmLabel="Supprimer"
+        busy={deleting}
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

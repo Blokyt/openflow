@@ -37,7 +37,7 @@ export default function CategoriesTab({ year }: Props) {
           Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités.
         </p>
       )}
-    <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+    <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#1a1a1a] text-[#666]">

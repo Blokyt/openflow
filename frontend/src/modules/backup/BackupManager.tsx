@@ -66,18 +66,20 @@ export default function BackupManager() {
     }
   };
 
+  const selectFile = (file: File) => {
+    if (!file.name.endsWith(".zip")) {
+      setError("Le fichier doit être un .zip");
+      return;
+    }
+    setSelectedFile(file);
+    setConfirmImport(true);
+    setError("");
+    setImportResult(null);
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (!file.name.endsWith(".zip")) {
-        setError("Le fichier doit être un .zip");
-        return;
-      }
-      setSelectedFile(file);
-      setConfirmImport(true);
-      setError("");
-      setImportResult(null);
-    }
+    if (file) selectFile(file);
   };
 
   const handleImport = async () => {
@@ -217,6 +219,13 @@ export default function BackupManager() {
 
         {/* Drop zone */}
         <label
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (importing) return;
+            const file = e.dataTransfer.files?.[0];
+            if (file) selectFile(file);
+          }}
           className={`flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
             importing
               ? "border-[#555] bg-[#111] cursor-not-allowed"

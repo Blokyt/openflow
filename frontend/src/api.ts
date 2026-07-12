@@ -1,6 +1,11 @@
 const BASE_URL = "/api";
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, { headers: { "Content-Type": "application/json" }, ...options });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, { headers: { "Content-Type": "application/json" }, ...options });
+  } catch {
+    throw new Error("Erreur de connexion au serveur. Vérifie ta connexion et réessaie.");
+  }
   if (!response.ok) {
     // Session expirée en cours d'usage : retour forcé à l'écran de connexion.
     // On exclut les endpoints d'authentification eux-mêmes : /users/login (un
@@ -14,8 +19,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ) {
       window.location.reload();
     }
-    const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(error.detail || response.statusText);
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Erreur ${response.status} : réponse inattendue du serveur.`);
   }
   return response.json();
 }
@@ -26,7 +31,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // qu'aucun appel ne laisse une bannière technique sur une page qui a l'air
 // encore connectée.
 export async function rawFetch(path: string, options?: RequestInit): Promise<Response> {
-  const response = await fetch(`${BASE_URL}${path}`, options);
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, options);
+  } catch {
+    throw new Error("Erreur de connexion au serveur. Vérifie ta connexion et réessaie.");
+  }
   if (response.status === 401 && path !== "/users/login" && path !== "/users/me") {
     window.location.reload();
   }
@@ -233,8 +243,8 @@ export const api = {
     formData.append("file", file);
     const response = await rawFetch(`/attachments/submission/${id}`, { method: "POST", body: formData });
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || response.statusText);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Erreur ${response.status} : réponse inattendue du serveur.`);
     }
     return response.json();
   },
@@ -252,8 +262,8 @@ export const api = {
     formData.append("file", file);
     const response = await rawFetch(`/backup/import`, { method: "POST", body: formData });
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || response.statusText);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Erreur ${response.status} : réponse inattendue du serveur.`);
     }
     return response.json();
   },
@@ -279,8 +289,8 @@ export const api = {
   ) => {
     const response = await rawFetch(`/reports/${kind}/pdf?${reportQuery(params)}`);
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || response.statusText);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Erreur ${response.status} : réponse inattendue du serveur.`);
     }
     const blob = await response.blob();
     triggerBlobDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), `${kind}.pdf`));
@@ -328,8 +338,8 @@ export const api = {
     if (params.assoc_name) q.set("assoc_name", params.assoc_name);
     const response = await rawFetch(`/direns/export?${q.toString()}`);
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || response.statusText);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Erreur ${response.status} : réponse inattendue du serveur.`);
     }
     const blob = await response.blob();
     triggerBlobDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), "DirENS.xlsx"));
