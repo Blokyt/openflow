@@ -227,6 +227,7 @@ export default function Dashboard() {
   const { selectedYear } = useFiscalYear();
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     const eid = selectedEntityId ?? undefined;
     const today = new Date().toISOString().slice(0, 10);
@@ -240,14 +241,22 @@ export default function Dashboard() {
       api.getRecentTransactions(eid, 5, dateFrom, dateTo),
     ])
       .then(([s, ts, tc, rt]) => {
+        // Garde anti-course : si l'entité/exercice a changé pendant le
+        // chargement, cet effet est déjà obsolète, on ignore sa réponse.
+        if (cancelled) return;
         setSummary(s);
         setSeries(ts);
         setCats(tc);
         setRecent(rt);
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [selectedEntityId, selectedYear?.id]);
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedEntityId, selectedYear?.id, selectedYear?.start_date, selectedYear?.end_date]);
 
   if (loading) {
     return (

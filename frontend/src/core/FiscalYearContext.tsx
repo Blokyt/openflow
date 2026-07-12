@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { api } from "../api";
+import Spinner from "./Spinner";
 
 export interface FiscalYear {
   id: number;
@@ -37,6 +38,9 @@ export function FiscalYearProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem("openflow_fiscal_year_id");
     return stored ? parseInt(stored, 10) : null;
   });
+  // Passe à true dès que la liste des exercices a été résolue une première
+  // fois (voir la garde de rendu plus bas).
+  const [ready, setReady] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -44,6 +48,8 @@ export function FiscalYearProvider({ children }: { children: ReactNode }) {
       setYears(data as FiscalYear[]);
     } catch {
       setYears([]);
+    } finally {
+      setReady(true);
     }
   }, []);
 
@@ -60,6 +66,13 @@ export function FiscalYearProvider({ children }: { children: ReactNode }) {
   const currentYear = years.find((y) => y.end_date === null) ?? null;
   const selectedYear =
     (selectedYearId ? years.find((y) => y.id === selectedYearId) : null) ?? currentYear;
+
+  // Tant que la liste des exercices n'a pas été résolue une première fois, on
+  // n'expose pas les enfants : cela évite au Dashboard d'afficher un flash de
+  // totaux toute-période (sans filtre d'exercice) avant de se recorriger.
+  if (!ready) {
+    return <Spinner />;
+  }
 
   return (
     <FiscalYearContext.Provider

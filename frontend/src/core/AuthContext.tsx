@@ -61,6 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await api.logout();
+    } catch {
+      // Déconnexion best-effort : même si l'appel réseau échoue, le but (oublier
+      // la session côté client) est atteint par le finally. On avale l'erreur
+      // pour ne pas casser la redirection post-déconnexion appelée par Settings.
     } finally {
       setUser(null);
     }
