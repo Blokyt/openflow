@@ -91,7 +91,7 @@ function ContactCombobox({
   }
 
   async function handleCreate() {
-    if (!newName.trim()) return;
+    if (saving || !newName.trim()) return;
     setSaving(true);
     try {
       const created = await api.createContact({ name: newName.trim(), type: newType });
@@ -113,6 +113,8 @@ function ContactCombobox({
           <button
             type="button"
             onClick={clearContact}
+            aria-label="Retirer le contact"
+            title="Retirer le contact"
             className="text-[#555] hover:text-[#FF5252] transition-colors ml-2"
           >
             <X size={14} />
@@ -165,7 +167,7 @@ function ContactCombobox({
                 placeholder="Nom du contact"
                 className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder-[#444]"
                 autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreate(); } }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !saving) { e.preventDefault(); handleCreate(); } }}
               />
               <select
                 value={newType}
@@ -227,7 +229,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         : ""
   );
   const [toEntityId, setToEntityId] = useState<string>(
-    initial?.to_entity_id !== undefined ? String(initial.to_entity_id) : ""
+    initial?.to_entity_id != null ? String(initial.to_entity_id) : ""
   );
   const [payerContactId, setPayerContactId] = useState<string>(
     initial?.reimb_contact_id != null ? String(initial.reimb_contact_id) : ""
@@ -313,8 +315,9 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelClass}>Date</label>
+          <label htmlFor="tx-date" className={labelClass}>Date</label>
           <input
+            id="tx-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -323,23 +326,25 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           />
         </div>
         <div>
-          <label className={labelClass}>Montant (€)</label>
+          <label htmlFor="tx-amount" className={labelClass}>Montant (€)</label>
           <input
+            id="tx-amount"
             type="number"
             step="0.01"
             min="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
-            placeholder="0.00"
+            placeholder="0,00"
             className={inputClass}
           />
         </div>
       </div>
 
       <div>
-        <label className={labelClass}>Libellé</label>
+        <label htmlFor="tx-label" className={labelClass}>Libellé</label>
         <input
+          id="tx-label"
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
@@ -351,8 +356,8 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelClass}>Source (d'où part l'argent)</label>
-          <select value={fromEntityId} onChange={(e) => setFromEntityId(e.target.value)} required className={inputClass}>
+          <label htmlFor="tx-from" className={labelClass}>Source (d'où part l'argent)</label>
+          <select id="tx-from" value={fromEntityId} onChange={(e) => setFromEntityId(e.target.value)} required className={inputClass}>
             <option value="">— Choisir —</option>
             <optgroup label="Mes comptes (internes)">
               {internalEntities.map((ent) => (
@@ -367,8 +372,8 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
           </select>
         </div>
         <div>
-          <label className={labelClass}>Destination (où va l'argent)</label>
-          <select value={toEntityId} onChange={(e) => setToEntityId(e.target.value)} required className={inputClass}>
+          <label htmlFor="tx-to" className={labelClass}>Destination (où va l'argent)</label>
+          <select id="tx-to" value={toEntityId} onChange={(e) => setToEntityId(e.target.value)} required className={inputClass}>
             <option value="">— Choisir —</option>
             <optgroup label="Mes comptes (internes)">
               {internalEntities.map((ent) => (
@@ -395,8 +400,8 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
       )}
 
       <div>
-        <label className={labelClass}>Catégorie</label>
-        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+        <label htmlFor="tx-category" className={labelClass}>Catégorie</label>
+        <select id="tx-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
           <option value="">— Sans catégorie —</option>
           {categories.map((cat) => (
             <option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -430,8 +435,9 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
       </div>
 
       <div>
-        <label className={labelClass}>Description</label>
+        <label htmlFor="tx-description" className={labelClass}>Description</label>
         <textarea
+          id="tx-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
