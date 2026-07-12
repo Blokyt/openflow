@@ -75,7 +75,7 @@ def test_export_import_round_trip_preserves_data(client_and_db):
 
 
 # --------------------------------------------------------------------------- #
-# 2. FIX 1 : intégrité — une table vide dans le backup doit vider la table
+# 2. FIX 1 : intégrité - une table vide dans le backup doit vider la table
 # --------------------------------------------------------------------------- #
 
 def test_import_empties_table_that_is_empty_in_backup(client_and_db):
@@ -103,7 +103,7 @@ def test_import_empties_table_that_is_empty_in_backup(client_and_db):
 
 
 # --------------------------------------------------------------------------- #
-# 3. FIX 3 : anti-injection — noms de colonnes du JSON importé sous allowlist
+# 3. FIX 3 : anti-injection - noms de colonnes du JSON importé sous allowlist
 # --------------------------------------------------------------------------- #
 
 def test_import_ignores_unknown_column_names_no_sql_error(client_and_db):
@@ -171,3 +171,66 @@ def test_config_path_resolves_to_actual_project_root():
     project_root = Path(__file__).resolve().parent.parent.parent
     assert resolved == project_root / "config.yaml"
     assert resolved.parent.name != "backend"
+
+
+# --------------------------------------------------------------------------- #
+# 5. CRITICAL : garde anti-verrouillage - un import sans utilisateurs est refusé
+# --------------------------------------------------------------------------- #
+
+def _fetch_user_count(db_path):
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_import_with_empty_users_list_is_rejected_and_does_not_wipe_users(client_and_db):
+    """Un backup dont data.json contient "users": [] doit être refusé (400) :
+    l'accepter viderait la table `users` (restauration complète) et
+    verrouillerait tout le monde hors de l'application. La table `users` doit
+    rester intacte après l'appel (régression CRITICAL corrigée)."""
+    client, db_path = client_and_db
+    users_before = _fetch_user_count(db_path)
+    assert users_before >= 1  # l'admin de la fixture existe déjà
+
+    zf = _export_zip(client)
+    metadata_bytes = zf.read("metadata.json")
+    data = json.loads(zf.read("data.json"))
+    assert len(data["users"]) >= 1  # l'export contient bien l'utilisateur admin
+
+    data["users"] = []  # simule un backup partiel où la table users était vide
+    zip_bytes = _build_import_zip(metadata_bytes, data)
+
+    r = client.post(
+        "/api/backup/import",
+        files={"file": ("backup.zip", zip_bytes, "application/zip")},
+    )
+    assert r.status_code == 400, r.text
+
+    users_after = _fetch_user_count(db_path)
+    assert users_after == users_before  # table users non vidée
+
+
+def test_import_without_users_key_is_rejected_and_does_not_wipe_users(client_and_db):
+    """Un data.json qui omet carrément la clé "users" (format d'une autre
+    version, JSON édité à la main) doit aussi être refusé, pas seulement le cas
+    d'une liste vide explicite."""
+    client, db_path = client_and_db
+    users_before = _fetch_user_count(db_path)
+    assert users_before >= 1
+
+    zf = _export_zip(client)
+    metadata_bytes = zf.read("metadata.json")
+    data = json.loads(zf.read("data.json"))
+    del data["users"]
+    zip_bytes = _build_import_zip(metadata_bytes, data)
+
+    r = client.post(
+        "/api/backup/import",
+        files={"file": ("backup.zip", zip_bytes, "application/zip")},
+    )
+    assert r.status_code == 400, r.text
+
+    users_after = _fetch_user_count(db_path)
+    assert users_after == users_before

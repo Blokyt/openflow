@@ -95,13 +95,20 @@ def _subtree_ids(conn: sqlite3.Connection, entity_id: int) -> list:
     """IDs de l'entité et de tous ses descendants internes (CTE récursive).
 
     Garde anti-cycle : `UNION` (et non `UNION ALL`) déduplique les lignes déjà
-    produites. Un id déjà présent n'est pas remis en file d'attente : un cycle
-    parent_id (import/migration/correction manuelle) ne boucle donc jamais
-    indéfiniment. Note : `WHERE e.id NOT IN (SELECT id FROM tree)` provoquerait
-    une erreur SQLite ("multiple recursive references: tree") car `tree` est
-    déjà référencée par le JOIN de ce même terme récursif ; `UNION` seul suffit
-    et reste sémantiquement équivalent ici (chaque entité n'a qu'un seul parent,
-    donc aucune ligne légitime n'est jamais dupliquée hors cycle).
+    produites. Un id déjà présent n'est pas remis en file d'attente : la CTE
+    elle-même ne boucle donc jamais indéfiniment. Note : `WHERE e.id NOT IN
+    (SELECT id FROM tree)` provoquerait une erreur SQLite ("multiple recursive
+    references: tree") car `tree` est déjà référencée par le JOIN de ce même
+    terme récursif ; `UNION` seul suffit et reste sémantiquement équivalent ici
+    (chaque entité n'a qu'un seul parent, donc aucune ligne légitime n'est
+    jamais dupliquée hors cycle).
+
+    Cette garde ne protège que la traversée interne de cette CTE. Le mode
+    `balance_mode='aggregate'` récupère ses enfants par une requête SQL directe
+    et rappelle `compute_consolidated_balance` sans passer par `_subtree_ids` :
+    la protection générale contre les cycles (y compris ce mode) est assurée
+    par l'ensemble `_visited` propagé par `compute_consolidated_balance` et
+    `_compute_aggregate_consolidated`.
     """
     return [
         row[0] for row in conn.execute(
@@ -124,10 +131,16 @@ def _compute_aggregate_consolidated(
     conn: sqlite3.Connection,
     entity_id: int,
     as_of_date: Optional[str] = None,
+    _visited: Optional[set] = None,
 ) -> dict:
     """Pour une entité en mode 'aggregate', le consolidé = ref + flux externes
     du sous-arbre (transactions qui traversent la frontière du sous-arbre).
     Les transferts internes au sous-arbre s'annulent et sont ignorés.
+
+    `_visited` : ensemble d'ids déjà en cours de consolidation, propagé par
+    `compute_consolidated_balance` pour détecter un cycle entre entités en
+    mode 'aggregate' (les enfants sont récupérés ici par requête SQL directe,
+    hors de la CTE anti-cycle `_subtree_ids`).
     """
     ref = conn.execute(
         "SELECT reference_date, reference_amount FROM entity_balance_refs WHERE entity_id = ?",
@@ -193,7 +206,7 @@ def _compute_aggregate_consolidated(
         "SELECT id FROM entities WHERE parent_id = ? AND type = 'internal'", (entity_id,)
     ).fetchall():
         child_id = row[0] if isinstance(row, tuple) else row["id"]
-        children.append(compute_consolidated_balance(conn, child_id, as_of_date))
+        children.append(compute_consolidated_balance(conn, child_id, as_of_date, _visited))
 
     own_balance = consolidated - sum(c["consolidated_balance"] for c in children)
 
@@ -290,12 +303,35 @@ def compute_consolidated_balance(
     conn: sqlite3.Connection,
     entity_id: int,
     as_of_date: Optional[str] = None,
+    _visited: Optional[set] = None,
 ) -> dict:
-    """Solde consolidé : propre + tous les descendants internes."""
+    """Solde consolidé : propre + tous les descendants internes.
+
+    `_visited` (interne, rétro-compatible) : ensemble des ids déjà en cours de
+    consolidation dans cet appel. Garde anti-cycle pour le mode 'aggregate',
+    dont les enfants sont récupérés hors de la CTE anti-cycle `_subtree_ids`
+    (voir `_compute_aggregate_consolidated`). En usage normal (arbre sans
+    cycle), cet ensemble ne fait qu'accumuler des ids déjà uniques et ne
+    change pas le résultat.
+    """
+    _visited = set() if _visited is None else _visited
+    if entity_id in _visited:
+        # Cycle détecté : on coupe la récursion avec un résultat neutre plutôt
+        # que de lever une RecursionError.
+        return {
+            "entity_id": entity_id,
+            "balance": 0,
+            "own_balance": 0,
+            "consolidated_balance": 0,
+            "children": [],
+            "mode": "cycle",
+        }
+    _visited.add(entity_id)
+
     mode = _get_balance_mode(conn, entity_id)
 
     if mode == "aggregate":
-        return _compute_aggregate_consolidated(conn, entity_id, as_of_date)
+        return _compute_aggregate_consolidated(conn, entity_id, as_of_date, _visited)
 
     ids = _subtree_ids(conn, entity_id)
     own = compute_entity_balance(conn, entity_id, as_of_date)

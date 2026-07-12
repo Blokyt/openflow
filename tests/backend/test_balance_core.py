@@ -191,7 +191,10 @@ def test_entity_balance_as_of_before_reference_date(client_and_db):
 def test_subtree_ids_guards_against_parent_cycle(tmp_path):
     """Un cycle parent_id (A.parent=B, B.parent=A) créé par erreur en base ne doit
     jamais faire boucler indéfiniment le calcul de solde consolidé (FIX 3 :
-    garde anti-cycle `e.id NOT IN (SELECT id FROM tree)` dans la CTE récursive)."""
+    garde anti-cycle par `UNION` dans la CTE récursive, qui déduplique les ids
+    déjà produits et arrête la récursion sur un cycle ; un `NOT IN (SELECT id
+    FROM tree)` provoquerait une erreur SQLite "multiple recursive
+    references")."""
     from backend.core.balance import get_subtree_ids, compute_consolidated_balance
 
     conn = _make_db(tmp_path)
@@ -208,3 +211,55 @@ def test_subtree_ids_guards_against_parent_cycle(tmp_path):
     result = compute_consolidated_balance(conn, 1)
     conn.close()
     assert result["consolidated_balance"] == pytest.approx(300.0)
+
+
+def test_compute_consolidated_balance_guards_against_aggregate_cycle(tmp_path):
+    """Un cycle parent_id entre deux entités en balance_mode='aggregate'
+    (A.parent=B, B.parent=A) ne doit jamais provoquer de RecursionError.
+
+    Contrairement au mode 'own' (protégé par la CTE `_subtree_ids`), le mode
+    'aggregate' récupère ses enfants par une requête SQL directe et rappelle
+    `compute_consolidated_balance` sans passer par cette CTE (voir
+    `_compute_aggregate_consolidated`). La garde anti-cycle vient ici de
+    l'ensemble `_visited` propagé entre les deux fonctions de consolidation."""
+    from backend.core.balance import compute_consolidated_balance
+
+    db = tmp_path / "aggregate_cycle.db"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    conn.execute("""CREATE TABLE entities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'internal',
+        parent_id INTEGER,
+        balance_mode TEXT NOT NULL DEFAULT 'own'
+    )""")
+    conn.execute("""CREATE TABLE entity_balance_refs (
+        entity_id INTEGER PRIMARY KEY,
+        reference_date TEXT NOT NULL,
+        reference_amount REAL NOT NULL DEFAULT 0.0,
+        updated_at TEXT NOT NULL
+    )""")
+    conn.execute("""CREATE TABLE transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        label TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        from_entity_id INTEGER,
+        to_entity_id INTEGER
+    )""")
+    # Cycle direct : A (id=1) a pour parent B (id=2), qui a pour parent A.
+    conn.execute(
+        "INSERT INTO entities (id, name, type, parent_id, balance_mode) "
+        "VALUES (1, 'A', 'internal', 2, 'aggregate')"
+    )
+    conn.execute(
+        "INSERT INTO entities (id, name, type, parent_id, balance_mode) "
+        "VALUES (2, 'B', 'internal', 1, 'aggregate')"
+    )
+    conn.commit()
+
+    # Ne doit jamais lever de RecursionError ; le contenu exact importe peu.
+    result = compute_consolidated_balance(conn, 1)
+    conn.close()
+    assert isinstance(result, dict)

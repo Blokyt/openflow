@@ -207,6 +207,8 @@ def update_entity(entity_id: int, update: EntityUpdate):
             # autorisé sans validation. Sinon, le nouveau parent doit exister
             # et être 'internal' (même contrainte qu'à la création).
             if new_parent is not None:
+                if existing["type"] == "external":
+                    raise HTTPException(400, "External entities cannot have a parent")
                 _validate_internal_parent(conn, new_parent)
             # Walk up from proposed parent to check for cycles
             current = new_parent

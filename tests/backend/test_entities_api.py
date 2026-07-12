@@ -190,6 +190,18 @@ def test_update_entity_parent_external_rejected(client):
     assert resp.status_code == 400
 
 
+def test_update_external_entity_with_parent_rejected(client):
+    """PUT /{id} sur une entité 'external' avec un parent_id interne → 400.
+
+    Symétrique de `test_reject_external_with_parent` (création) : l'invariant
+    « une entité externe n'a jamais de parent » doit aussi tenir en mise à
+    jour, pas seulement à la création."""
+    parent = _create_internal(client, name="Parent").json()
+    ext = _create_external(client, name="Fournisseur").json()
+    resp = client.put(f"/api/entities/{ext['id']}", json={"parent_id": parent["id"]})
+    assert resp.status_code == 400
+
+
 def test_update_entity_parent_null_detaches_without_validation(client):
     """parent_id explicitement null = détacher vers la racine, toujours autorisé."""
     parent = _create_internal(client, name="Parent").json()

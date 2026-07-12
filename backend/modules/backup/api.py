@@ -176,16 +176,33 @@ async def import_backup(file: UploadFile = File(...)):
     try:
         zf = zipfile.ZipFile(io.BytesIO(content))
     except zipfile.BadZipFile:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Le fichier n'est pas un ZIP valide")
 
     required = {"metadata.json", "data.json"}
     if not required.issubset(set(zf.namelist())):
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="ZIP invalide : metadata.json et data.json requis")
 
     metadata = json.loads(zf.read("metadata.json"))
     data = json.loads(zf.read("data.json"))
+
+    # Garde anti-verrouillage : un import qui ne contient pas d'utilisateurs
+    # viderait la table `users` (restauration complète) et verrouillerait tout
+    # le monde hors de l'application. Un export légitime contient toujours les
+    # utilisateurs ; on refuse donc un backup partiel ou malformé plutôt que de
+    # supprimer silencieusement les comptes.
+    guard_conn = get_conn()
+    try:
+        guard_tables = _existing_tables(guard_conn)
+        if "users" in guard_tables:
+            current_users = guard_conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            if current_users > 0 and not data.get("users"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Sauvegarde invalide : aucun utilisateur dans le fichier importé. "
+                           "Import refusé pour ne pas verrouiller l'accès à l'application.",
+                )
+    finally:
+        guard_conn.close()
 
     # Backup current DB before overwriting
     from backend.core.database import get_db_path
@@ -217,7 +234,6 @@ async def import_backup(file: UploadFile = File(...)):
         # (pas de copie brute qui laisserait des sidecars -wal/-shm en décalage).
         if os.path.exists(backup_path):
             _snapshot_db(backup_path, db_path)
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=f"Erreur lors de la restauration : {str(e)}")
     finally:
         conn.close()
