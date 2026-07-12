@@ -87,3 +87,52 @@ def test_tree_counts_and_totals(client_and_db):
     assert node_c["tx_total"] == pytest.approx(100.0)
     assert node_c["descendant_tx_count"] == 1
     assert node_c["descendant_tx_total"] == pytest.approx(100.0)
+
+
+def test_tree_stats_scoped_by_entity_and_period(client):
+    """Les stats de l'arbre peuvent être bornées au périmètre entité + exercice."""
+    parent = client.post("/api/entities/", json={"name": "Pole", "type": "internal"}).json()
+    child = client.post("/api/entities/", json={
+        "name": "Club", "type": "internal", "parent_id": parent["id"]
+    }).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    cat = client.post("/api/categories/", json={"name": "ScopedCat"}).json()
+
+    # Dépense du club dans la période, dépense du pôle hors période.
+    client.post("/api/transactions/", json={
+        "date": "2025-05-01", "label": "in", "amount": 1000, "category_id": cat["id"],
+        "from_entity_id": child["id"], "to_entity_id": ext["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2024-01-01", "label": "out", "amount": 2000, "category_id": cat["id"],
+        "from_entity_id": parent["id"], "to_entity_id": ext["id"],
+    })
+
+    def node(tree, cid):
+        for n in tree:
+            if n["id"] == cid:
+                return n
+            found = node(n.get("children", []), cid)
+            if found:
+                return found
+        return None
+
+    # Sans filtre : les deux transactions comptent.
+    full = node(client.get("/api/categories/tree").json(), cat["id"])
+    assert full["tx_count"] == 2
+
+    # Périmètre sous-arbre du pôle + fenêtre 2025 : seule la dépense du club reste.
+    scoped = node(client.get(
+        "/api/categories/tree",
+        params={"entity_id": parent["id"], "include_children": "true",
+                "date_from": "2025-01-01", "date_to": "2025-12-31"},
+    ).json(), cat["id"])
+    assert scoped["tx_count"] == 1
+    assert scoped["tx_total"] == 1000
+
+    # Entité seule (sans enfants) sur la même fenêtre : rien.
+    solo = node(client.get(
+        "/api/categories/tree",
+        params={"entity_id": parent["id"], "date_from": "2025-01-01", "date_to": "2025-12-31"},
+    ).json(), cat["id"])
+    assert solo["tx_count"] == 0

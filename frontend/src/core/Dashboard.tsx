@@ -128,6 +128,9 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
           />
           <YAxis
             ticks={ticks}
+            // Sans domain explicite, recharts garde [0, auto] : avec un solde à
+            // 27 000 € la courbe s'écrase dans les 3 % du haut et devient invisible.
+            domain={[ticks[0], ticks[ticks.length - 1]]}
             tickFormatter={(v: number) => `${(v / 100).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`}
             tick={{ fill: "#666", fontSize: 10 }}
             axisLine={false}
@@ -220,7 +223,7 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<RecentTx[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { selectedEntityId } = useEntity();
+  const { selectedEntityId, selectedEntity } = useEntity();
   const { selectedYear } = useFiscalYear();
 
   useEffect(() => {
@@ -231,7 +234,8 @@ export default function Dashboard() {
     const dateTo = selectedYear ? (selectedYear.end_date ?? today) : undefined;
     Promise.all([
       api.getSummary(eid, dateFrom, dateTo),
-      api.getTimeseries(eid),
+      // Le graphe suit la même fenêtre que le reste : l'exercice sélectionné.
+      api.getTimeseries(eid, 12, dateFrom, dateTo),
       api.getTopCategories(eid, 5, dateFrom, dateTo),
       api.getRecentTransactions(eid, 5, dateFrom, dateTo),
     ])
@@ -271,7 +275,8 @@ export default function Dashboard() {
       <div>
         <p className="text-sm font-medium text-[#666] uppercase tracking-wider mb-2">Solde actuel</p>
         <div className="relative inline-block">
-          <div className="absolute -inset-4 bg-[rgba(26,115,232,0.08)] rounded-3xl blur-xl pointer-events-none" />
+          {/* Halo dans l'accent doré de la marque (l'ancien bleu était un vestige). */}
+          <div className="absolute -inset-4 bg-[rgba(242,196,141,0.07)] rounded-3xl blur-xl pointer-events-none" />
           <h1
             className={`relative text-5xl font-bold tracking-tight ${balancePositive ? "text-white" : "text-[#FF5252]"}`}
             style={{ letterSpacing: "-0.02em" }}
@@ -279,6 +284,13 @@ export default function Dashboard() {
             {formatEuros(summary.balance)}
           </h1>
         </div>
+        {selectedEntity && (
+          <p className="mt-3 text-sm text-[#666]">
+            Périmètre : <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span>
+            {selectedEntity.children && selectedEntity.children.length > 0 && " et sous-entités"}
+            {" "}(solde consolidé)
+          </p>
+        )}
         {summary.reference_date && summary.reference_amount !== undefined && (
           <p className="mt-3 text-sm text-[#666]">
             Référence au{" "}

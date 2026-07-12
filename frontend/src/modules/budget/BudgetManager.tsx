@@ -23,7 +23,7 @@ export default function BudgetManager() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
             Budget
           </h1>
-          <p className="text-sm text-[#999] mt-1">
+          <p className="text-sm text-[#666] mt-1">
             Allocations, suivi du réalisé, comparaison à l'exercice précédent.
           </p>
         </div>

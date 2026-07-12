@@ -49,7 +49,7 @@ export default function DirensPage() {
         <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
           DirENS
         </h1>
-        <p className="text-sm text-[#999] mt-1">
+        <p className="text-sm text-[#666] mt-1">
           Génère le fichier Excel financier officiel demandé par la DirENS, entièrement pré-rempli
           à partir des données de l'app.
         </p>
@@ -121,7 +121,7 @@ export default function DirensPage() {
             <button
               onClick={handleDownload}
               disabled={busy || !bilanId}
-              className="flex items-center gap-2 rounded-xl bg-[#F2C48D] px-4 py-2.5 text-sm font-semibold text-black hover:opacity-90 transition disabled:opacity-50"
+              className="flex items-center gap-2 rounded-full bg-[#F2C48D] px-5 py-2.5 text-sm font-semibold text-black hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
             >
               <FileDown size={16} strokeWidth={2} />
               {busy ? "Génération…" : "Télécharger l'Excel DirENS"}

@@ -145,3 +145,44 @@ def test_entity_balance_no_ref(tmp_path):
     conn.close()
     assert result["reference_amount"] == pytest.approx(0.0)
     assert result["balance"] == pytest.approx(300.0)
+
+
+def test_entity_balance_as_of_before_reference_date(client_and_db):
+    """as_of antérieur à la date de référence : on remonte le temps depuis la
+    référence en retranchant les flux intermédiaires (pas de double comptage).
+
+    Régression : le bilan d'un exercice utilisait le solde à la veille de
+    l'ouverture ; avec une référence posée en cours d'exercice, il renvoyait
+    la référence brute puis ré-additionnait le réalisé -> disponibilités fausses.
+    """
+    import sqlite3
+    from backend.core.balance import compute_entity_balance
+
+    client, db_path = client_and_db
+    ent = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+
+    # Flux : +10000 le 10/05, -3000 le 20/05. Référence posée le 26/06 : 93836.
+    client.post("/api/transactions/", json={
+        "date": "2026-05-10", "label": "in", "amount": 10000,
+        "from_entity_id": ext["id"], "to_entity_id": ent["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2026-05-20", "label": "out", "amount": 3000,
+        "from_entity_id": ent["id"], "to_entity_id": ext["id"],
+    })
+    client.put(f"/api/entities/{ent['id']}/balance-ref", json={
+        "reference_date": "2026-06-26", "reference_amount": 93836
+    })
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        # Au 30/06 (>= ref) : référence seule, aucun flux depuis.
+        assert compute_entity_balance(conn, ent["id"], as_of_date="2026-06-30")["balance"] == 93836
+        # Au 30/04 (< ref, avant les flux) : ref - (+10000 - 3000) = 86836.
+        assert compute_entity_balance(conn, ent["id"], as_of_date="2026-04-30")["balance"] == 86836
+        # Au 15/05 (< ref, entre les deux flux) : ref - (-3000) = 96836.
+        assert compute_entity_balance(conn, ent["id"], as_of_date="2026-05-15")["balance"] == 96836
+    finally:
+        conn.close()

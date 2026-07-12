@@ -102,3 +102,40 @@ def test_summary_not_matched_by_id_route(client):
     response = client.get("/api/reimbursements/summary")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def test_list_ordering_pending_first_then_expense_date(client):
+    """Ordre métier : avances en attente d'abord, puis par date de dépense décroissante."""
+    ext = client.post("/api/entities/", json={"name": "ExtOrd", "type": "external"}).json()
+    ent = client.post("/api/entities/", json={"name": "IntOrd", "type": "internal"}).json()
+
+    def tx(date, label):
+        return client.post("/api/transactions/", json={
+            "date": date, "label": label, "amount": 1000,
+            "from_entity_id": ent["id"], "to_entity_id": ext["id"],
+        }).json()
+
+    t_old = tx("2025-01-10", "vieille dépense")
+    t_mid = tx("2025-06-10", "dépense de juin")
+    t_new = tx("2025-09-10", "dépense récente")
+
+    # Réglé sur la dépense la plus récente ; en attente sur les deux autres.
+    client.post("/api/reimbursements/", json={
+        "transaction_id": t_new["id"], "person_name": "A", "amount": 1000,
+        "status": "reimbursed", "reimbursed_date": "2025-09-12",
+    })
+    client.post("/api/reimbursements/", json={
+        "transaction_id": t_old["id"], "person_name": "B", "amount": 1000,
+    })
+    client.post("/api/reimbursements/", json={
+        "transaction_id": t_mid["id"], "person_name": "C", "amount": 1000,
+    })
+
+    items = client.get("/api/reimbursements/").json()
+    statuses = [i["status"] for i in items]
+    # Tous les pending avant le premier non-pending.
+    first_settled = statuses.index("reimbursed")
+    assert all(s == "pending" for s in statuses[:first_settled])
+    # Au sein des pending : juin avant janvier (date de dépense décroissante).
+    pending_labels = [i["transaction_label"] for i in items if i["status"] == "pending"]
+    assert pending_labels.index("dépense de juin") < pending_labels.index("vieille dépense")

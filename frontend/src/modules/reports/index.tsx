@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { FileDown, CheckCircle2, AlertTriangle, Info, Plus, Trash2, Sparkles } from "lucide-react";
+import { FileDown, AlertTriangle, Plus, Trash2, Sparkles } from "lucide-react";
 import { useFiscalYear } from "../../core/FiscalYearContext";
+import { useEntity } from "../../core/EntityContext";
 import { api } from "../../api";
 import { formatEuros, eurosToCents } from "../../utils/format";
 
@@ -36,14 +37,19 @@ function useYearData<T>(year: any, fetcher: (id: number) => Promise<T>, deps: an
 
 export default function Reports() {
   const { years, selectedYear, setSelectedYearId } = useFiscalYear();
+  // Le périmètre des rapports suit le focus entité global (sidebar) : même
+  // sélection partout, modifiable aussi depuis cette page.
+  const { selectedEntityId, setSelectedEntityId } = useEntity();
   const [tab, setTab] = useState<TabId>("resultat");
   const [entities, setEntities] = useState<any[]>([]);
-  const [entityId, setEntityId] = useState<number | null>(null);
 
   useEffect(() => {
     api.getEntities("internal").then(setEntities).catch(() => setEntities([]));
   }, []);
 
+  // Une entité externe sélectionnée globalement n'a pas de sens comptable ici :
+  // on retombe sur le périmètre consolidé sans toucher au focus global.
+  const entityId = entities.some((e) => e.id === selectedEntityId) ? selectedEntityId : null;
   const scopeName = entityId ? entities.find((e) => e.id === entityId)?.name : null;
   const scoped = tab === "resultat" || tab === "bilan";
 
@@ -54,7 +60,7 @@ export default function Reports() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
             Rapports comptables
           </h1>
-          <p className="text-sm text-[#999] mt-1">
+          <p className="text-sm text-[#666] mt-1">
             {scoped && scopeName
               ? `Périmètre « ${scopeName} » : le club et ses sous-entités (les dotations reçues comptent comme produits).`
               : "Compte de résultat et bilan de l'exercice, sur le périmètre consolidé de l'association."}
@@ -64,7 +70,7 @@ export default function Reports() {
           {scoped && entities.length > 0 && (
             <select
               value={entityId ?? ""}
-              onChange={(e) => setEntityId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              onChange={(e) => setSelectedEntityId(e.target.value ? parseInt(e.target.value, 10) : null)}
               className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
             >
               <option value="">Toute l'association</option>
@@ -87,15 +93,6 @@ export default function Reports() {
             </select>
           )}
         </div>
-      </div>
-
-      <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#999]">
-        <Info size={15} className="text-[#F2C48D] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
-        <p>
-          États établis par exercice, consolidés (BDA et clubs, virements internes neutralisés).
-          Un excédent n'est pas imposable pour une association non lucrative à gestion désintéressée :
-          il abonde les fonds associatifs (report à nouveau).
-        </p>
       </div>
 
       <div className="flex gap-1 border-b border-[#222]">
@@ -159,7 +156,7 @@ function PdfButton({ onClick }: { onClick: () => void }) {
           }
         }}
         disabled={busy}
-        className="flex items-center gap-2 rounded-xl border border-[#222] bg-[#111] px-3 py-2 text-sm text-white hover:border-[#F2C48D] transition-colors disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors disabled:opacity-50"
       >
         <FileDown size={15} strokeWidth={1.5} />
         {busy ? "Génération…" : "Télécharger le PDF"}
@@ -286,19 +283,18 @@ function BilanTab({ year, entityId }: { year: any; entityId: number | null }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span
-          className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium"
-          style={{
-            color: equilibre ? COLOR_OK : COLOR_KO,
-            background: (equilibre ? COLOR_OK : COLOR_KO) + "0d",
-          }}
-        >
-          {equilibre ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-          {equilibre ? "Bilan équilibré (actif = passif)" : "Bilan déséquilibré"}
-        </span>
+        <p className="text-xs text-[#777]">Arrêté au {data.arrete_le}.</p>
         <PdfButton onClick={() => api.downloadReportPdf("bilan", { fiscal_year_id: year.id, entity_id: entityId ?? undefined })} />
       </div>
-      <p className="text-xs text-[#777]">Arrêté au {data.arrete_le}.</p>
+      {/* L'équilibre actif = passif est la norme : on n'alerte qu'en cas d'anomalie. */}
+      {!equilibre && (
+        <span
+          className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium"
+          style={{ color: COLOR_KO, background: COLOR_KO + "0d" }}
+        >
+          <AlertTriangle size={14} /> Bilan déséquilibré : vérifie les saisies de clôture.
+        </span>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <BilanColumn title="Actif">

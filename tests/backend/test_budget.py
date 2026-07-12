@@ -747,3 +747,97 @@ def test_seed_from_realized_marks_seeded(client):
     allocs = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
     assert allocs, "le seed doit créer des allocations"
     assert all(a["origin"] == "seeded" for a in allocs)
+
+
+def test_category_view_scoped_by_entity(client):
+    """La vue par catégories peut être limitée au sous-arbre d'une entité."""
+    parent = client.post("/api/entities/", json={"name": "PoleCV", "type": "internal"}).json()
+    child = client.post("/api/entities/", json={
+        "name": "ClubCV", "type": "internal", "parent_id": parent["id"]
+    }).json()
+    other = client.post("/api/entities/", json={"name": "AutreCV", "type": "internal"}).json()
+    ext = client.post("/api/entities/", json={"name": "ExtCV", "type": "external"}).json()
+    cat = client.post("/api/categories/", json={"name": "CatCV"}).json()
+
+    fy = client.post("/api/budget/fiscal-years", json={
+        "name": "CV-2025", "start_date": "2025-01-01"
+    }).json()
+
+    # Dépense du club (dans le périmètre) et d'une entité hors périmètre.
+    client.post("/api/transactions/", json={
+        "date": "2025-02-01", "label": "in-scope", "amount": 1000, "category_id": cat["id"],
+        "from_entity_id": child["id"], "to_entity_id": ext["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-02-02", "label": "out-scope", "amount": 5000, "category_id": cat["id"],
+        "from_entity_id": other["id"], "to_entity_id": ext["id"],
+    })
+    # Allocations : une pour le club, une pour l'autre entité.
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": child["id"], "category_id": cat["id"], "direction": "expense", "amount": 2000,
+    })
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": other["id"], "category_id": cat["id"], "direction": "expense", "amount": 9000,
+    })
+
+    def row(view):
+        return next(c for c in view["categories"] if c["category_id"] == cat["id"])
+
+    full = row(client.get(f"/api/budget/view/categories?fiscal_year_id={fy['id']}").json())
+    assert full["realized"] == -6000
+    assert full["allocated"] == 11000
+
+    scoped = row(client.get(
+        f"/api/budget/view/categories?fiscal_year_id={fy['id']}&entity_id={parent['id']}"
+    ).json())
+    assert scoped["realized"] == -1000
+    assert scoped["allocated"] == 2000
+
+    # Nettoyage : l'exercice de test ne doit pas rester (mandat ouvert unique).
+    client.delete(f"/api/budget/fiscal-years/{fy['id']}")
+
+
+def test_update_allocation_negative_amount_rejected(client):
+    """PUT /allocations/{id} doit refuser un montant <= 0, comme create_allocation."""
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    alloc = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "amount": 10000,
+    }).json()
+
+    r = client.put(f"/api/budget/allocations/{alloc['id']}", json={"amount": -500})
+    assert r.status_code == 400
+    assert "positif" in r.json()["detail"].lower()
+
+    r = client.put(f"/api/budget/allocations/{alloc['id']}", json={"amount": 0})
+    assert r.status_code == 400
+
+    # Le montant original n'a pas bougé.
+    rows = client.get(f"/api/budget/fiscal-years/{fy['id']}/allocations").json()
+    assert rows[0]["amount"] == 10000
+
+
+def test_view_category_allocated_split_by_direction(client):
+    """L'alloué de /view/categories est séparé dépense/recette, pas mélangé."""
+    fy = _make_fy(client)
+    e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
+    cat = client.post("/api/categories/", json={"name": "Buvette"}).json()
+
+    # Budget de dépense 300 € et budget de recette 500 € sur la même catégorie.
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": cat["id"], "direction": "expense", "amount": 30000,
+    })
+    client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": e["id"], "category_id": cat["id"], "direction": "income", "amount": 50000,
+    })
+
+    data = client.get(f"/api/budget/view/categories?fiscal_year_id={fy['id']}").json()
+    row = next(c for c in data["categories"] if c["category_id"] == cat["id"])
+
+    # Les deux montants doivent être exposés séparément, pas leur somme (80000).
+    assert row["allocated_expense"] == 30000
+    assert row["allocated_income"] == 50000
+    assert row["allocated"] == 30000  # alias legacy = allocated_expense (cohérent avec /view)
+
+    assert data["totals"]["allocated_expense"] == 30000
+    assert data["totals"]["allocated_income"] == 50000

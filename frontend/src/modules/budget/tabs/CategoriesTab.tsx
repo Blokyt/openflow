@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import { FiscalYear } from "../../../core/FiscalYearContext";
+import { useEntity } from "../../../core/EntityContext";
 import { formatEuros, budgetColor } from "../../../utils/format";
 
 interface Props { year: FiscalYear | null }
 
 export default function CategoriesTab({ year }: Props) {
+  const { selectedEntityId, selectedEntity } = useEntity();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -14,11 +16,13 @@ export default function CategoriesTab({ year }: Props) {
     let cancelled = false;
     setLoading(true);
     setData(null);
-    api.getBudgetCategoryView(year.id)
+    // Même périmètre que le reste de l'app : le focus entité limite la vue
+    // au sous-arbre (réalisé frontière + allocations du sous-arbre).
+    api.getBudgetCategoryView(year.id, selectedEntityId ?? undefined)
       .then((d) => { if (!cancelled) setData(d); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [year?.id]);
+  }, [year?.id, selectedEntityId]);
 
   if (!year) return <p className="text-sm text-[#666]">Crée un exercice pour voir le suivi.</p>;
   if (loading) return <p className="text-sm text-[#666]">Chargement…</p>;
@@ -27,6 +31,12 @@ export default function CategoriesTab({ year }: Props) {
   const hasNMinus1 = data.categories.some((c: any) => c.realized_n_minus_1 !== 0);
 
   return (
+    <div>
+      {selectedEntity && (
+        <p className="mb-3 text-xs text-[#666]">
+          Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités.
+        </p>
+      )}
     <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
@@ -77,6 +87,7 @@ export default function CategoriesTab({ year }: Props) {
           </tr>
         </tfoot>
       </table>
+    </div>
     </div>
   );
 }

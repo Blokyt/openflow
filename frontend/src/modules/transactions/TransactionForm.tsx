@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { UserPlus, X } from "lucide-react";
 import { api } from "../../api";
 import { Transaction, Category, Entity, Contact } from "../../types";
+import { useEntity } from "../../core/EntityContext";
 import { eurosToCents, centsToEuros } from "../../utils/format";
 
 /** Retourne la date locale du jour au format YYYY-MM-DD (sans décalage UTC). */
@@ -31,27 +32,26 @@ const CONTACT_TYPES: { value: string; label: string }[] = [
 ];
 
 function ContactCombobox({
-  contacts,
   value,
+  selectedName,
   onChange,
-  onContactCreated,
+  onPick,
   placeholder,
 }: {
-  contacts: Contact[];
   value: string;
+  selectedName: string | null;
   onChange: (id: string) => void;
-  onContactCreated: (c: Contact) => void;
+  onPick: (c: Contact) => void;
   placeholder: string;
 }) {
   const [search, setSearch] = useState("");
+  const [results, setResults] = useState<Contact[]>([]);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("membre");
   const [saving, setSaving] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-
-  const selected = contacts.find((c) => String(c.id) === value);
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -64,11 +64,21 @@ function ContactCombobox({
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  const filtered = contacts.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Recherche côté serveur, temporisée : le carnet peut contenir des milliers
+  // de contacts, on ne charge jamais la liste complète dans le navigateur.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      api.searchContacts(search)
+        .then((items) => { if (!cancelled) setResults(items); })
+        .catch(() => { if (!cancelled) setResults([]); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [search, open]);
 
   function selectContact(c: Contact) {
+    onPick(c);
     onChange(String(c.id));
     setSearch("");
     setOpen(false);
@@ -85,7 +95,7 @@ function ContactCombobox({
     setSaving(true);
     try {
       const created = await api.createContact({ name: newName.trim(), type: newType });
-      onContactCreated(created);
+      onPick(created);
       onChange(String(created.id));
       setCreating(false);
       setNewName("");
@@ -97,9 +107,9 @@ function ContactCombobox({
 
   return (
     <div ref={wrapRef} className="relative">
-      {selected ? (
+      {value ? (
         <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5">
-          <span className="text-sm text-white">{selected.name}</span>
+          <span className="text-sm text-white">{selectedName ?? "…"}</span>
           <button
             type="button"
             onClick={clearContact}
@@ -120,10 +130,10 @@ function ContactCombobox({
         />
       )}
 
-      {open && !selected && (
+      {open && !value && (
         <div className="absolute z-50 mt-1 w-full bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
-          {filtered.length > 0 ? (
-            filtered.slice(0, 30).map((c) => (
+          {results.length > 0 ? (
+            results.map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -192,6 +202,7 @@ function ContactCombobox({
 }
 
 export default function TransactionForm({ initial, onSave, onCancel }: TransactionFormProps) {
+  const { selectedEntity } = useEntity();
   const [date, setDate] = useState(initial?.date ?? localToday());
   const [label, setLabel] = useState(initial?.label ?? "");
   // Le champ montant est en euros (pas en centimes). Si une transaction existante est passée,
@@ -199,34 +210,54 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
   const [amount, setAmount] = useState(initial?.amount !== undefined ? String(centsToEuros(initial.amount)) : "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [categoryId, setCategoryId] = useState<string>(
-    initial?.category_id !== undefined ? String(initial.category_id) : ""
+    initial?.category_id != null ? String(initial.category_id) : ""
   );
+  // `contact_id` peut valoir null sur une transaction existante : ne pré-remplir
+  // que si un contact est réellement lié (String(null) donnerait "null", truthy).
   const [contactId, setContactId] = useState<string>(
-    (initial as any)?.contact_id !== undefined ? String((initial as any).contact_id) : ""
+    (initial as any)?.contact_id != null ? String((initial as any).contact_id) : ""
   );
+  // En création avec un focus entité interne actif, la source est pré-remplie
+  // avec l'entité focalisée (cas le plus fréquent : saisir une dépense du club).
   const [fromEntityId, setFromEntityId] = useState<string>(
-    initial?.from_entity_id !== undefined ? String(initial.from_entity_id) : ""
+    initial?.from_entity_id != null
+      ? String(initial.from_entity_id)
+      : selectedEntity && selectedEntity.type === "internal" && !initial
+        ? String(selectedEntity.id)
+        : ""
   );
   const [toEntityId, setToEntityId] = useState<string>(
     initial?.to_entity_id !== undefined ? String(initial.to_entity_id) : ""
   );
   const [payerContactId, setPayerContactId] = useState<string>(
-    initial?.reimb_contact_id !== undefined ? String(initial.reimb_contact_id) : ""
+    initial?.reimb_contact_id != null ? String(initial.reimb_contact_id) : ""
   );
   const [categories, setCategories] = useState<Category[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  // Cache id -> nom des contacts déjà vus (sélection, création, pré-remplissage).
+  // On ne charge jamais tout le carnet : la recherche se fait côté serveur.
+  const [contactNames, setContactNames] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {});
     api.getEntities().then(setEntities).catch(() => {});
-    api.getContacts().then(setContacts).catch(() => {});
   }, []);
 
-  function handleContactCreated(c: Contact) {
-    setContacts((prev) => [...prev, c].sort((a, b) => a.name.localeCompare(b.name)));
+  // Pré-remplissage en édition : résout les noms des contacts déjà liés.
+  useEffect(() => {
+    const ids = [contactId, payerContactId].filter((id) => id && !contactNames[id]);
+    ids.forEach((id) => {
+      api.getContact(parseInt(id))
+        .then((c) => setContactNames((prev) => ({ ...prev, [id]: c.name })))
+        .catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactId, payerContactId]);
+
+  function rememberContact(c: Contact) {
+    setContactNames((prev) => ({ ...prev, [String(c.id)]: c.name }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -376,28 +407,27 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
       <div>
         <label className={labelClass}>Contact associé</label>
         <ContactCombobox
-          contacts={contacts}
           value={contactId}
+          selectedName={contactNames[contactId] ?? null}
           onChange={setContactId}
-          onContactCreated={handleContactCreated}
+          onPick={rememberContact}
           placeholder="Rechercher un contact..."
         />
       </div>
 
-      {contacts.length > 0 && (
-        <div>
-          <label className={labelClass}>Avance de frais (payée par)</label>
-          <select value={payerContactId} onChange={(e) => setPayerContactId(e.target.value)} className={inputClass}>
-            <option value="">— Aucun remboursement —</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <p className="text-xs text-[#555] mt-1">
-            Si un membre a avancé l'argent, sélectionne-le pour créer un remboursement automatique.
-          </p>
-        </div>
-      )}
+      <div>
+        <label className={labelClass}>Avance de frais (payée par)</label>
+        <ContactCombobox
+          value={payerContactId}
+          selectedName={contactNames[payerContactId] ?? null}
+          onChange={setPayerContactId}
+          onPick={rememberContact}
+          placeholder="Aucun remboursement — rechercher un membre..."
+        />
+        <p className="text-xs text-[#555] mt-1">
+          Si un membre a avancé l'argent, sélectionne-le pour créer un remboursement automatique.
+        </p>
+      </div>
 
       <div>
         <label className={labelClass}>Description</label>

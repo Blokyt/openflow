@@ -129,18 +129,33 @@ def _compute_aggregate_consolidated(
     subtree = _subtree_ids(conn, entity_id)
     placeholders = ",".join("?" * len(subtree))
 
+    # Voir compute_entity_balance : as_of antérieur à la référence = on remonte
+    # le temps depuis la référence en retranchant les flux de l'intervalle.
+    rewind = bool(as_of_date and reference_date and as_of_date < reference_date)
+
+    def _period_conds():
+        conds, params = [], []
+        if rewind:
+            conds.extend(["date > ?", "date < ?"])
+            params.extend([as_of_date, reference_date])
+        else:
+            if reference_date:
+                conds.append("date >= ?")
+                params.append(reference_date)
+            if as_of_date:
+                conds.append("date <= ?")
+                params.append(as_of_date)
+        return conds, params
+
     # Entrant : to dans le sous-arbre, from hors du sous-arbre (NULL-safe).
     conds_in = [
         f"to_entity_id IN ({placeholders})",
         f"(from_entity_id IS NULL OR from_entity_id NOT IN ({placeholders}))",
     ]
     params_in = list(subtree) + list(subtree)
-    if reference_date:
-        conds_in.append("date >= ?")
-        params_in.append(reference_date)
-    if as_of_date:
-        conds_in.append("date <= ?")
-        params_in.append(as_of_date)
+    pc, pp = _period_conds()
+    conds_in += pc
+    params_in += pp
     incoming = conn.execute(
         f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {' AND '.join(conds_in)}",
         params_in,
@@ -152,18 +167,15 @@ def _compute_aggregate_consolidated(
         f"(to_entity_id IS NULL OR to_entity_id NOT IN ({placeholders}))",
     ]
     params_out = list(subtree) + list(subtree)
-    if reference_date:
-        conds_out.append("date >= ?")
-        params_out.append(reference_date)
-    if as_of_date:
-        conds_out.append("date <= ?")
-        params_out.append(as_of_date)
+    pc, pp = _period_conds()
+    conds_out += pc
+    params_out += pp
     outgoing = conn.execute(
         f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {' AND '.join(conds_out)}",
         params_out,
     ).fetchone()[0]
 
-    external_delta = incoming - outgoing
+    external_delta = (incoming - outgoing) if not rewind else -(incoming - outgoing)
     consolidated = reference_amount + external_delta
 
     children = []
@@ -222,16 +234,26 @@ def compute_entity_balance(
     params_in = [entity_id]
     params_out = [entity_id]
 
-    if reference_date:
-        conditions_in.append("date >= ?")
-        conditions_out.append("date >= ?")
-        params_in.append(reference_date)
-        params_out.append(reference_date)
-    if as_of_date:
-        conditions_in.append("date <= ?")
-        conditions_out.append("date <= ?")
-        params_in.append(as_of_date)
-        params_out.append(as_of_date)
+    rewind = bool(as_of_date and reference_date and as_of_date < reference_date)
+    if rewind:
+        # La date demandée précède la référence : on remonte le temps depuis la
+        # référence en retranchant les flux de l'intervalle (as_of, ref_date).
+        # Sans cela, la référence brute serait renvoyée et tout consommateur qui
+        # ré-additionne le réalisé de la période compterait ces flux deux fois.
+        for conds, params in ((conditions_in, params_in), (conditions_out, params_out)):
+            conds.extend(["date > ?", "date < ?"])
+            params.extend([as_of_date, reference_date])
+    else:
+        if reference_date:
+            conditions_in.append("date >= ?")
+            conditions_out.append("date >= ?")
+            params_in.append(reference_date)
+            params_out.append(reference_date)
+        if as_of_date:
+            conditions_in.append("date <= ?")
+            conditions_out.append("date <= ?")
+            params_in.append(as_of_date)
+            params_out.append(as_of_date)
 
     incoming = conn.execute(
         f"SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE {' AND '.join(conditions_in)}",
@@ -242,7 +264,7 @@ def compute_entity_balance(
         params_out,
     ).fetchone()[0]
 
-    transactions_sum = incoming - outgoing
+    transactions_sum = (incoming - outgoing) if not rewind else -(incoming - outgoing)
 
     return {
         "entity_id": entity_id,
