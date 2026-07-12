@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { api } from "../api";
 import { Entity } from "../types";
+import Spinner from "./Spinner";
 
 interface EntityContextType {
   entities: Entity[];
@@ -68,11 +69,7 @@ export function EntityProvider({ children }: { children: ReactNode }) {
   // précédente hors du périmètre courant (403 "Accès refusé à cette entité").
   // reload() pose une entité légitime avant de libérer le rendu.
   if (!ready) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-      </div>
-    );
+    return <Spinner />;
   }
 
   const selectedEntity = selectedEntityId
