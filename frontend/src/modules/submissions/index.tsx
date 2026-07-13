@@ -3,7 +3,9 @@ import { FileUp, Paperclip, X } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../core/AuthContext";
 import ContactCombobox from "../../core/ContactCombobox";
+import ConfirmDialog from "../../core/ConfirmDialog";
 import { formatEuros } from "../../utils/format";
+import { notifyBadgesChanged } from "../../utils/events";
 
 // Libellés français des statuts (design system : chips fond couleur+"20").
 export const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -107,7 +109,7 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
       setPayerContactId("");
       setPayerName(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      window.dispatchEvent(new Event("openflow:submissions-changed"));
+      notifyBadgesChanged();
       onCreated();
     } catch (err: any) {
       setError(err?.message || "Erreur lors de la soumission.");
@@ -253,7 +255,7 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
     try {
       await api.cancelSubmission(id);
       setConfirmCancel(null);
-      window.dispatchEvent(new Event("openflow:submissions-changed"));
+      notifyBadgesChanged();
       load();
     } catch (err: any) {
       setError(err?.message || "Erreur lors de l'annulation.");
@@ -270,6 +272,7 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
       </p>
     );
   }
+  const cancelTarget = items.find((s) => s.id === confirmCancel);
   return (
     <div className="space-y-2">
       {error && <p className="text-sm text-[#FF5252]">{error}</p>}
@@ -307,29 +310,10 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
               <td className="px-4 py-3"><StatusChip status={s.status} /></td>
               <td className="px-4 py-3 text-right">
                 {s.status === "pending" && (
-                  confirmCancel === s.id ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="text-xs text-[#8a8a8a]">Annuler ?</span>
-                      <button
-                        onClick={() => cancel(s.id)}
-                        disabled={cancelingId === s.id}
-                        className="text-xs font-medium text-[#FF5252] hover:text-red-400"
-                      >
-                        Oui
-                      </button>
-                      <button
-                        onClick={() => setConfirmCancel(null)}
-                        className="text-xs font-medium text-[#8a8a8a] hover:text-white"
-                      >
-                        Non
-                      </button>
-                    </span>
-                  ) : (
-                    <button onClick={() => setConfirmCancel(s.id)} title="Annuler cette soumission"
-                      className="text-[#8a8a8a] hover:text-white transition-colors">
-                      <X size={15} />
-                    </button>
-                  )
+                  <button onClick={() => setConfirmCancel(s.id)} title="Annuler cette soumission"
+                    className="text-[#8a8a8a] hover:text-white transition-colors">
+                    <X size={15} />
+                  </button>
                 )}
               </td>
             </tr>
@@ -337,6 +321,17 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
         </tbody>
       </table>
       </div>
+      <ConfirmDialog
+        open={confirmCancel !== null}
+        title="Annuler la soumission"
+        message={cancelTarget ? <>Annuler la soumission « {cancelTarget.label} » ?</> : "Annuler cette soumission ?"}
+        confirmLabel="Oui, annuler"
+        cancelLabel="Non"
+        danger
+        busy={cancelingId === confirmCancel}
+        onConfirm={() => confirmCancel !== null && cancel(confirmCancel)}
+        onCancel={() => setConfirmCancel(null)}
+      />
     </div>
   );
 }
@@ -373,7 +368,7 @@ function AdminQueue() {
         return;
       }
     }
-    window.dispatchEvent(new Event("openflow:submissions-changed"));
+    notifyBadgesChanged();
     load();
   }
 
@@ -383,7 +378,7 @@ function AdminQueue() {
       await api.rejectSubmission(id, comment);
       setRejectingId(null);
       setComment("");
-      window.dispatchEvent(new Event("openflow:submissions-changed"));
+      notifyBadgesChanged();
       load();
     } catch (err: any) {
       setError(err?.message || "Erreur lors du refus.");

@@ -3,7 +3,7 @@
   "name": "Contacts",
   "description": "Carnet d'adresses : clients, fournisseurs, sponsors, membres",
   "help": "Gerez votre carnet de contacts : clients, fournisseurs, membres. Associez un contact a vos transactions, factures ou subventions pour suivre les flux par tiers.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "origin": "builtin",
   "category": "core",
   "dependencies": [

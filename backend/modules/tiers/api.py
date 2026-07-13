@@ -12,7 +12,12 @@ from backend.core.database import get_conn, row_to_dict
 router = APIRouter()
 
 
-
+def _require_name(raw: str) -> str:
+    """Valide et normalise le nom d'un contact : strip, 400 si vide après strip."""
+    name = raw.strip()
+    if not name:
+        raise HTTPException(400, "Le nom du contact est obligatoire.")
+    return name
 
 class ContactCreate(BaseModel):
     name: str
@@ -69,9 +74,7 @@ def list_contacts(
 
 @router.post("/", status_code=201)
 def create_contact(contact: ContactCreate):
-    name = contact.name.strip()
-    if not name:
-        raise HTTPException(400, "Le nom du contact est obligatoire.")
+    name = _require_name(contact.name)
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
@@ -163,10 +166,7 @@ def update_contact(contact_id: int, contact: ContactUpdate):
             if updates["name"] is None:
                 del updates["name"]
             else:
-                stripped_name = updates["name"].strip()
-                if not stripped_name:
-                    raise HTTPException(400, "Le nom du contact est obligatoire.")
-                updates["name"] = stripped_name
+                updates["name"] = _require_name(updates["name"])
 
         if not updates:
             return row_to_dict(existing)

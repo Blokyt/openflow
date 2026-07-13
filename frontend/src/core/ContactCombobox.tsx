@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { UserPlus, X } from "lucide-react";
 import { api } from "../api";
 import { Contact } from "../types";
+import { inputClass } from "./formStyles";
+import useDebounce from "../utils/useDebounce";
 
-const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
-
-const CONTACT_TYPES: { value: string; label: string }[] = [
+export const CONTACT_TYPES: { value: string; label: string }[] = [
   { value: "membre", label: "Membre" },
   { value: "fournisseur", label: "Fournisseur" },
   { value: "client", label: "Client" },
@@ -56,16 +56,15 @@ export default function ContactCombobox({
 
   // Recherche côté serveur, temporisée : le carnet peut contenir des milliers
   // de contacts, on ne charge jamais la liste complète dans le navigateur.
+  const debouncedSearch = useDebounce(search, 250);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    const t = setTimeout(() => {
-      api.searchContacts(search)
-        .then((items) => { if (!cancelled) setResults(items); })
-        .catch(() => { if (!cancelled) setResults([]); });
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [search, open]);
+    api.searchContacts(debouncedSearch)
+      .then((items) => { if (!cancelled) setResults(items); })
+      .catch(() => { if (!cancelled) setResults([]); });
+    return () => { cancelled = true; };
+  }, [debouncedSearch, open]);
 
   function selectContact(c: Contact) {
     onPick(c);

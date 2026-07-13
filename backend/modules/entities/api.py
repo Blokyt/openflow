@@ -15,6 +15,11 @@ router = APIRouter()
 VALID_TYPES = {"internal", "external"}
 
 
+def _empty_balance_ref(entity_id: int) -> dict:
+    """Représentation d'une référence de solde absente (ou effacée) pour une entité."""
+    return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0}
+
+
 def _validate_internal_parent(conn, parent_id: int):
     """Vérifie qu'un parent existe et qu'il est de type 'internal'."""
     parent = conn.execute("SELECT type FROM entities WHERE id = ?", (parent_id,)).fetchone()
@@ -333,7 +338,7 @@ def get_balance_ref(entity_id: int, request: Request):
         require_entity_access(conn, user, entity_id)
         row = conn.execute("SELECT * FROM entity_balance_refs WHERE entity_id = ?", (entity_id,)).fetchone()
         if not row:
-            return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0}
+            return _empty_balance_ref(entity_id)
         return row_to_dict(row)
     finally:
         conn.close()
@@ -358,7 +363,7 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
         if clear:
             conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
             conn.commit()
-            return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0}
+            return _empty_balance_ref(entity_id)
 
         conn.execute(
             """INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at)

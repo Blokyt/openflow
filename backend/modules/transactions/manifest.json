@@ -3,7 +3,7 @@
   "name": "Transactions",
   "description": "Saisie et historique de toutes les opérations financières",
   "help": "Enregistrez vos recettes et depenses. Chaque transaction relie une entite source (from) a une entite destination (to) ; le montant est toujours positif et son sens vient de cette direction. Le solde se calcule automatiquement a partir de votre solde de reference. Filtrez par date, categorie ou mot-cle.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "origin": "builtin",
   "category": "core",
   "dependencies": [],

@@ -4,6 +4,7 @@ import { Transaction, Category, Entity, Contact } from "../../types";
 import { useEntity } from "../../core/EntityContext";
 import ContactCombobox from "../../core/ContactCombobox";
 import { eurosToCents, centsToEuros } from "../../utils/format";
+import { inputClass, labelClass } from "../../core/formStyles";
 
 /** Retourne la date locale du jour au format YYYY-MM-DD (sans décalage UTC). */
 function localToday(): string {
@@ -19,9 +20,6 @@ interface TransactionFormProps {
   onSave: (tx: Omit<Transaction, "id">) => void;
   onCancel: () => void;
 }
-
-const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
-const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
 
 export default function TransactionForm({ initial, onSave, onCancel }: TransactionFormProps) {
   const { selectedEntity } = useEntity();

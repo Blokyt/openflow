@@ -83,6 +83,47 @@ def test_all_four_indexes_via_pragma(client_and_db):
     assert not missing, f"Index manquants : {missing}. Présents : {names}"
 
 
+# ─── Index de performance additionnels (contacts, remboursements) ───────────
+
+def test_index_on_contact_date_exists(client_and_db):
+    """idx_tx_contact_date doit exister sur la table transactions (contact_id, date)."""
+    _, db_path = client_and_db
+    conn = sqlite3.connect(str(db_path))
+    try:
+        names = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='transactions'"
+        ).fetchall()}
+    finally:
+        conn.close()
+    assert "idx_tx_contact_date" in names, f"Index idx_tx_contact_date absent. Index trouvés : {names}"
+
+
+def test_index_on_contacts_type_exists(client_and_db):
+    """idx_contacts_type doit exister sur la table contacts."""
+    _, db_path = client_and_db
+    conn = sqlite3.connect(str(db_path))
+    try:
+        names = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='contacts'"
+        ).fetchall()}
+    finally:
+        conn.close()
+    assert "idx_contacts_type" in names, f"Index idx_contacts_type absent. Index trouvés : {names}"
+
+
+def test_index_on_reimb_transaction_exists(client_and_db):
+    """idx_reimb_transaction doit exister sur la table reimbursements."""
+    _, db_path = client_and_db
+    conn = sqlite3.connect(str(db_path))
+    try:
+        names = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='reimbursements'"
+        ).fetchall()}
+    finally:
+        conn.close()
+    assert "idx_reimb_transaction" in names, f"Index idx_reimb_transaction absent. Index trouvés : {names}"
+
+
 # ─── Test de cohérence après dé-N+1 ──────────────────────────────────────────
 
 def test_budget_view_totals_coherence_multi_entities(client):

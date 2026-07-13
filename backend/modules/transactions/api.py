@@ -10,6 +10,9 @@ from pydantic import BaseModel
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin, require_entity_access
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
+# Couplage inter-modules assumé : import physique direct du service reimbursements.
+# Le module reimbursements peut être INACTIF (ses fonctions sont no-op si la table
+# reimbursements n'existe pas), mais son code reste toujours présent dans le dépôt.
 from backend.modules.reimbursements.service import (
     create_advance,
     delete_advance,
@@ -347,7 +350,7 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
         # statut (sinon un remboursement déjà traité repasserait "en attente").
         if payer_contact_id_provided:
             existing_reimb = conn.execute(
-                "SELECT id, contact_id, status FROM reimbursements WHERE transaction_id = ?",
+                "SELECT contact_id FROM reimbursements WHERE transaction_id = ?",
                 (tx_id,),
             ).fetchone()
             existing_payer = existing_reimb["contact_id"] if existing_reimb else None

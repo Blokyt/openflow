@@ -12,4 +12,8 @@ migrations = {
             updated_at TEXT NOT NULL
         )""",
     ],
+    "1.1.0": [
+        # Perf : filtrage/agrégation par type de contact.
+        "CREATE INDEX IF NOT EXISTS idx_contacts_type ON contacts(type)",
+    ],
 }

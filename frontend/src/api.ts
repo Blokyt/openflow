@@ -217,8 +217,6 @@ export const api = {
     const q = params ? "?" + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : "";
     return request<{ total: number; items: any[] }>(`/tiers/${q}`);
   },
-  getContacts: () =>
-    request<{ total: number; items: any[] }>("/tiers/?limit=10000").then((r) => r.items),
   // Recherche paginée côté serveur (combobox) : évite de charger tout le carnet.
   searchContacts: (search: string, limit = 30) => {
     const q = new URLSearchParams();

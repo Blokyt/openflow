@@ -6,6 +6,7 @@ import { useAuth } from "../../../core/AuthContext";
 import { Category } from "../../../types";
 import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME, COLOR_BUDGET_SEEDED, COLOR_BUDGET_MODIFIED } from "../../../utils/format";
 import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
+import { notifyBadgesChanged } from "../../../utils/events";
 
 interface Props { year: FiscalYear | null }
 
@@ -383,6 +384,7 @@ function AddCategoryForm({
         direction: dir,
         amount: eurosToCents(amount),
       });
+      notifyBadgesChanged();
       onSaved();
     } catch (e: any) {
       setErr(e?.message || "Échec de l'ajout.");
@@ -488,6 +490,7 @@ function EditableBudget({
           entity_id: node.entity_id, category_id: cat.category_id, direction, amount: cents,
         });
       }
+      notifyBadgesChanged();
       setEditing(false);
       onSaved();
     } catch (e: any) {

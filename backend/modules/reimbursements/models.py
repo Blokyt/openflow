@@ -63,4 +63,8 @@ migrations = {
         "DROP TABLE reimbursements",
         "ALTER TABLE reimbursements_v3 RENAME TO reimbursements",
     ],
+    "1.4.0": [
+        # Perf : jointure reimbursements <- transaction_id (panneau remboursements).
+        "CREATE INDEX IF NOT EXISTS idx_reimb_transaction ON reimbursements(transaction_id)",
+    ],
 }

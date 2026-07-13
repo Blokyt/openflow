@@ -4,6 +4,7 @@ import { api, rawFetch } from "../../api";
 import EmptyState from "../../core/EmptyState";
 import { useAuth } from "../../core/AuthContext";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
+import { notifyBadgesChanged } from "../../utils/events";
 
 async function apiReimb<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await rawFetch(`/reimbursements${path}`, {
@@ -171,6 +172,7 @@ export default function ReimbursementManager() {
         await apiReimb("/", { method: "POST", body: JSON.stringify(payload) });
       }
       setError(null);
+      notifyBadgesChanged();
       cancelForm();
       fetchAll();
     } catch (e: any) {
@@ -184,6 +186,7 @@ export default function ReimbursementManager() {
     try {
       await apiReimb(`/${id}`, { method: "DELETE" });
       setError(null);
+      notifyBadgesChanged();
       setConfirmDelete(null);
       fetchAll();
     } catch (e: any) {
@@ -205,6 +208,7 @@ export default function ReimbursementManager() {
         }),
       });
       setError(null);
+      notifyBadgesChanged();
       await fetchAll();
     } catch (e: any) {
       setError(e.message);

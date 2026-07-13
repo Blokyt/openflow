@@ -38,6 +38,7 @@ from backend.core.balance import (
     get_subtree_ids,
 )
 from backend.core.database import get_conn
+from backend.core.formatting import format_date_fr
 
 router = APIRouter()
 
@@ -906,10 +907,7 @@ def _fmt_eur(cents: int, symbol: str = "€") -> str:
 
 def _fmt_date(iso) -> str:
     """ISO (YYYY-MM-DD) -> format français JJ/MM/AAAA."""
-    try:
-        return date.fromisoformat(str(iso)[:10]).strftime("%d/%m/%Y")
-    except Exception:
-        return str(iso)
+    return format_date_fr(str(iso)[:10])
 
 
 def _fit(pdf, text: str, max_w: float) -> str:

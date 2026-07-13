@@ -13,6 +13,7 @@ import { useAuth } from "./AuthContext";
 import { api } from "../api";
 import { Entity } from "../types";
 import { MODULE_IDS_WITH_ROUTE } from "../routes";
+import { BADGES_CHANGED } from "../utils/events";
 
 // Map manifest icon names → React components
 const ICON_MAP: Record<string, any> = {
@@ -284,14 +285,19 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   useEffect(() => {
     if (!reimbursementsActive) return;
     let cancelled = false;
-    fetch("/api/reimbursements/?status=pending")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => {
-        if (!cancelled) setPendingReimbursements(Array.isArray(d) ? d.length : 0);
-      })
-      .catch(() => {});
+    function refetch() {
+      fetch("/api/reimbursements/?status=pending")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => {
+          if (!cancelled) setPendingReimbursements(Array.isArray(d) ? d.length : 0);
+        })
+        .catch(() => {});
+    }
+    refetch();
+    window.addEventListener(BADGES_CHANGED, refetch);
     return () => {
       cancelled = true;
+      window.removeEventListener(BADGES_CHANGED, refetch);
     };
   }, [reimbursementsActive]);
 
@@ -301,18 +307,25 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   useEffect(() => {
     if (!budgetActive || !currentYear) { setBudgetBadge(0); return; }
     let cancelled = false;
-    api.getBudgetView(currentYear.id)
-      .then((data) => {
-        if (cancelled) return;
-        // Même règle que le widget Budget : dépenses réalisées vs budget dépenses
-        // (le net recettes-dépenses faussait le seuil des 95 %).
-        const count = (data.entities as any[]).filter(
-          (e) => e.allocated_expense > 0 && e.realized_expense / e.allocated_expense >= 0.95
-        ).length;
-        setBudgetBadge(count);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    function refetch() {
+      api.getBudgetView(currentYear!.id)
+        .then((data) => {
+          if (cancelled) return;
+          // Même règle que le widget Budget : dépenses réalisées vs budget dépenses
+          // (le net recettes-dépenses faussait le seuil des 95 %).
+          const count = (data.entities as any[]).filter(
+            (e) => e.allocated_expense > 0 && e.realized_expense / e.allocated_expense >= 0.95
+          ).length;
+          setBudgetBadge(count);
+        })
+        .catch(() => {});
+    }
+    refetch();
+    window.addEventListener(BADGES_CHANGED, refetch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(BADGES_CHANGED, refetch);
+    };
   }, [budgetActive, currentYear?.id]);
 
   const [pendingSubmissions, setPendingSubmissions] = useState(0);
@@ -326,10 +339,10 @@ export default function Sidebar({ activeModules }: SidebarProps) {
         .catch(() => {});
     }
     refetch();
-    window.addEventListener("openflow:submissions-changed", refetch);
+    window.addEventListener(BADGES_CHANGED, refetch);
     return () => {
       cancelled = true;
-      window.removeEventListener("openflow:submissions-changed", refetch);
+      window.removeEventListener(BADGES_CHANGED, refetch);
     };
   }, [submissionsActive, isAdmin]);
 

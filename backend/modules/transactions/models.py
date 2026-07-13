@@ -56,4 +56,9 @@ migrations = {
         "DROP TABLE transactions",
         "ALTER TABLE transactions_v2 RENAME TO transactions",
     ],
+    "1.5.0": [
+        # Perf : liste des contacts triée par dernière transaction (2x plus
+        # rapide à 30k tx) + panneau transactions liées d'un contact (~90x).
+        "CREATE INDEX IF NOT EXISTS idx_tx_contact_date ON transactions(contact_id, date)",
+    ],
 }

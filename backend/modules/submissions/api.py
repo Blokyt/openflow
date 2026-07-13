@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin
 from backend.core.database import get_conn, row_to_dict
+# Couplage inter-modules assumé : import physique direct du service reimbursements.
+# Le module reimbursements peut être INACTIF (ses fonctions sont no-op si la table
+# reimbursements n'existe pas), mais son code reste toujours présent dans le dépôt.
 from backend.modules.reimbursements.service import create_advance
 
 router = APIRouter()

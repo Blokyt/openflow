@@ -13,6 +13,33 @@ from backend.core.database import get_conn, row_to_dict
 router = APIRouter()
 
 
+# Tables des modules optionnels référençant category_id : source unique pour
+# la cascade de suppression (delete_category) ET le comptage d'impact
+# (get_category_usage). Chaque entrée est gardée par le même try/except
+# sqlite3.OperationalError (le module peut être désactivé -> table absente).
+# NOTE : category_account_map est nettoyée par delete_category mais N'EST PAS
+# comptée dans /usage (usage_key=None) -- comportement historique conservé.
+CATEGORY_REFERENCES = [
+    {
+        "table": "budget_allocations",
+        "action_sql": "DELETE FROM budget_allocations WHERE category_id = ?",
+        "count": True,
+        "usage_key": "allocations",
+    },
+    {
+        "table": "category_account_map",
+        "action_sql": "DELETE FROM category_account_map WHERE category_id = ?",
+        "count": False,
+        "usage_key": None,
+    },
+    {
+        "table": "report_accruals",
+        "action_sql": "UPDATE report_accruals SET category_id = NULL WHERE category_id = ?",
+        "count": True,
+        "usage_key": "accruals",
+    },
+]
+
 
 class CategoryIn(BaseModel):
     name: str
@@ -176,28 +203,23 @@ def get_category_usage(cat_id: int):
             "SELECT COUNT(*) FROM categories WHERE parent_id = ?", (cat_id,)
         ).fetchone()[0]
 
-        allocations = 0
-        try:
-            allocations = conn.execute(
-                "SELECT COUNT(*) FROM budget_allocations WHERE category_id = ?", (cat_id,)
-            ).fetchone()[0]
-        except sqlite3.OperationalError:
-            pass
-
-        accruals = 0
-        try:
-            accruals = conn.execute(
-                "SELECT COUNT(*) FROM report_accruals WHERE category_id = ?", (cat_id,)
-            ).fetchone()[0]
-        except sqlite3.OperationalError:
-            pass
-
-        return {
+        usage = {
             "transactions": transactions,
-            "allocations": allocations,
+            "allocations": 0,
             "children": children,
-            "accruals": accruals,
+            "accruals": 0,
         }
+        for ref in CATEGORY_REFERENCES:
+            if not ref["count"]:
+                continue
+            try:
+                usage[ref["usage_key"]] = conn.execute(
+                    f"SELECT COUNT(*) FROM {ref['table']} WHERE category_id = ?", (cat_id,)
+                ).fetchone()[0]
+            except sqlite3.OperationalError:
+                pass
+
+        return usage
     finally:
         conn.close()
 
@@ -251,13 +273,9 @@ def delete_category(cat_id: int):
         # lignes des modules optionnels nettoyées (ignorées si le module est absent).
         conn.execute("UPDATE categories SET parent_id = NULL WHERE parent_id = ?", (cat_id,))
         conn.execute("UPDATE transactions SET category_id = NULL WHERE category_id = ?", (cat_id,))
-        for stmt in (
-            "DELETE FROM budget_allocations WHERE category_id = ?",
-            "DELETE FROM category_account_map WHERE category_id = ?",
-            "UPDATE report_accruals SET category_id = NULL WHERE category_id = ?",
-        ):
+        for ref in CATEGORY_REFERENCES:
             try:
-                conn.execute(stmt, (cat_id,))
+                conn.execute(ref["action_sql"], (cat_id,))
             except sqlite3.OperationalError:
                 pass
         conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))

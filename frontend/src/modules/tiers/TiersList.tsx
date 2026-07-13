@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, Search, Mail, Phone, MapPin, Users, GitMerge, AlertTriangle } from "lucide-react";
 import EmptyState from "../../core/EmptyState";
 import { useAuth } from "../../core/AuthContext";
 import { rawFetch } from "../../api";
 import { formatEuros, formatDate, txTone } from "../../utils/format";
+import { CONTACT_TYPES } from "../../core/ContactCombobox";
+import useDebounce from "../../utils/useDebounce";
 
 const PAGE_SIZE = 80;
 
@@ -44,9 +46,7 @@ type ContactForm = Omit<Contact, "id" | "created_at" | "updated_at">;
 
 const emptyForm: ContactForm = { name: "", type: "other", email: "", phone: "", address: "", notes: "" };
 
-const TYPE_LABELS: Record<string, string> = {
-  client: "Client", fournisseur: "Fournisseur", membre: "Membre", sponsor: "Sponsor", other: "Autre",
-};
+const TYPE_LABELS: Record<string, string> = Object.fromEntries(CONTACT_TYPES.map((t) => [t.value, t.label]));
 const TYPE_COLORS: Record<string, string> = {
   client: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   fournisseur: "bg-orange-500/15 text-orange-400 border-orange-500/30",
@@ -54,15 +54,6 @@ const TYPE_COLORS: Record<string, string> = {
   sponsor: "bg-purple-500/15 text-purple-400 border-purple-500/30",
   other: "bg-[#222] text-[#B0B0B0] border-[#333]",
 };
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
 
 export default function TiersList() {
   const { isAdmin } = useAuth();
@@ -84,12 +75,10 @@ export default function TiersList() {
   const [txnsLoading, setTxnsLoading] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeSearch, setMergeSearch] = useState("");
+  const debouncedMergeSearch = useDebounce(mergeSearch, 250);
+  const [mergeResults, setMergeResults] = useState<Contact[]>([]);
   const [mergeTarget, setMergeTarget] = useState<Contact | null>(null);
   const [merging, setMerging] = useState(false);
-
-  // All contacts cache for merge picker (loaded once, no pagination)
-  const [allContacts, setAllContacts] = useState<Contact[]>([]);
-  const allContactsLoaded = useRef(false);
 
   function buildQuery(offset = 0) {
     const p = new URLSearchParams();
@@ -129,14 +118,19 @@ export default function TiersList() {
     }
   }
 
-  async function ensureAllContacts() {
-    if (allContactsLoaded.current) return;
-    try {
-      const data = await apiTiers<{ total: number; items: Contact[] }>("/?limit=10000&offset=0");
-      setAllContacts(data.items);
-      allContactsLoaded.current = true;
-    } catch {}
-  }
+  // Recherche côté serveur, temporisée : évite de charger tout le carnet
+  // (mesuré 60-110 ms et croissant avec l'historique) pour filtrer côté client.
+  useEffect(() => {
+    if (!mergeMode || debouncedMergeSearch.length < 2) { setMergeResults([]); return; }
+    let cancelled = false;
+    apiTiers<{ total: number; items: Contact[] }>(`/?search=${encodeURIComponent(debouncedMergeSearch)}&limit=20`)
+      .then((data) => {
+        if (cancelled) return;
+        setMergeResults(data.items.filter((c) => c.id !== selected?.id));
+      })
+      .catch(() => { if (!cancelled) setMergeResults([]); });
+    return () => { cancelled = true; };
+  }, [debouncedMergeSearch, mergeMode, selected?.id]);
 
   function openCreate() { setEditing(null); setForm(emptyForm); setShowForm(true); setSelected(null); }
   function openEdit(c: Contact) {
@@ -157,7 +151,6 @@ export default function TiersList() {
         await apiTiers("/", { method: "POST", body: JSON.stringify(form) });
       }
       cancelForm();
-      allContactsLoaded.current = false;
       fetchContacts();
     } catch (e: any) {
       setError(e.message);
@@ -171,7 +164,6 @@ export default function TiersList() {
       await apiTiers(`/${id}`, { method: "DELETE" });
       setConfirmDelete(null);
       if (selected?.id === id) setSelected(null);
-      allContactsLoaded.current = false;
       fetchContacts();
     } catch (e: any) {
       setError(e.message);
@@ -204,7 +196,6 @@ export default function TiersList() {
       setSelected(null);
       setMergeMode(false);
       setMergeTarget(null);
-      allContactsLoaded.current = false;
       fetchContacts();
     } catch (e: any) {
       setError(e.message);
@@ -215,14 +206,7 @@ export default function TiersList() {
 
   function openMergeMode() {
     setMergeMode(true);
-    ensureAllContacts();
   }
-
-  const mergeFiltered = mergeSearch.length >= 2
-    ? allContacts.filter(
-        (c) => c.id !== selected?.id && c.name.toLowerCase().includes(mergeSearch.toLowerCase())
-      )
-    : [];
 
   const hasMore = contacts.length < total;
 
@@ -515,9 +499,9 @@ export default function TiersList() {
                   <div className="max-h-48 overflow-y-auto space-y-1">
                     {mergeSearch.length < 2 ? (
                       <p className="text-xs text-[#555] px-3 py-2">Tape au moins 2 caractères…</p>
-                    ) : mergeFiltered.length === 0 ? (
+                    ) : mergeResults.length === 0 ? (
                       <p className="text-xs text-[#555] px-3 py-2">Aucun résultat</p>
-                    ) : mergeFiltered.slice(0, 20).map((c) => (
+                    ) : mergeResults.slice(0, 20).map((c) => (
                       <button
                         key={c.id}
                         onClick={() => setMergeTarget(c)}
