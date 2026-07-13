@@ -25,14 +25,18 @@ export default function BudgetOverview() {
   const { selectedYear } = useFiscalYear();
   const { selectedEntityId, selectedEntity } = useEntity();
   const [view, setView] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedYear) { setView(null); return; }
     let cancelled = false;
     setView(null);
+    setError(null);
     api.getBudgetView(selectedYear.id)
       .then((d) => { if (!cancelled) setView(d); })
-      .catch(() => { if (!cancelled) setView(null); });
+      // Sans état d'erreur distinct, un échec réseau laissait le widget
+      // bloqué sur "Chargement…" (indiscernable d'un vrai chargement).
+      .catch((e: any) => { if (!cancelled) setError(e?.message || "Erreur lors du chargement du budget."); });
     return () => { cancelled = true; };
   }, [selectedYear?.id]);
 
@@ -43,6 +47,14 @@ export default function BudgetOverview() {
         <p className="text-sm text-[#8a8a8a]">
           <Link to="/budget" className="text-[#F2C48D] hover:underline">Crée un exercice</Link> pour activer le suivi.
         </p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
+        <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-3">Budget</p>
+        <p className="text-sm text-[#FF5252]">{error}</p>
       </div>
     );
   }
@@ -73,8 +85,8 @@ export default function BudgetOverview() {
     .slice(0, 3);
 
   const title = selectedEntity && scopedNode
-    ? `Budget — ${selectedYear.name} · ${selectedEntity.name}`
-    : `Budget — ${selectedYear.name}`;
+    ? `Budget · ${selectedYear.name} · ${selectedEntity.name}`
+    : `Budget · ${selectedYear.name}`;
 
   return (
     <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
@@ -91,7 +103,7 @@ export default function BudgetOverview() {
       )}
       {allocated === 0 ? (
         <p className="text-sm text-[#8a8a8a] mb-3">
-          {formatEuros(realized)} dépensés — aucun budget alloué sur ce périmètre.{" "}
+          {formatEuros(realized)} dépensés, aucun budget alloué sur ce périmètre.{" "}
           <Link to="/budget" className="text-[#F2C48D] hover:underline">Budgéter</Link>
         </p>
       ) : (

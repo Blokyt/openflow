@@ -10,22 +10,26 @@ export default function CategoriesTab({ year }: Props) {
   const { selectedEntityId, selectedEntity } = useEntity();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!year) return;
     let cancelled = false;
     setLoading(true);
     setData(null);
+    setError(null);
     // Même périmètre que le reste de l'app : le focus entité limite la vue
     // au sous-arbre (réalisé frontière + allocations du sous-arbre).
     api.getBudgetCategoryView(year.id, selectedEntityId ?? undefined)
       .then((d) => { if (!cancelled) setData(d); })
+      .catch((e: any) => { if (!cancelled) setError(e?.message || "Erreur lors du chargement du suivi par catégorie."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [year?.id, selectedEntityId]);
 
   if (!year) return <p className="text-sm text-[#8a8a8a]">Crée un exercice pour voir le suivi.</p>;
   if (loading) return <p className="text-sm text-[#8a8a8a]">Chargement…</p>;
+  if (error) return <p className="text-sm text-[#FF5252]">{error}</p>;
   if (!data) return null;
 
   const hasNMinus1 = data.categories.some((c: any) => c.realized_n_minus_1 !== 0);
