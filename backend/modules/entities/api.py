@@ -19,9 +19,9 @@ def _validate_internal_parent(conn, parent_id: int):
     """Vérifie qu'un parent existe et qu'il est de type 'internal'."""
     parent = conn.execute("SELECT type FROM entities WHERE id = ?", (parent_id,)).fetchone()
     if not parent:
-        raise HTTPException(404, f"Parent entity {parent_id} not found")
+        raise HTTPException(404, f"Entité parente {parent_id} introuvable")
     if parent["type"] != "internal":
-        raise HTTPException(400, "Parent must be an internal entity")
+        raise HTTPException(400, "L'entité parente doit être de type 'interne'")
 
 
 class EntityCreate(BaseModel):
@@ -80,9 +80,9 @@ def list_entities(request: Request, type: Optional[str] = None):
 @router.post("/", status_code=201)
 def create_entity(entity: EntityCreate):
     if entity.type not in VALID_TYPES:
-        raise HTTPException(400, f"Invalid type '{entity.type}'. Must be: {sorted(VALID_TYPES)}")
+        raise HTTPException(400, f"Type '{entity.type}' invalide. Valeurs autorisées : {sorted(VALID_TYPES)}")
     if entity.type == "external" and entity.parent_id is not None:
-        raise HTTPException(400, "External entities cannot have a parent")
+        raise HTTPException(400, "Une entité externe ne peut pas avoir de parent")
 
     conn = get_conn()
     try:
@@ -90,9 +90,9 @@ def create_entity(entity: EntityCreate):
         if entity.is_divers:
             existing = conn.execute("SELECT id FROM entities WHERE is_divers = 1").fetchone()
             if existing:
-                raise HTTPException(400, "A 'divers' entity already exists")
+                raise HTTPException(400, "Une entité 'divers' existe déjà")
             if entity.type != "external":
-                raise HTTPException(400, "'divers' entity must be external")
+                raise HTTPException(400, "L'entité 'divers' doit être de type externe")
 
         # Validate parent exists and is internal
         if entity.parent_id is not None:
@@ -101,7 +101,7 @@ def create_entity(entity: EntityCreate):
         # Only root entities (parent_id IS NULL) can use 'aggregate' mode
         balance_mode = entity.balance_mode or "own"
         if balance_mode == "aggregate" and entity.parent_id is not None:
-            raise HTTPException(400, "Only root entities (parent_id = null) can use balance_mode='aggregate'")
+            raise HTTPException(400, "Seules les entités racines (sans parent) peuvent utiliser le mode de solde 'agrégé'")
 
         now = datetime.now(timezone.utc).isoformat()
         cur = conn.execute(
@@ -158,7 +158,7 @@ def get_entity(entity_id: int, request: Request):
     try:
         row = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "Entity not found")
+            raise HTTPException(404, "Entité introuvable")
         allowed = get_allowed_entity_ids(conn, user)
         # Les entités externes restent visibles (contreparties), même hors périmètre.
         if allowed is not None and row["type"] != "external" and entity_id not in allowed:
@@ -174,7 +174,7 @@ def update_entity(entity_id: int, update: EntityUpdate):
     try:
         existing = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         if not existing:
-            raise HTTPException(404, "Entity not found")
+            raise HTTPException(404, "Entité introuvable")
 
         old_data = row_to_dict(existing)
         # exclude_unset distingue « champ non fourni » de « fourni à null ».
@@ -197,18 +197,18 @@ def update_entity(entity_id: int, update: EntityUpdate):
         if "balance_mode" in fields and fields["balance_mode"] == "aggregate":
             parent_id = fields.get("parent_id", existing["parent_id"])
             if parent_id is not None:
-                raise HTTPException(400, "Only root entities (parent_id = null) can use balance_mode='aggregate'")
+                raise HTTPException(400, "Seules les entités racines (sans parent) peuvent utiliser le mode de solde 'agrégé'")
 
         if "parent_id" in fields:
             new_parent = fields["parent_id"]
             if new_parent == entity_id:
-                raise HTTPException(400, "Entity cannot be its own parent")
+                raise HTTPException(400, "Une entité ne peut pas être son propre parent")
             # parent_id explicitement null = détacher vers la racine, toujours
             # autorisé sans validation. Sinon, le nouveau parent doit exister
             # et être 'internal' (même contrainte qu'à la création).
             if new_parent is not None:
                 if existing["type"] == "external":
-                    raise HTTPException(400, "External entities cannot have a parent")
+                    raise HTTPException(400, "Une entité externe ne peut pas avoir de parent")
                 _validate_internal_parent(conn, new_parent)
             # Walk up from proposed parent to check for cycles
             current = new_parent
@@ -217,7 +217,11 @@ def update_entity(entity_id: int, update: EntityUpdate):
                 if not row:
                     break
                 if row["parent_id"] == entity_id:
-                    raise HTTPException(400, "Circular parent reference detected")
+                    raise HTTPException(
+                        400,
+                        "Référence parente circulaire détectée : une entité ne peut pas devenir "
+                        "l'enfant de l'un de ses descendants.",
+                    )
                 current = row["parent_id"]
 
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -237,7 +241,7 @@ def delete_entity(entity_id: int):
     try:
         existing = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         if not existing:
-            raise HTTPException(404, "Entity not found")
+            raise HTTPException(404, "Entité introuvable")
 
         old_data = row_to_dict(existing)
 
@@ -258,7 +262,11 @@ def delete_entity(entity_id: int):
                 (entity_id, entity_id),
             ).fetchone()
             if has_tx:
-                raise HTTPException(400, "Cannot delete entity with transactions.")
+                raise HTTPException(
+                    400,
+                    "Impossible de supprimer une entité qui a des transactions. "
+                    "Réaffectez ou supprimez d'abord ses transactions.",
+                )
         except HTTPException:
             raise
         except Exception:
@@ -297,7 +305,7 @@ def get_entity_balance(entity_id: int, request: Request, as_of_date: Optional[st
         require_entity_access(conn, user, entity_id)
         entity = conn.execute("SELECT * FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
-            raise HTTPException(404, "Internal entity not found")
+            raise HTTPException(404, "Entité interne introuvable")
         return compute_entity_balance(conn, entity_id, as_of_date)
     finally:
         conn.close()
@@ -311,7 +319,7 @@ def get_consolidated_balance(entity_id: int, request: Request, as_of_date: Optio
         require_entity_access(conn, user, entity_id)
         entity = conn.execute("SELECT * FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
-            raise HTTPException(404, "Internal entity not found")
+            raise HTTPException(404, "Entité interne introuvable")
         return compute_consolidated_balance(conn, entity_id, as_of_date)
     finally:
         conn.close()
@@ -337,9 +345,21 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
     try:
         entity = conn.execute("SELECT id FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
-            raise HTTPException(404, "Internal entity not found")
+            raise HTTPException(404, "Entité interne introuvable")
 
+        # reference_date null (ou vide) = effacement explicite de la référence côté
+        # UI (BalanceRefsSection.tsx envoie reference_date: null). La colonne
+        # reference_date de entity_balance_refs est NOT NULL : un INSERT avec None
+        # y provoquerait un sqlite3.IntegrityError. On traduit donc "date effacée"
+        # en suppression de la ligne, ce qui redonne le même résultat que
+        # get_balance_ref pour une entité qui n'a jamais eu de référence.
+        clear = ref.reference_date is None or ref.reference_date.strip() == ""
         now = datetime.now(timezone.utc).isoformat()
+        if clear:
+            conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
+            conn.commit()
+            return {"entity_id": entity_id, "reference_date": None, "reference_amount": 0}
+
         conn.execute(
             """INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at)
                VALUES (?, ?, ?, ?)

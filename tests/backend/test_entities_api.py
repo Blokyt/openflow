@@ -354,3 +354,133 @@ def test_balance_ref_put_external_rejected(client):
         "reference_amount": 0.0,
     })
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Bug 1 : PUT /balance-ref avec reference_date null (effacement de la référence)
+# ---------------------------------------------------------------------------
+
+def test_balance_ref_put_null_clears_reference(client):
+    """PUT /balance-ref avec reference_date null efface la référence posée
+    précédemment (au lieu de planter avec un IntegrityError sqlite)."""
+    entity = _create_internal(client, name="RefClear").json()
+    client.put(f"/api/entities/{entity['id']}/balance-ref", json={
+        "reference_date": "2025-01-01",
+        "reference_amount": 50000,
+    })
+
+    resp = client.put(f"/api/entities/{entity['id']}/balance-ref", json={
+        "reference_date": None,
+        "reference_amount": 50000,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["reference_date"] is None
+    assert data["reference_amount"] == 0
+
+    get_resp = client.get(f"/api/entities/{entity['id']}/balance-ref")
+    assert get_resp.status_code == 200
+    get_data = get_resp.json()
+    assert get_data["reference_date"] is None
+    assert get_data["reference_amount"] == 0
+
+
+def test_balance_ref_put_null_without_prior_reference_ok(client):
+    """PUT /balance-ref avec reference_date null sur une entité qui n'a JAMAIS
+    eu de référence → 200 sans erreur (pas de ligne à supprimer, no-op)."""
+    entity = _create_internal(client, name="RefNeverSet").json()
+    resp = client.put(f"/api/entities/{entity['id']}/balance-ref", json={
+        "reference_date": None,
+        "reference_amount": 12345,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["entity_id"] == entity["id"]
+    assert data["reference_date"] is None
+    assert data["reference_amount"] == 0
+
+
+def test_balance_ref_clear_matches_virgin_entity_balance(client):
+    """Après effacement de la référence, le solde recalculé retombe sur le
+    comportement sans référence (pas de filtre de date, pas de base non
+    nulle), identique à une entité qui n'a jamais eu de référence."""
+    e = _create_internal(client, name="RefClearedBalance").json()
+    ext = _create_external(client, name="ExtRefCleared").json()
+
+    # Une transaction avant et une après la date de référence posée.
+    client.post("/api/transactions/", json={
+        "date": "2025-01-10", "label": "avant", "amount": 3000,
+        "from_entity_id": ext["id"], "to_entity_id": e["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-06-10", "label": "apres", "amount": 2000,
+        "from_entity_id": ext["id"], "to_entity_id": e["id"],
+    })
+
+    client.put(f"/api/entities/{e['id']}/balance-ref", json={
+        "reference_date": "2025-03-01",
+        "reference_amount": 50000,
+    })
+    ref_balance = client.get(f"/api/entities/{e['id']}/balance").json()
+    # Avec la référence : seule la transaction du 2025-06-10 (postérieure) compte.
+    assert ref_balance["balance"] == 50000 + 2000
+
+    # Effacement de la référence.
+    clear_resp = client.put(f"/api/entities/{e['id']}/balance-ref", json={
+        "reference_date": None,
+        "reference_amount": 0,
+    })
+    assert clear_resp.status_code == 200
+    cleared_balance = client.get(f"/api/entities/{e['id']}/balance").json()
+
+    # Solde d'une entité vierge (jamais eu de référence) avec les mêmes transactions.
+    virgin = _create_internal(client, name="RefVirgin").json()
+    client.post("/api/transactions/", json={
+        "date": "2025-01-10", "label": "avant", "amount": 3000,
+        "from_entity_id": ext["id"], "to_entity_id": virgin["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-06-10", "label": "apres", "amount": 2000,
+        "from_entity_id": ext["id"], "to_entity_id": virgin["id"],
+    })
+    virgin_balance = client.get(f"/api/entities/{virgin['id']}/balance").json()
+
+    assert cleared_balance["reference_amount"] == 0
+    assert cleared_balance["reference_date"] is None
+    assert cleared_balance["balance"] == virgin_balance["balance"]
+    assert cleared_balance["balance"] == 3000 + 2000
+
+
+# ---------------------------------------------------------------------------
+# Bug 2 : messages d'erreur en français (verrouillage anti-régression)
+# ---------------------------------------------------------------------------
+
+def test_update_entity_circular_parent_rejected_french_message(client):
+    """PUT /{id} créant un cycle parent → 400 avec un message en français,
+    pas la chaîne anglaise 'Circular parent reference detected'."""
+    a = _create_internal(client, name="CycleA").json()
+    b = _create_internal(client, name="CycleB", parent_id=a["id"]).json()
+    # B est déjà l'enfant de A : faire de A l'enfant de B fermerait un cycle.
+    resp = client.put(f"/api/entities/{a['id']}", json={"parent_id": b["id"]})
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "circular" not in detail.lower()
+    assert "circulaire" in detail.lower()
+
+
+def test_delete_entity_with_transactions_rejected_french_message(client_and_db):
+    """DELETE d'une entité ayant des transactions → 400 avec un message en
+    français, pas la chaîne anglaise 'Cannot delete entity with transactions.'."""
+    client, db_path = client_and_db
+    e = _create_internal(client, name="AvecTransactions").json()
+    ext = _create_external(client, name="ExtAvecTransactions").json()
+    client.post("/api/transactions/", json={
+        "date": "2025-01-01", "label": "tx", "amount": 1000,
+        "from_entity_id": ext["id"], "to_entity_id": e["id"],
+    })
+    resp = client.delete(f"/api/entities/{e['id']}")
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "cannot delete" not in detail.lower()
+    assert "transaction" in detail.lower()
+    assert "impossible" in detail.lower()
