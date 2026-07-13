@@ -33,14 +33,36 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
+# ATTACHMENTS_DIR reste fixe sur data/attachments du dépôt : c'est là que le
+# module attachments (backend/modules/attachments/api.py) stocke toujours ses
+# fichiers, quel que soit le db_path configuré pour l'instance.
 ATTACHMENTS_DIR = DATA_DIR / "attachments"
 PRISTINE_ZIP = PROJECT_ROOT / "install" / "pristine.zip"
-SYSTEM_SETTINGS_FILE = DATA_DIR / "system_settings.json"
 
 DEFAULT_SETTINGS = {
     "max_backups": 5,
     "temp_max_age_hours": 24,
 }
+
+
+# ─── Chemins dérivés du db_path de l'instance (PAS data/ du dépôt) ─────────
+#
+# Une instance peut être lancée avec un db_path personnalisé (tests, E2E,
+# déploiement alternatif). Les sauvegardes automatiques de migrate.py sont
+# toujours créées à côté du fichier de base (<nom-db>.backup.<timestamp>) :
+# on doit donc dériver ces chemins de get_db_path() à chaque appel plutôt que
+# de les figer sur data/ du dépôt au chargement du module.
+
+def _db_dir() -> Path:
+    return Path(get_db_path()).parent
+
+
+def _backup_prefix() -> str:
+    return Path(get_db_path()).name + ".backup"
+
+
+def _settings_file() -> Path:
+    return _db_dir() / "system_settings.json"
 
 # Directories considered "code" (restorable from pristine)
 CODE_DIRS = ["backend", "frontend/src", "frontend/public", "tools"]
@@ -53,17 +75,19 @@ CODE_ROOT_FILES = ["start.py", "setup.py", "requirements.txt", "requirements-dev
 # ─── Settings helpers ───────────────────────────────────────────────────────
 
 def _load_settings():
-    if SYSTEM_SETTINGS_FILE.exists():
+    settings_file = _settings_file()
+    if settings_file.exists():
         try:
-            return {**DEFAULT_SETTINGS, **json.loads(SYSTEM_SETTINGS_FILE.read_text())}
+            return {**DEFAULT_SETTINGS, **json.loads(settings_file.read_text())}
         except Exception:
             pass
     return dict(DEFAULT_SETTINGS)
 
 
 def _save_settings(s):
-    SYSTEM_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SYSTEM_SETTINGS_FILE.write_text(json.dumps(s, indent=2))
+    settings_file = _settings_file()
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps(s, indent=2))
 
 
 def _dir_size(path: Path) -> int:
@@ -92,10 +116,11 @@ def _format_bytes(n: int) -> str:
 
 
 def _list_db_backups() -> list[dict]:
-    """List auto-backup files from migrate.py (*.backup.* pattern)."""
+    """List auto-backup files from migrate.py (<nom-db>.backup.* pattern)."""
     backups = []
-    if DATA_DIR.exists():
-        for p in DATA_DIR.glob("openflow.db.backup*"):
+    db_dir = _db_dir()
+    if db_dir.exists():
+        for p in db_dir.glob(f"{_backup_prefix()}*"):
             try:
                 st = p.stat()
                 backups.append({
@@ -213,12 +238,13 @@ def list_backups():
 @router.delete("/backups/{name}")
 def delete_backup(name: str):
     # Anti path traversal : on résout le chemin et on vérifie qu'il reste dans
-    # DATA_DIR ET que le fichier porte bien le préfixe de backup. Un nom comme
-    # "openflow.db.backup../../config.yaml" passe le startswith mais sort de
-    # DATA_DIR : is_relative_to le rejette.
-    base = DATA_DIR.resolve()
-    path = (DATA_DIR / name).resolve()
-    if not path.is_relative_to(base) or not path.name.startswith("openflow.db.backup"):
+    # le dossier de la base (celle de l'instance, via get_db_path()) ET que le
+    # fichier porte bien le préfixe de backup. Un nom comme
+    # "<nom-db>.backup../../config.yaml" passe le startswith mais sort du
+    # dossier de la base : is_relative_to le rejette.
+    base = _db_dir().resolve()
+    path = (_db_dir() / name).resolve()
+    if not path.is_relative_to(base) or not path.name.startswith(_backup_prefix()):
         raise HTTPException(400, "Nom de sauvegarde invalide")
     if not path.exists():
         raise HTTPException(404, "Backup not found")
@@ -242,7 +268,7 @@ def cleanup(body: CleanupRequest):
         to_remove = backups[settings["max_backups"]:]
         for b in to_remove:
             try:
-                path = DATA_DIR / b["name"]
+                path = _db_dir() / b["name"]
                 removed["total_bytes"] += path.stat().st_size
                 path.unlink()
                 removed["pruned_backups"] += 1
