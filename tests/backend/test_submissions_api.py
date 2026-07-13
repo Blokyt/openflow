@@ -34,7 +34,7 @@ def test_submissions_table_exists(client_and_db):
         "id", "date", "label", "description", "amount", "category_id",
         "entity_id", "counterparty_entity_id", "direction", "status",
         "submitted_by", "reviewed_by", "reviewed_at", "review_comment",
-        "transaction_id", "created_at", "updated_at",
+        "transaction_id", "payer_contact_id", "created_at", "updated_at",
     } <= cols
 
 

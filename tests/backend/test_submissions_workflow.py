@@ -163,6 +163,88 @@ def test_approve_rejected_submission_409(client_and_db, login_as):
     assert client.post(f"/api/submissions/{sid}/approve").status_code == 409
 
 
+# ─── Avance de frais : le soumetteur désigne le payeur, l'approbation crée la
+# fiche de remboursement (même mécanisme que la saisie directe admin).
+
+def _contact(client, name="Alice Martin"):
+    r = client.post("/api/tiers/", json={"name": name, "type": "membre"})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def _reimbursements(client):
+    r = client.get("/api/reimbursements/")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_submission_with_payer_exposes_payer(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    cid = _contact(client)
+    sid = _submission(tres, gastro, fournisseur, payer_contact_id=cid)
+    body = tres.get(f"/api/submissions/{sid}").json()
+    assert body["payer_contact_id"] == cid
+    assert body["payer_name"] == "Alice Martin"
+
+
+def test_submission_with_unknown_payer_rejected(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    p = {"date": "2026-05-10", "label": "Courses", "amount": 4550,
+         "entity_id": gastro, "counterparty_entity_id": fournisseur,
+         "direction": "expense", "payer_contact_id": 99999}
+    r = tres.post("/api/submissions/", json=p)
+    assert r.status_code == 400
+
+
+def test_approve_with_payer_creates_pending_reimbursement(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    cid = _contact(client)
+    sid = _submission(tres, gastro, fournisseur, payer_contact_id=cid)
+    tx_id = client.post(f"/api/submissions/{sid}/approve").json()["transaction_id"]
+    fiches = [r for r in _reimbursements(client) if r["transaction_id"] == tx_id]
+    assert len(fiches) == 1
+    fiche = fiches[0]
+    assert fiche["contact_id"] == cid
+    assert fiche["person_name"] == "Alice Martin"
+    assert fiche["amount"] == 4550
+    assert fiche["status"] == "pending"
+
+
+def test_approve_without_payer_creates_no_reimbursement(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    sid = _submission(tres, gastro, fournisseur)
+    tx_id = client.post(f"/api/submissions/{sid}/approve").json()["transaction_id"]
+    assert [r for r in _reimbursements(client) if r["transaction_id"] == tx_id] == []
+
+
+def test_reject_with_payer_creates_no_reimbursement(client_and_db, login_as):
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    cid = _contact(client)
+    sid = _submission(tres, gastro, fournisseur, payer_contact_id=cid)
+    r = client.post(f"/api/submissions/{sid}/reject", json={"comment": "Facture illisible"})
+    assert r.status_code == 200
+    assert _reimbursements(client) == []
+
+
+def test_approve_with_deleted_payer_contact_skips_reimbursement(client_and_db, login_as):
+    """Le contact a disparu entre la soumission et l'approbation (FK OFF) :
+    on approuve quand même, simplement sans fiche de remboursement (même
+    philosophie que la catégorie disparue)."""
+    client, db_path = client_and_db
+    gastro, fournisseur, tres = _env(db_path, login_as)
+    cid = _contact(client)
+    sid = _submission(tres, gastro, fournisseur, payer_contact_id=cid)
+    assert client.delete(f"/api/tiers/{cid}").status_code == 200
+    r = client.post(f"/api/submissions/{sid}/approve")
+    assert r.status_code == 200
+    assert _reimbursements(client) == []
+
+
 def test_reject_requires_comment(client_and_db, login_as):
     client, db_path = client_and_db
     gastro, fournisseur, tres = _env(db_path, login_as)

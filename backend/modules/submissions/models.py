@@ -23,4 +23,9 @@ migrations = {
         "CREATE INDEX idx_submissions_status ON transaction_submissions(status)",
         "CREATE INDEX idx_submissions_submitted_by ON transaction_submissions(submitted_by)",
     ],
+    # Avance de frais : le soumetteur peut désigner le membre (contact tiers)
+    # qui a avancé l'argent ; l'approbation crée la fiche de remboursement.
+    "1.1.0": [
+        "ALTER TABLE transaction_submissions ADD COLUMN payer_contact_id INTEGER",
+    ],
 }

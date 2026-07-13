@@ -3,7 +3,7 @@
   "name": "Soumissions",
   "description": "Soumission de transactions par les trésoriers, validation par l'admin",
   "help": "Les trésoriers de sous-entités soumettent leurs dépenses et recettes avec justificatif PDF. L'administrateur approuve (la transaction entre en comptabilité) ou refuse avec un commentaire. Une soumission en attente n'affecte jamais les soldes.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "entities", "attachments", "users"],

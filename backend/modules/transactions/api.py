@@ -10,6 +10,11 @@ from pydantic import BaseModel
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin, require_entity_access
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
+from backend.modules.reimbursements.service import (
+    create_advance,
+    delete_advance,
+    sync_pending_advance_amount,
+)
 
 router = APIRouter()
 
@@ -244,17 +249,7 @@ def create_transaction(tx: TransactionCreate, force: bool = False):
         tx_id = cur.lastrowid
         new_row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
 
-        if tx.payer_contact_id is not None:
-            contact_row = conn.execute(
-                "SELECT name FROM contacts WHERE id = ?", (tx.payer_contact_id,)
-            ).fetchone()
-            person_name = contact_row[0] if contact_row else ""
-            conn.execute(
-                """INSERT INTO reimbursements
-                   (transaction_id, contact_id, person_name, amount, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
-                (tx_id, tx.payer_contact_id, person_name, abs(tx.amount), now, now),
-            )
+        create_advance(conn, tx_id, tx.payer_contact_id, now)
 
         conn.commit()
         return row_to_dict(new_row)
@@ -360,34 +355,13 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
 
             if payer_changed:
                 # Le payeur change : l'ancien suivi devient obsolète, on le remplace.
-                conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
-                if payer_contact_id_value is not None:
-                    contact_row = conn.execute(
-                        "SELECT name FROM contacts WHERE id = ?", (payer_contact_id_value,)
-                    ).fetchone()
-                    person_name = contact_row[0] if contact_row else ""
-                    current_amount_row = conn.execute(
-                        "SELECT amount FROM transactions WHERE id = ?", (tx_id,)
-                    ).fetchone()
-                    amount = abs(current_amount_row[0]) if current_amount_row else 0
-                    conn.execute(
-                        """INSERT INTO reimbursements
-                           (transaction_id, contact_id, person_name, amount, status, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
-                        (tx_id, payer_contact_id_value, person_name, amount, now, now),
-                    )
-            elif existing_reimb is not None and existing_reimb["status"] == "pending" and "amount" in updates:
+                delete_advance(conn, tx_id)
+                create_advance(conn, tx_id, payer_contact_id_value, now)
+            elif existing_reimb is not None and "amount" in updates:
                 # Payeur inchangé : statut préservé. On resynchronise seulement le
                 # montant du suivi si l'avance est encore "en attente" et que le
                 # montant de la transaction vient de changer.
-                current_amount_row = conn.execute(
-                    "SELECT amount FROM transactions WHERE id = ?", (tx_id,)
-                ).fetchone()
-                new_amount = abs(current_amount_row[0]) if current_amount_row else 0
-                conn.execute(
-                    "UPDATE reimbursements SET amount = ?, updated_at = ? WHERE id = ?",
-                    (new_amount, now, existing_reimb["id"]),
-                )
+                sync_pending_advance_amount(conn, tx_id, now)
 
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         conn.commit()
@@ -409,13 +383,9 @@ def delete_transaction(tx_id: int, force: bool = False):
                 status_code=409,
                 detail="Exercice clôturé : modifier quand même ?",
             )
-        # Nettoyage des remboursements qui référencent cette écriture comme avance,
-        # pour éviter les orphelins (FK OFF, pas de cascade). Les écritures de
-        # décaissement déjà générées (reimbursement_transaction_id) ne sont pas touchées.
-        try:
-            conn.execute("DELETE FROM reimbursements WHERE transaction_id = ?", (tx_id,))
-        except sqlite3.OperationalError:
-            pass  # module reimbursements absent : table inexistante
+        # Nettoyage du suivi d'avance lié à cette écriture, pour éviter les
+        # orphelins (FK OFF, pas de cascade).
+        delete_advance(conn, tx_id)
         # Justificatifs liés : fichiers sur disque + lignes (la cascade FK déclarée
         # n'est jamais exécutée car PRAGMA foreign_keys est OFF).
         try:

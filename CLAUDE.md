@@ -96,13 +96,23 @@ Le contexte React `FiscalYearContext` expose `currentYear` et `selectedYear`
 
 ## Soumissions
 
-Le module `submissions` (1.0.0) porte le workflow treasurer → admin :
+Le module `submissions` (1.1.0) porte le workflow treasurer → admin :
 table `transaction_submissions` séparée (JAMAIS de statut sur `transactions`),
 approbation = création d'une vraie transaction (from/to déduits de
 entité + contrepartie + direction) et re-liaison des justificatifs
 (`attachments.submission_id`, conservé pour l'historique).
 `test_coherence_submissions.py` garantit qu'une soumission non approuvée
 n'affecte jamais un solde, un budget ni un rapport.
+
+Avance de frais : le soumetteur peut désigner le membre qui a avancé l'argent
+(`payer_contact_id`, contact du module tiers) ; l'approbation crée alors la
+fiche de remboursement automatiquement. Toute la logique d'avance (création,
+suppression, resynchronisation de la fiche liée à une transaction) est
+centralisée dans `backend/modules/reimbursements/service.py`, consommé par les
+modules transactions et submissions : ne pas réécrire de SQL reimbursements
+ailleurs. Côté React, le sélecteur de contact partagé est
+`frontend/src/core/ContactCombobox.tsx` (prop `allowCreate` à false pour les
+non-admins, la création de contact étant réservée à l'admin).
 
 ## Convention modules
 

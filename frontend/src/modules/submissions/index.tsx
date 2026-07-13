@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileUp, Paperclip, X } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../core/AuthContext";
+import ContactCombobox from "../../core/ContactCombobox";
 import { formatEuros } from "../../utils/format";
 
 // Libellés français des statuts (design system : chips fond couleur+"20").
@@ -47,6 +48,8 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
   const [categories, setCategories] = useState<any[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [payerContactId, setPayerContactId] = useState<string>("");
+  const [payerName, setPayerName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -94,12 +97,15 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
         entity_id: Number(form.entity_id),
         counterparty_entity_id: Number(form.counterparty_entity_id),
         direction: form.direction,
+        payer_contact_id: payerContactId ? Number(payerContactId) : null,
       });
       for (const file of files) {
         await api.uploadSubmissionAttachment(created.id, file);
       }
       setForm((f) => ({ ...f, label: "", description: "", amount: "" }));
       setFiles([]);
+      setPayerContactId("");
+      setPayerName(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       window.dispatchEvent(new Event("openflow:submissions-changed"));
       onCreated();
@@ -177,6 +183,21 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
             {externals.map((ex) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
           </select>
         </div>
+      </div>
+      <div>
+        <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Avance de frais (payée par)</label>
+        <ContactCombobox
+          value={payerContactId}
+          selectedName={payerName}
+          onChange={setPayerContactId}
+          onPick={(c) => setPayerName(c.name)}
+          placeholder="Rechercher un membre..."
+          allowCreate={isAdmin}
+        />
+        <p className="mt-1 text-xs text-[#8a8a8a]">
+          Si un membre a avancé l'argent, sélectionne-le : la fiche de remboursement
+          sera créée automatiquement à l'approbation.
+        </p>
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Justificatifs (PDF, images)</label>
@@ -271,6 +292,9 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
               <td className="px-4 py-3 text-white">
                 {s.label}
                 <AttachmentLinks submissionId={s.id} />
+                {s.payer_name && (
+                  <p className="text-xs text-[#F2C48D] mt-1">Avance de frais : {s.payer_name}</p>
+                )}
                 {s.status === "rejected" && s.review_comment && (
                   <p className="text-xs text-[#FF5252] mt-1">Motif du refus : {s.review_comment}</p>
                 )}
@@ -399,6 +423,11 @@ function AdminQueue() {
                     {s.date} · {s.entity_name} → {s.counterparty_name}
                     {s.category_name ? ` · ${s.category_name}` : ""} · par {s.submitted_by_name || s.submitted_by_email}
                   </p>
+                  {s.payer_name && (
+                    <p className="text-xs text-[#F2C48D] mt-1">
+                      Avance de frais : {s.payer_name} (fiche de remboursement créée à l'approbation)
+                    </p>
+                  )}
                   {s.description && <p className="text-sm text-[#B0B0B0] mt-1">{s.description}</p>}
                   <AttachmentLinks submissionId={s.id} />
                   {s.status === "rejected" && s.review_comment && (

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin
 from backend.core.database import get_conn, row_to_dict
+from backend.modules.reimbursements.service import create_advance
 
 router = APIRouter()
 
@@ -18,13 +19,15 @@ _SELECT = """SELECT s.*,
        ce.name AS counterparty_name,
        c.name AS category_name, c.color AS category_color,
        u.display_name AS submitted_by_name, u.email AS submitted_by_email,
-       ru.display_name AS reviewed_by_name
+       ru.display_name AS reviewed_by_name,
+       pc.name AS payer_name
 FROM transaction_submissions s
 LEFT JOIN entities e ON s.entity_id = e.id
 LEFT JOIN entities ce ON s.counterparty_entity_id = ce.id
 LEFT JOIN categories c ON s.category_id = c.id
 LEFT JOIN users u ON s.submitted_by = u.id
-LEFT JOIN users ru ON s.reviewed_by = ru.id"""
+LEFT JOIN users ru ON s.reviewed_by = ru.id
+LEFT JOIN contacts pc ON s.payer_contact_id = pc.id"""
 
 
 def _now() -> str:
@@ -45,6 +48,9 @@ class SubmissionCreate(BaseModel):
     entity_id: int
     counterparty_entity_id: int
     direction: Literal["expense", "income"]
+    # Avance de frais : contact (module tiers) qui a avancé l'argent. Reporté
+    # sur la transaction à l'approbation (fiche de remboursement automatique).
+    payer_contact_id: Optional[int] = None
 
 
 @router.post("/", status_code=201)
@@ -73,14 +79,22 @@ def create_submission(sub: SubmissionCreate, request: Request):
             cat = conn.execute("SELECT id FROM categories WHERE id = ?", (sub.category_id,)).fetchone()
             if cat is None:
                 raise HTTPException(status_code=400, detail=f"Catégorie {sub.category_id} introuvable")
+        if sub.payer_contact_id is not None:
+            payer = conn.execute(
+                "SELECT id FROM contacts WHERE id = ?", (sub.payer_contact_id,)
+            ).fetchone()
+            if payer is None:
+                raise HTTPException(status_code=400, detail=f"Contact payeur {sub.payer_contact_id} introuvable")
         now = _now()
         cur = conn.execute(
             """INSERT INTO transaction_submissions
                (date, label, description, amount, category_id, entity_id,
-                counterparty_entity_id, direction, status, submitted_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+                counterparty_entity_id, direction, status, submitted_by,
+                payer_contact_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
             (sub.date, sub.label, sub.description, sub.amount, sub.category_id,
-             sub.entity_id, sub.counterparty_entity_id, sub.direction, user["id"], now, now),
+             sub.entity_id, sub.counterparty_entity_id, sub.direction, user["id"],
+             sub.payer_contact_id, now, now),
         )
         data = _fetch_serialized(conn, cur.lastrowid)
         conn.commit()
@@ -205,6 +219,10 @@ def approve_submission(submission_id: int, force: bool = False, admin: dict = De
             "UPDATE attachments SET transaction_id = ? WHERE submission_id = ?",
             (tx_id, submission_id),
         )
+        # Avance de frais : même mécanisme que la saisie directe admin. Si le
+        # contact a disparu depuis la soumission (FK OFF), on approuve quand
+        # même sans fiche, comme pour la catégorie disparue.
+        create_advance(conn, tx_id, row["payer_contact_id"], now)
         # Garde CAS : le statut n'est basculé que s'il est ENCORE 'pending' au
         # moment de l'écriture. Sous WAL + busy_timeout, le verrou d'écriture
         # SQLite sérialise deux approbations concurrentes ; la perdante voit
