@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FileDown, AlertTriangle, Plus, Trash2, Sparkles } from "lucide-react";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import { useEntity } from "../../core/EntityContext";
+import { useAuth } from "../../core/AuthContext";
 import ConfirmDialog from "../../core/ConfirmDialog";
 import { api } from "../../api";
 import { formatEuros, eurosToCents } from "../../utils/format";
@@ -362,12 +363,14 @@ function BilanRow({
 // ─── Plan comptable (mapping catégorie -> compte) ───────────────────────────
 
 function PlanComptableTab() {
+  const { isAdmin } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [rows, setRows] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
   const [applying, setApplying] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   function loadMapping() {
     return api.getReportMapping().then((m) => {
@@ -400,9 +403,12 @@ function PlanComptableTab() {
 
   async function change(categoryId: number, accountId: number | null) {
     setSaving(categoryId);
+    setPlanError(null);
     try {
       await api.setReportMapping(categoryId, accountId);
       await Promise.all([loadMapping(), loadSuggestions()]);
+    } catch (e: any) {
+      setPlanError(e?.message || "Erreur lors de la mise à jour du mapping");
     } finally {
       setSaving(null);
     }
@@ -410,14 +416,23 @@ function PlanComptableTab() {
 
   async function applyAllSuggestions() {
     setApplying(true);
+    setPlanError(null);
     try {
       await api.applyReportMappingSuggestions(
         suggestions.map((s) => ({ category_id: s.category_id, account_id: s.suggested_account_id })),
       );
       await Promise.all([loadMapping(), loadSuggestions()]);
+    } catch (e: any) {
+      setPlanError(e?.message || "Erreur lors de l'application des suggestions");
     } finally {
       setApplying(false);
     }
+  }
+
+  function accountLabel(accountId: number | null) {
+    if (!accountId) return "Non mappée (compte Autres par défaut)";
+    const a = accounts.find((x) => x.id === accountId);
+    return a ? `${a.code} · ${a.label}` : "Compte inconnu";
   }
 
   if (loading) return <Loading />;
@@ -433,6 +448,18 @@ function PlanComptableTab() {
         compte « Autres » de son sens.
       </p>
 
+      {!isAdmin && (
+        <p className="text-sm text-[#8a8a8a]">
+          Lecture seule : le plan comptable est géré par l'administrateur.
+        </p>
+      )}
+
+      {planError && (
+        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+          {planError}
+        </div>
+      )}
+
       {suggestions.length > 0 && (
         <div className="rounded-2xl border border-[#F2C48D]/30 bg-[#F2C48D]/[0.06] p-4 flex items-start justify-between gap-4">
           <div className="flex items-start gap-2 min-w-0">
@@ -447,13 +474,15 @@ function PlanComptableTab() {
               </p>
             </div>
           </div>
-          <button
-            onClick={applyAllSuggestions}
-            disabled={applying}
-            className="flex items-center gap-1.5 rounded-xl bg-[#F2C48D] px-3 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
-          >
-            <Sparkles size={14} /> {applying ? "Application…" : `Appliquer (${suggestions.length})`}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={applyAllSuggestions}
+              disabled={applying}
+              className="flex items-center gap-1.5 rounded-xl bg-[#F2C48D] px-3 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
+            >
+              <Sparkles size={14} /> {applying ? "Application…" : `Appliquer (${suggestions.length})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -477,26 +506,30 @@ function PlanComptableTab() {
                 <tr key={r.category_id} className="border-b border-[#1a1a1a] last:border-0">
                   <td className="px-5 py-3 text-white">{r.category_name}</td>
                   <td className="px-5 py-3">
-                    <select
-                      value={r.account_id ?? ""}
-                      disabled={saving === r.category_id}
-                      onChange={(e) =>
-                        change(r.category_id, e.target.value ? parseInt(e.target.value, 10) : null)
-                      }
-                      className="bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-1.5 text-sm text-white min-w-[18rem] disabled:opacity-50"
-                    >
-                      <option value="">Non mappée (compte Autres par défaut)</option>
-                      <optgroup label="Produits (classe 7)">
-                        {produits.map((a) => (
-                          <option key={a.id} value={a.id}>{a.code} · {a.label}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Charges (classe 6)">
-                        {charges.map((a) => (
-                          <option key={a.id} value={a.id}>{a.code} · {a.label}</option>
-                        ))}
-                      </optgroup>
-                    </select>
+                    {isAdmin ? (
+                      <select
+                        value={r.account_id ?? ""}
+                        disabled={saving === r.category_id}
+                        onChange={(e) =>
+                          change(r.category_id, e.target.value ? parseInt(e.target.value, 10) : null)
+                        }
+                        className="bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-1.5 text-sm text-white min-w-[18rem] disabled:opacity-50"
+                      >
+                        <option value="">Non mappée (compte Autres par défaut)</option>
+                        <optgroup label="Produits (classe 7)">
+                          {produits.map((a) => (
+                            <option key={a.id} value={a.id}>{a.code} · {a.label}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Charges (classe 6)">
+                          {charges.map((a) => (
+                            <option key={a.id} value={a.id}>{a.code} · {a.label}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    ) : (
+                      <span className="text-[#8a8a8a]">{accountLabel(r.account_id)}</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -522,6 +555,7 @@ function Field({ label, children, className }: { label: string; children: React.
 }
 
 function ClotureTab({ year }: { year: any }) {
+  const { isAdmin } = useAuth();
   const [accruals, setAccruals] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [entities, setEntities] = useState<any[]>([]);
@@ -611,56 +645,62 @@ function ClotureTab({ year }: { year: any }) {
         </div>
       )}
 
-      <div className="rounded-2xl border border-[#222] bg-[#111] p-4 grid gap-3 md:grid-cols-6 items-end">
-        <Field label="Nature">
-          <select value={kind} onChange={(e) => setKind(e.target.value as any)} className={inputCls}>
-            <option value="creance">Créance (à recevoir)</option>
-            <option value="dette">Dette (à payer)</option>
-          </select>
-        </Field>
-        <Field label="Libellé" className="md:col-span-2">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Subvention BDE à recevoir"
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Montant (€)">
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputMode="decimal"
-            placeholder="0,00"
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Catégorie">
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputCls}>
-            <option value="">Aucune</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Entité">
-          <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className={inputCls}>
-            <option value="">Aucune</option>
-            {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
-          </select>
-        </Field>
-        <div className="md:col-span-6">
-          <button
-            onClick={add}
-            disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-[#F2C48D] px-4 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50"
-          >
-            <Plus size={15} strokeWidth={2} />
-            Ajouter
-          </button>
+      {isAdmin ? (
+        <div className="rounded-2xl border border-[#222] bg-[#111] p-4 grid gap-3 md:grid-cols-6 items-end">
+          <Field label="Nature">
+            <select value={kind} onChange={(e) => setKind(e.target.value as any)} className={inputCls}>
+              <option value="creance">Créance (à recevoir)</option>
+              <option value="dette">Dette (à payer)</option>
+            </select>
+          </Field>
+          <Field label="Libellé" className="md:col-span-2">
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Subvention BDE à recevoir"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Montant (€)">
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="decimal"
+              placeholder="0,00"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Catégorie">
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputCls}>
+              <option value="">Aucune</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Entité">
+            <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className={inputCls}>
+              <option value="">Aucune</option>
+              {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
+            </select>
+          </Field>
+          <div className="md:col-span-6">
+            <button
+              onClick={add}
+              disabled={saving}
+              className="flex items-center gap-2 rounded-xl bg-[#F2C48D] px-4 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50"
+            >
+              <Plus size={15} strokeWidth={2} />
+              Ajouter
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="text-sm text-[#8a8a8a]">
+          Lecture seule : les écritures de clôture sont gérées par l'administrateur.
+        </p>
+      )}
 
-      <AccrualList title="Restes à recevoir (créances)" items={creances} onDelete={(id) => setPendingDelete(id)} accent={COLOR_OK} />
-      <AccrualList title="Restes à payer (dettes)" items={dettes} onDelete={(id) => setPendingDelete(id)} accent={COLOR_KO} />
+      <AccrualList title="Restes à recevoir (créances)" items={creances} onDelete={(id) => setPendingDelete(id)} accent={COLOR_OK} isAdmin={isAdmin} />
+      <AccrualList title="Restes à payer (dettes)" items={dettes} onDelete={(id) => setPendingDelete(id)} accent={COLOR_KO} isAdmin={isAdmin} />
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -677,8 +717,8 @@ function ClotureTab({ year }: { year: any }) {
 }
 
 function AccrualList({
-  title, items, onDelete, accent,
-}: { title: string; items: any[]; onDelete: (id: number) => void; accent: string }) {
+  title, items, onDelete, accent, isAdmin,
+}: { title: string; items: any[]; onDelete: (id: number) => void; accent: string; isAdmin: boolean }) {
   return (
     <div className="rounded-2xl border border-[#222] bg-[#111] overflow-hidden">
       <div className="px-5 py-3 border-b border-[#222] flex items-center gap-2">
@@ -702,13 +742,15 @@ function AccrualList({
                 </td>
                 <td className="px-5 py-3 text-right text-white whitespace-nowrap">{formatEuros(a.amount)}</td>
                 <td className="px-3 py-3 text-right">
-                  <button
-                    onClick={() => onDelete(a.id)}
-                    className="text-[#8a8a8a] hover:text-[#FF5252] transition"
-                    title="Supprimer"
-                  >
-                    <Trash2 size={15} strokeWidth={1.5} />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => onDelete(a.id)}
+                      className="text-[#8a8a8a] hover:text-[#FF5252] transition"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={15} strokeWidth={1.5} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

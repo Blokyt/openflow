@@ -320,10 +320,17 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   useEffect(() => {
     if (!submissionsActive || !isAdmin) { setPendingSubmissions(0); return; }
     let cancelled = false;
-    api.getSubmissions("pending")
-      .then((d) => { if (!cancelled) setPendingSubmissions(Array.isArray(d) ? d.length : 0); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    function refetch() {
+      api.getSubmissions("pending")
+        .then((d) => { if (!cancelled) setPendingSubmissions(Array.isArray(d) ? d.length : 0); })
+        .catch(() => {});
+    }
+    refetch();
+    window.addEventListener("openflow:submissions-changed", refetch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("openflow:submissions-changed", refetch);
+    };
   }, [submissionsActive, isAdmin]);
 
   // Build core nav items (fixed, always shown)

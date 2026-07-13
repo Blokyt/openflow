@@ -117,7 +117,7 @@ function EntityModal({
   entity?: Entity | null;
   internalEntities: Entity[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (updated?: Entity) => void;
 }) {
   const isEdit = !!entity;
   const [name, setName] = useState(entity?.name ?? "");
@@ -136,7 +136,8 @@ function EntityModal({
       if (isEdit) {
         const payload: any = { name: name.trim(), description: description.trim(), color };
         if (type === "internal") payload.parent_id = parentId !== "" ? parentId : null;
-        await api.updateEntityNode(entity!.id, payload);
+        const updated = await api.updateEntityNode(entity!.id, payload);
+        onSaved(updated);
       } else {
         await api.createEntity({
           name: name.trim(),
@@ -148,8 +149,8 @@ function EntityModal({
           is_divers: 0,
           position: 0,
         });
+        onSaved();
       }
-      onSaved();
       onClose();
     } catch (err: any) {
       setError(err.message || "Erreur lors de l'enregistrement");
@@ -599,9 +600,15 @@ export default function EntityTree() {
     }
   }
 
-  async function handleSaved() {
+  async function handleSaved(updated?: Entity) {
     await reload();
     await api.getEntities("external").then(setExternalEntities).catch(() => {});
+    // Si l'entité modifiée est celle affichée dans le panneau de détail, on
+    // reflète immédiatement son nouveau nom (sinon le titre resterait figé
+    // sur l'ancien nom jusqu'à une nouvelle sélection).
+    if (updated && selectedEntityId === updated.id) {
+      setSelectedEntityName(updated.name);
+    }
   }
 
   // Flatten internal entities for parent selector

@@ -215,7 +215,14 @@ export default function FiscalYearsTab() {
                     )}
                     {isAdmin && y.end_date === null && closingId !== y.id && (
                       <button
-                        onClick={() => { setClosingId(y.id); setCloseDate(new Date().toISOString().slice(0, 10)); }}
+                        onClick={() => {
+                          setClosingId(y.id);
+                          const today = new Date().toISOString().slice(0, 10);
+                          // Pré-remplir avec aujourd'hui n'a de sens que si l'exercice a déjà
+                          // commencé : pour un exercice futur, partir du début évite un refus
+                          // systématique du backend (date de clôture < date de début).
+                          setCloseDate(y.start_date > today ? y.start_date : today);
+                        }}
                         className="text-xs text-[#B0B0B0] hover:text-white mr-3 border border-[#333] px-2.5 py-1 rounded-full"
                       >
                         Clore

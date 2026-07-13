@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileUp, Paperclip, X } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../core/AuthContext";
@@ -46,6 +46,7 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
   const [externals, setExternals] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -99,6 +100,8 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
       }
       setForm((f) => ({ ...f, label: "", description: "", amount: "" }));
       setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      window.dispatchEvent(new Event("openflow:submissions-changed"));
       onCreated();
     } catch (err: any) {
       setError(err?.message || "Erreur lors de la soumission.");
@@ -177,7 +180,7 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Justificatifs (PDF, images)</label>
-        <input type="file" multiple accept=".pdf,image/*"
+        <input type="file" multiple accept=".pdf,image/*" ref={fileInputRef}
           className="block w-full text-sm text-[#B0B0B0] file:mr-3 file:rounded-full file:border-0 file:bg-[#222] file:px-3 file:py-1.5 file:text-sm file:text-white"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
         {files.length > 0 && (
@@ -215,6 +218,8 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelingId, setCancelingId] = useState<number | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<number | null>(null);
 
   const load = useCallback(() => {
     api.getMySubmissions().then(setItems).catch(() => {}).finally(() => setLoading(false));
@@ -223,11 +228,16 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
 
   async function cancel(id: number) {
     setError(null);
+    setCancelingId(id);
     try {
       await api.cancelSubmission(id);
+      setConfirmCancel(null);
+      window.dispatchEvent(new Event("openflow:submissions-changed"));
       load();
     } catch (err: any) {
       setError(err?.message || "Erreur lors de l'annulation.");
+    } finally {
+      setCancelingId(null);
     }
   }
 
@@ -273,10 +283,29 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
               <td className="px-4 py-3"><StatusChip status={s.status} /></td>
               <td className="px-4 py-3 text-right">
                 {s.status === "pending" && (
-                  <button onClick={() => cancel(s.id)} title="Annuler cette soumission"
-                    className="text-[#8a8a8a] hover:text-white transition-colors">
-                    <X size={15} />
-                  </button>
+                  confirmCancel === s.id ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="text-xs text-[#8a8a8a]">Annuler ?</span>
+                      <button
+                        onClick={() => cancel(s.id)}
+                        disabled={cancelingId === s.id}
+                        className="text-xs font-medium text-[#FF5252] hover:text-red-400"
+                      >
+                        Oui
+                      </button>
+                      <button
+                        onClick={() => setConfirmCancel(null)}
+                        className="text-xs font-medium text-[#8a8a8a] hover:text-white"
+                      >
+                        Non
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setConfirmCancel(s.id)} title="Annuler cette soumission"
+                      className="text-[#8a8a8a] hover:text-white transition-colors">
+                      <X size={15} />
+                    </button>
+                  )
                 )}
               </td>
             </tr>
@@ -320,6 +349,7 @@ function AdminQueue() {
         return;
       }
     }
+    window.dispatchEvent(new Event("openflow:submissions-changed"));
     load();
   }
 
@@ -329,6 +359,7 @@ function AdminQueue() {
       await api.rejectSubmission(id, comment);
       setRejectingId(null);
       setComment("");
+      window.dispatchEvent(new Event("openflow:submissions-changed"));
       load();
     } catch (err: any) {
       setError(err?.message || "Erreur lors du refus.");

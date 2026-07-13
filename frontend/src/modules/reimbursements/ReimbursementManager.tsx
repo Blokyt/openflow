@@ -170,6 +170,7 @@ export default function ReimbursementManager() {
       } else {
         await apiReimb("/", { method: "POST", body: JSON.stringify(payload) });
       }
+      setError(null);
       cancelForm();
       fetchAll();
     } catch (e: any) {
@@ -182,6 +183,7 @@ export default function ReimbursementManager() {
   async function handleDelete(id: number) {
     try {
       await apiReimb(`/${id}`, { method: "DELETE" });
+      setError(null);
       setConfirmDelete(null);
       fetchAll();
     } catch (e: any) {
@@ -202,6 +204,7 @@ export default function ReimbursementManager() {
           reimbursed_date: newStatus === "reimbursed" ? today : null,
         }),
       });
+      setError(null);
       await fetchAll();
     } catch (e: any) {
       setError(e.message);
