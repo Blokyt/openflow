@@ -41,6 +41,15 @@ def _fy_end(fy) -> str:
     return fy["end_date"] if fy["end_date"] else _today()
 
 
+def _format_date_fr(iso_date: str) -> str:
+    """Formate une date ISO (AAAA-MM-JJ) en JJ/MM/AAAA pour l'affichage utilisateur,
+    cohérent avec le reste de l'UI. Retombe sur la chaîne d'origine si non parsable."""
+    try:
+        return _date.fromisoformat(iso_date).strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return iso_date
+
+
 # ─── Pydantic models ─────────────────────────────────────────────────────────
 
 class FiscalYearCreate(BaseModel):
@@ -189,7 +198,7 @@ def create_fiscal_year(body: FiscalYearCreate):
             raise HTTPException(
                 400,
                 f"La date de début doit être postérieure à la fin de l'exercice "
-                f"« {overlap['name']} » (clos le {overlap['end_date']}).",
+                f"« {overlap['name']} » (clos le {_format_date_fr(overlap['end_date'])}).",
             )
         now = _now()
         # Trouve l'exercice précédent : le plus récent dont end_date < nouveau start_date.

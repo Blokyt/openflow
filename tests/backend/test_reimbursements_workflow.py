@@ -241,7 +241,11 @@ class TestDeletion:
         client.put(f"/api/reimbursements/{rid}", json={"status": "reimbursed"})
         resp = client.delete(f"/api/reimbursements/{rid}")
         assert resp.status_code == 409
-        assert "attente" in resp.json()["detail"].lower()
+        detail = resp.json()["detail"]
+        assert "attente" in detail.lower()
+        # Le message ne doit plus contenir le mot anglais "(reimbursed)".
+        assert "(reimbursed)" not in detail
+        assert "déjà réglé" in detail
 
     def test_repending_then_delete_ok(self, client):
         """Après repassage en attente, la suppression d'un remboursement réglé est permise."""

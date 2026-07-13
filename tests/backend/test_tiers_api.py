@@ -103,6 +103,43 @@ def test_default_type_is_other(client):
     assert c["type"] == "other"
 
 
+# ─── Validation du nom ─────────────────────────────────────────────────────────
+
+def test_create_contact_empty_name_rejected(client):
+    r = client.post("/api/tiers/", json={"name": "", "type": "other"})
+    assert r.status_code == 400
+    assert "obligatoire" in r.json()["detail"].lower()
+
+
+def test_create_contact_whitespace_name_rejected(client):
+    r = client.post("/api/tiers/", json={"name": "   ", "type": "other"})
+    assert r.status_code == 400
+    assert "obligatoire" in r.json()["detail"].lower()
+
+
+def test_create_contact_name_stripped(client):
+    r = client.post("/api/tiers/", json={"name": "  Alice Dupont  ", "type": "other"})
+    assert r.status_code == 201
+    assert r.json()["name"] == "Alice Dupont"
+
+
+def test_update_contact_empty_name_rejected(client):
+    c = _create(client, name="Nom Valide")
+    r = client.put(f"/api/tiers/{c['id']}", json={"name": "   "})
+    assert r.status_code == 400
+    assert "obligatoire" in r.json()["detail"].lower()
+
+
+def test_update_contact_without_name_field_ok(client):
+    """L'absence du champ name (contrairement à name='' ou name='   ') laisse le nom inchangé."""
+    c = _create(client, name="Nom Valide")
+    r = client.put(f"/api/tiers/{c['id']}", json={"phone": "0600000000"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["name"] == "Nom Valide"
+    assert data["phone"] == "0600000000"
+
+
 # ─── Filtres ──────────────────────────────────────────────────────────────────
 
 def test_filter_by_type(client):

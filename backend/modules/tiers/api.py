@@ -69,6 +69,9 @@ def list_contacts(
 
 @router.post("/", status_code=201)
 def create_contact(contact: ContactCreate):
+    name = contact.name.strip()
+    if not name:
+        raise HTTPException(400, "Le nom du contact est obligatoire.")
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn()
     try:
@@ -77,7 +80,7 @@ def create_contact(contact: ContactCreate):
                (name, type, email, phone, address, notes, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                contact.name,
+                name,
                 contact.type,
                 contact.email,
                 contact.phone,
@@ -151,6 +154,20 @@ def update_contact(contact_id: int, contact: ContactUpdate):
             raise HTTPException(status_code=404, detail=f"Contact {contact_id} not found")
 
         updates = contact.model_dump(exclude_unset=True)
+        if not updates:
+            return row_to_dict(existing)
+
+        # name absent du payload (champ non fourni) : pas dans `updates`, inchangé.
+        # name explicitement fourni (y compris null) : on valide et on strip.
+        if "name" in updates:
+            if updates["name"] is None:
+                del updates["name"]
+            else:
+                stripped_name = updates["name"].strip()
+                if not stripped_name:
+                    raise HTTPException(400, "Le nom du contact est obligatoire.")
+                updates["name"] = stripped_name
+
         if not updates:
             return row_to_dict(existing)
 

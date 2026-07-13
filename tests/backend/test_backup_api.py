@@ -69,7 +69,10 @@ def test_export_import_round_trip_preserves_data(client_and_db):
         files={"file": ("backup.zip", zip_bytes, "application/zip")},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["success"] is True
+    body = r.json()
+    assert body["success"] is True
+    # Verrouille le message de succès accentué (régression : accents manquants).
+    assert body["message"] == "Sauvegarde importée avec succès"
 
     assert _fetch_category_names(db_path) == ["Cotisations", "Subventions"]
 

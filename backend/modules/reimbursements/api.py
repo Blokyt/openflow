@@ -336,7 +336,7 @@ def delete_reimbursement(reimbursement_id: int):
         if old_data.get("status") == ReimbursementStatus.reimbursed.value:
             raise HTTPException(
                 409,
-                "Ce remboursement est déjà réglé (reimbursed). "
+                "Ce remboursement est déjà réglé. "
                 "Repassez-le en attente avant de le supprimer.",
             )
 

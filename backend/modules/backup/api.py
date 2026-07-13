@@ -242,7 +242,7 @@ async def import_backup(file: UploadFile = File(...)):
 
     return {
         "success": True,
-        "message": "Sauvegarde importee avec succes",
+        "message": "Sauvegarde importée avec succès",
         "backup_created": backup_path,
         "imported": imported_counts,
         "total_records": sum(imported_counts.values()),

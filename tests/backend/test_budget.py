@@ -177,6 +177,21 @@ def test_close_date_must_be_after_start(client):
     assert r.status_code == 400
 
 
+def test_create_fiscal_year_overlap_message_uses_french_date_format(client):
+    """Bug 3 : le message de chevauchement d'exercice affiche la date de clôture
+    au format JJ/MM/AAAA (comme toute l'UI), pas la forme ISO brute (AAAA-MM-JJ)."""
+    fy = _make_fy(client, "2025-2026", "2025-09-01")
+    _close_fy(client, fy["id"], "2026-08-31")
+
+    r = client.post("/api/budget/fiscal-years", json={
+        "name": "2026-2027-chevauche", "start_date": "2026-08-15",
+    })
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "31/08/2026" in detail
+    assert "2026-08-31" not in detail
+
+
 def test_allocation_crud(client):
     fy = _make_fy(client)
     e = client.post("/api/entities/", json={"name": "Club", "type": "internal"}).json()
