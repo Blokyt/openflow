@@ -53,4 +53,16 @@ migrations = {
         "CREATE INDEX IF NOT EXISTS idx_login_events_email ON login_events(email, id)",
         "CREATE INDEX IF NOT EXISTS idx_login_events_ip ON login_events(ip, id)",
     ],
+    "1.2.0": [
+        """CREATE TABLE IF NOT EXISTS password_resets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            user_id INTEGER NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            created_by INTEGER,
+            created_at TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id)",
+    ],
 }

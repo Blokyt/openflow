@@ -73,6 +73,8 @@ export const api = {
   getMe: () => request<any>("/users/me"),
   changeMyPassword: (current_password: string, new_password: string) =>
     request<any>("/users/me/password", { method: "PUT", body: JSON.stringify({ current_password, new_password }) }),
+  updateMe: (data: { display_name?: string; email?: string }) =>
+    request<any>("/users/me", { method: "PUT", body: JSON.stringify(data) }),
   listUsers: () => request<any[]>("/users/"),
   updateUser: (id: number, data: any) =>
     request<any>(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -80,6 +82,12 @@ export const api = {
     request<any>(`/users/${id}/roles`, { method: "PUT", body: JSON.stringify({ roles }) }),
   revokeUserSessions: (id: number) =>
     request<any>(`/users/${id}/sessions`, { method: "DELETE" }),
+  createResetLink: (userId: number) =>
+    request<any>(`/users/${userId}/reset-link`, { method: "POST" }),
+  previewReset: (token: string) =>
+    request<any>(`/users/reset/preview?token=${encodeURIComponent(token)}`),
+  acceptReset: (data: { token: string; new_password: string }) =>
+    request<any>("/users/reset/accept", { method: "POST", body: JSON.stringify(data) }),
   listLoginEvents: (limit = 100) => request<any[]>(`/users/login-events?limit=${limit}`),
   createInvitation: (data: { email: string; is_admin?: boolean; roles?: { entity_id: number; role: string }[] }) =>
     request<any>("/users/invitations", { method: "POST", body: JSON.stringify(data) }),

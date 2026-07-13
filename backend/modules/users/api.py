@@ -50,6 +50,7 @@ class RolesPayload(BaseModel):
 
 class UserUpdatePayload(BaseModel):
     display_name: Optional[str] = None
+    email: Optional[str] = None
     is_admin: Optional[bool] = None
     is_active: Optional[bool] = None
 
@@ -209,6 +210,40 @@ def list_login_events(limit: int = 100):
         conn.close()
 
 
+class MeUpdatePayload(BaseModel):
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+
+
+@router.put("/me")
+def update_me(request: Request, payload: MeUpdatePayload):
+    """L'utilisateur modifie son propre nom ou email."""
+    user = get_current_user(request)
+    conn = get_conn()
+    try:
+        fields, values = [], []
+        if payload.display_name is not None:
+            fields.append("display_name = ?"); values.append(payload.display_name.strip())
+        if payload.email is not None:
+            email = payload.email.strip().lower()
+            if not email:
+                raise HTTPException(status_code=400, detail="L'email ne peut pas être vide")
+            fields.append("email = ?"); values.append(email)
+        if not fields:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+            return serialize_user(conn, row)
+        values.append(user["id"])
+        try:
+            conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte")
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+        return serialize_user(conn, row)
+    finally:
+        conn.close()
+
+
 @router.put("/me/password")
 def change_my_password(request: Request, payload: PasswordPayload):
     user = get_current_user(request)
@@ -364,6 +399,16 @@ def update_user(user_id: int, payload: UserUpdatePayload, request: Request):
         fields, values = [], []
         if payload.display_name is not None:
             fields.append("display_name = ?"); values.append(payload.display_name.strip())
+        if payload.email is not None:
+            email = payload.email.strip().lower()
+            if not email:
+                raise HTTPException(status_code=400, detail="L'email ne peut pas être vide")
+            existing = conn.execute(
+                "SELECT id FROM users WHERE email = ? AND id != ?", (email, user_id)
+            ).fetchone()
+            if existing is not None:
+                raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte")
+            fields.append("email = ?"); values.append(email)
         if payload.is_admin is not None:
             fields.append("is_admin = ?"); values.append(1 if payload.is_admin else 0)
         if payload.is_active is not None:
@@ -372,8 +417,11 @@ def update_user(user_id: int, payload: UserUpdatePayload, request: Request):
                 conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         if fields:
             values.append(user_id)
-            conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
-            conn.commit()
+            try:
+                conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+                conn.commit()
+            except sqlite3.IntegrityError:
+                raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte")
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return serialize_user(conn, row)
     finally:
@@ -410,5 +458,79 @@ def revoke_sessions(user_id: int):
         cur = conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         conn.commit()
         return {"deleted": cur.rowcount}
+    finally:
+        conn.close()
+
+
+RESET_TTL_HOURS = 72
+
+
+@router.post("/{user_id}/reset-link", dependencies=[Depends(require_admin)])
+def create_reset_link(user_id: int, request: Request):
+    """Génère un lien de réinitialisation de mot de passe (admin → utilisateur)."""
+    conn = get_conn()
+    try:
+        row = _get_user_or_404(conn, user_id)
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        expires = (now + timedelta(hours=RESET_TTL_HOURS)).isoformat()
+        conn.execute(
+            "INSERT INTO password_resets (token_hash, user_id, expires_at, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (hash_token(token), user_id, expires, get_current_user(request)["id"], now.isoformat()),
+        )
+        conn.commit()
+        return {"token": token, "url_path": f"/reset?token={token}", "expires_at": expires, "email": row["email"]}
+    finally:
+        conn.close()
+
+
+@router.get("/reset/preview")
+def preview_reset(token: str):
+    """Prévisualisation publique d'un lien de reset (comme les invitations)."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT pr.*, u.email FROM password_resets pr JOIN users u ON u.id = pr.user_id "
+            "WHERE pr.token_hash = ? AND pr.used_at IS NULL AND pr.expires_at > ?",
+            (hash_token(token), _now_iso()),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Lien de réinitialisation invalide ou expiré")
+        return {"email": row["email"]}
+    finally:
+        conn.close()
+
+
+class ResetAcceptPayload(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset/accept")
+@limiter.limit("5/minute;20/hour")
+def accept_reset(request: Request, payload: ResetAcceptPayload, response: Response):
+    """Accepte un lien de reset : nouveau mot de passe, connexion automatique."""
+    if len(payload.new_password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(status_code=400,
+                            detail=f"Mot de passe trop court ({MIN_PASSWORD_LENGTH} caractères minimum)")
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?",
+            (hash_token(payload.token), _now_iso()),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Lien de réinitialisation invalide ou expiré")
+        now = _now_iso()
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                     (hash_password(payload.new_password), row["user_id"]))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))
+        conn.execute("UPDATE password_resets SET used_at = ? WHERE id = ?", (now, row["id"]))
+        token = create_session(conn, row["user_id"], request.headers.get("user-agent", ""))
+        conn.commit()
+        _set_session_cookie(response, request, token)
+        user_row = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        return serialize_user(conn, user_row)
     finally:
         conn.close()

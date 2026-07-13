@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, X, Copy, Check, ShieldCheck, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Copy, Check, ShieldCheck, Users, KeyRound } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../core/AuthContext";
 import { useEntity } from "../../core/EntityContext";
@@ -168,6 +168,18 @@ export default function UsersAdmin() {
   const [savingRoles, setSavingRoles] = useState(false);
   const [rolesError, setRolesError] = useState<string | null>(null);
 
+  // Modal: edit user info (email + display_name)
+  const [editUser, setEditUser] = useState<UserAccount | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Reset password link
+  const [resetLinkResult, setResetLinkResult] = useState<{ url_path: string; email: string } | null>(null);
+  const [resetLinkCopied, setResetLinkCopied] = useState(false);
+  const [generatingReset, setGeneratingReset] = useState<number | null>(null);
+
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [revokingId, setRevokingId] = useState<number | null>(null);
   const [revokedOkId, setRevokedOkId] = useState<number | null>(null);
@@ -253,6 +265,60 @@ export default function UsersAdmin() {
       setError(e.message);
     } finally {
       setRevokingId(null);
+    }
+  }
+
+  function openEdit(u: UserAccount) {
+    setEditError(null);
+    setEditUser(u);
+    setEditName(u.display_name);
+    setEditEmail(u.email);
+  }
+  function closeEdit() {
+    setEditUser(null);
+    setEditName("");
+    setEditEmail("");
+  }
+  async function saveEdit() {
+    if (!editUser) return;
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const updated = await api.updateUser(editUser.id, {
+        display_name: editName.trim() || undefined,
+        email: editEmail.trim() || undefined,
+      });
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)));
+      closeEdit();
+    } catch (e: any) {
+      setEditError(e.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function generateResetLink(u: UserAccount) {
+    setGeneratingReset(u.id);
+    try {
+      const result = await api.createResetLink(u.id);
+      setResetLinkResult(result);
+      setResetLinkCopied(false);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setGeneratingReset(null);
+    }
+  }
+
+  async function copyResetLink() {
+    if (!resetLinkResult) return;
+    const fullUrl = `${window.location.origin}${resetLinkResult.url_path}`;
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setResetLinkCopied(true);
+      setTimeout(() => setResetLinkCopied(false), 2000);
+    } catch {
+      setError("Impossible de copier le lien automatiquement.");
     }
   }
 
@@ -393,6 +459,9 @@ export default function UsersAdmin() {
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-3 text-xs whitespace-nowrap">
+                        <button onClick={() => openEdit(u)} className="font-medium text-[#F2C48D] hover:text-[#e8b87a] transition-colors flex items-center gap-1">
+                          <Pencil size={12} /> Modifier
+                        </button>
                         {!u.is_admin && (
                           <button onClick={() => openRoles(u)} className="font-medium text-[#F2C48D] hover:text-[#e8b87a] transition-colors flex items-center gap-1">
                             <Pencil size={12} /> Rôles
@@ -413,6 +482,15 @@ export default function UsersAdmin() {
                         >
                           {revokedOkId === u.id ? "Déconnecté" : revokingId === u.id ? "..." : "Déconnecter partout"}
                         </button>
+                        {!isSelf && (
+                          <button
+                            onClick={() => generateResetLink(u)}
+                            disabled={generatingReset === u.id}
+                            className="font-medium text-[#B0B0B0] hover:text-white disabled:opacity-30 transition-colors"
+                          >
+                            {generatingReset === u.id ? "..." : "Réinitialiser mdp"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -541,6 +619,99 @@ export default function UsersAdmin() {
               <button type="button" onClick={saveRoles} disabled={savingRoles} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">
                 {savingRoles ? "Enregistrement..." : "Enregistrer"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal : modifier nom et email */}
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !savingEdit && closeEdit()}>
+          <div className="w-full max-w-lg bg-[#111] border border-[#222] rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Modifier le compte</h2>
+                <p className="text-xs text-[#8a8a8a] mt-0.5">{editUser.email}</p>
+              </div>
+              <button onClick={closeEdit} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
+            </div>
+            {editError && (
+              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{editError}</div>
+            )}
+            <div className="px-6 py-6 space-y-4">
+              <div>
+                <label className={labelClass}>Nom d'affichage</label>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className={inputClass}
+                  placeholder="Prénom Nom"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className={inputClass}
+                  placeholder="email@exemple.fr"
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-6 flex justify-end gap-3">
+              <button type="button" onClick={closeEdit} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
+              <button type="button" onClick={saveEdit} disabled={savingEdit} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">
+                {savingEdit ? "Enregistrement..." : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal : lien de réinitialisation */}
+      {resetLinkResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setResetLinkResult(null)}>
+          <div className="w-full max-w-lg bg-[#111] border border-[#222] rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Lien de réinitialisation</h2>
+                <p className="text-xs text-[#8a8a8a] mt-0.5">Pour {resetLinkResult.email}</p>
+              </div>
+              <button onClick={() => setResetLinkResult(null)} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                <p className="text-sm text-emerald-300">
+                  Lien généré ! Transmets-le à <span className="font-semibold">{resetLinkResult.email}</span> pour qu'il puisse choisir un nouveau mot de passe.
+                </p>
+              </div>
+              <div>
+                <label className={labelClass}>Lien de réinitialisation</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={`${window.location.origin}${resetLinkResult.url_path}`}
+                    onFocus={(e) => e.target.select()}
+                    className={`${inputClass} text-xs`}
+                  />
+                  <button
+                    type="button"
+                    onClick={copyResetLink}
+                    className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-xl hover:bg-[#e8b87a] transition-colors"
+                  >
+                    {resetLinkCopied ? <><Check size={14} /> Copié</> : <><Copy size={14} /> Copier</>}
+                  </button>
+                </div>
+                <p className="text-xs text-[#FF5252] mt-2">
+                  Ce lien ne sera affiché qu'une seule fois. Il expire dans 72 h.
+                </p>
+              </div>
+              <div className="flex justify-end pt-2">
+                <button type="button" onClick={() => setResetLinkResult(null)} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>

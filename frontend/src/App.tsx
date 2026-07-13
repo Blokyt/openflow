@@ -10,6 +10,7 @@ import { FiscalYearProvider } from "./core/FiscalYearContext";
 import { AuthProvider, useAuth } from "./core/AuthContext";
 import LoginPage from "./core/LoginPage";
 import InvitationPage from "./core/InvitationPage";
+import ResetPage from "./core/ResetPage";
 import { MODULE_ROUTES } from "./routes";
 import Spinner from "./core/Spinner";
 
@@ -81,6 +82,7 @@ function AppContent() {
 
 function AuthGate() {
   const { user, loading } = useAuth();
+  if (window.location.pathname === "/reset") return <ResetPage />;
   if (window.location.pathname === "/invitation") return <InvitationPage />;
   if (loading) return <Spinner />;
   if (!user) return <LoginPage />;

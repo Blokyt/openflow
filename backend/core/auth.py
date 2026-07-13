@@ -86,12 +86,15 @@ PUBLIC_API_PATHS = {
     "/api/users/login",
     "/api/users/invitations/preview",
     "/api/users/invitations/accept",
+    "/api/users/reset/preview",
+    "/api/users/reset/accept",
 }
 
 # Mutations autorisées aux non-admins (gestion de leur propre compte).
 NON_ADMIN_MUTATIONS = {
     "/api/users/login",
     "/api/users/logout",
+    "/api/users/me",
     "/api/users/me/password",
     "/api/users/invitations/accept",
     "/api/submissions/",

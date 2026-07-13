@@ -20,6 +20,13 @@ function MyAccountSection() {
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileName, setProfileName] = useState(user?.display_name || "");
+  const [profileEmail, setProfileEmail] = useState(user?.email || "");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -47,6 +54,27 @@ function MyAccountSection() {
     window.location.href = "/";
   }
 
+  async function onSaveProfile(e: FormEvent) {
+    e.preventDefault();
+    setProfileError(null);
+    setProfileSuccess(false);
+    setProfileBusy(true);
+    try {
+      await api.updateMe({
+        display_name: profileName.trim(),
+        email: profileEmail.trim(),
+      });
+      setProfileSuccess(true);
+      setEditingProfile(false);
+      // Refresh user data in AuthContext
+      window.location.reload();
+    } catch (err: any) {
+      setProfileError(err?.message || "Modification impossible");
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
   return (
     <section className="mb-8">
       <h2 className="text-base font-semibold text-white mb-3">Mon compte</h2>
@@ -56,13 +84,57 @@ function MyAccountSection() {
             <p className="text-sm font-medium text-white">{user?.display_name}</p>
             <p className="text-xs text-[#8a8a8a]">{user?.email}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 text-xs font-semibold text-white bg-[#1a1a1a] border border-[#222] rounded-full hover:border-[#FF5252] hover:text-[#FF5252] transition-colors"
-          >
-            Se déconnecter
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setEditingProfile(true); setProfileName(user?.display_name || ""); setProfileEmail(user?.email || ""); setProfileError(null); setProfileSuccess(false); }}
+              className="px-4 py-2 text-xs font-semibold text-[#F2C48D] border border-[#333] rounded-full hover:border-[#F2C48D] transition-colors"
+            >
+              Modifier
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-xs font-semibold text-white bg-[#1a1a1a] border border-[#222] rounded-full hover:border-[#FF5252] hover:text-[#FF5252] transition-colors"
+            >
+              Se déconnecter
+            </button>
+          </div>
         </div>
+        {editingProfile && (
+          <form onSubmit={onSaveProfile} className="border-t border-[#1a1a1a] pt-5 space-y-3 max-w-sm">
+            <p className="text-xs text-[#8a8a8a]">Modifier mon profil</p>
+            <input
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="Prénom Nom"
+              className={accountInputClass}
+            />
+            <input
+              type="email"
+              value={profileEmail}
+              onChange={(e) => setProfileEmail(e.target.value)}
+              placeholder="Email"
+              className={accountInputClass}
+            />
+            {profileError && <p className="text-sm text-[#FF5252]">{profileError}</p>}
+            {profileSuccess && <p className="text-sm text-[#00C853]">Profil modifié</p>}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={profileBusy}
+                className="px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
+              >
+                {profileBusy ? "Enregistrement..." : "Enregistrer"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingProfile(false)}
+                className="px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+        )}
 
         <div className="border-t border-[#1a1a1a] pt-5">
           <form onSubmit={onSubmit} className="space-y-3 max-w-sm">
