@@ -31,6 +31,7 @@ EXPECTED_GET = {
     "/api/categories/": "connected",
     "/api/categories/tree": "connected",
     "/api/categories/{cat_id}": "connected",
+    "/api/categories/{cat_id}/usage": "connected",
     # dashboard
     "/api/dashboard/widgets": "connected",
     "/api/dashboard/layout": "connected",

@@ -5,7 +5,43 @@ import { useEntity } from "../../core/EntityContext";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import { useAuth } from "../../core/AuthContext";
 import { formatEuros } from "../../utils/format";
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Check, AlertTriangle } from "lucide-react";
+
+interface CategoryUsage {
+  transactions: number;
+  allocations: number;
+  children: number;
+  accruals: number;
+}
+
+/** Construit le message d'avertissement affiché avant confirmation de suppression,
+ * en fonction de ce qui utilise la catégorie. Retourne null si rien n'est utilisé
+ * (dans ce cas la confirmation générique reste inchangée). */
+function describeUsageImpact(usage: CategoryUsage): string | null {
+  const uses: string[] = [];
+  if (usage.transactions > 0) {
+    uses.push(`${usage.transactions} transaction${usage.transactions > 1 ? "s" : ""}`);
+  }
+  if (usage.allocations > 0) {
+    uses.push(`${usage.allocations} allocation${usage.allocations > 1 ? "s" : ""} budgétaire${usage.allocations > 1 ? "s" : ""}`);
+  }
+  if (usage.children > 0) {
+    uses.push(`${usage.children} sous-catégorie${usage.children > 1 ? "s" : ""}`);
+  }
+  if (usage.accruals > 0) {
+    uses.push(`${usage.accruals} écriture${usage.accruals > 1 ? "s" : ""} de clôture`);
+  }
+  if (uses.length === 0) return null;
+
+  const consequences: string[] = [];
+  if (usage.transactions > 0) consequences.push("les transactions seront décatégorisées");
+  if (usage.accruals > 0) consequences.push("les écritures de clôture seront décatégorisées");
+  if (usage.allocations > 0) consequences.push("les allocations budgétaires seront supprimées");
+  if (usage.children > 0) consequences.push("les sous-catégories seront rattachées à la racine");
+  const consequenceSentence = consequences.join(", ");
+
+  return `Utilisée par ${uses.join(", ")}. ${consequenceSentence.charAt(0).toUpperCase()}${consequenceSentence.slice(1)}.`;
+}
 
 /* ---------- Category tree node ---------- */
 function CategoryNode({
@@ -156,6 +192,7 @@ export default function CategoryManager() {
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [savingCat, setSavingCat] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [deleteUsage, setDeleteUsage] = useState<CategoryUsage | null>(null);
 
   const [newName, setNewName] = useState("");
   const [newParentId, setNewParentId] = useState("");
@@ -220,10 +257,24 @@ export default function CategoryManager() {
     }
   }
 
+  function requestDelete(id: number) {
+    setConfirmDelete(id);
+    setDeleteUsage(null);
+    // Best-effort : si la route n'est pas encore déployée ou que l'appel échoue
+    // (réseau), on retombe silencieusement sur la confirmation générique.
+    api.getCategoryUsage(id).then(setDeleteUsage).catch(() => {});
+  }
+
+  function cancelDelete() {
+    setConfirmDelete(null);
+    setDeleteUsage(null);
+  }
+
   async function handleDelete(id: number) {
     try {
       await api.deleteCategory(id);
       setConfirmDelete(null);
+      setDeleteUsage(null);
       fetchCategories();
     } catch (e: any) {
       setError(e.message);
@@ -244,23 +295,32 @@ export default function CategoryManager() {
         );
       }
       if (confirmDelete === cat.id) {
+        const impact = deleteUsage ? describeUsageImpact(deleteUsage) : null;
         return (
-          <div key={cat.id} className="flex items-center gap-2 py-2 px-2 bg-[#1a0a0a] border border-[#FF5252]/20 rounded-lg">
-            <span className="w-5" />
-            <span className="flex-1 text-sm text-[#FF5252] font-medium">{cat.name}</span>
-            <span className="text-xs text-[#FF5252]/70">Supprimer ?</span>
-            <button
-              onClick={() => handleDelete(cat.id)}
-              className="text-xs font-medium text-[#FF5252] hover:text-red-400"
-            >
-              Oui
-            </button>
-            <button
-              onClick={() => setConfirmDelete(null)}
-              className="text-xs font-medium text-[#8a8a8a] hover:text-white"
-            >
-              Non
-            </button>
+          <div key={cat.id} className="flex flex-col gap-1.5 py-2 px-2 bg-[#1a0a0a] border border-[#FF5252]/20 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="w-5" />
+              <span className="flex-1 text-sm text-[#FF5252] font-medium">{cat.name}</span>
+              <span className="text-xs text-[#FF5252]/70">Supprimer ?</span>
+              <button
+                onClick={() => handleDelete(cat.id)}
+                className="text-xs font-medium text-[#FF5252] hover:text-red-400"
+              >
+                Oui
+              </button>
+              <button
+                onClick={cancelDelete}
+                className="text-xs font-medium text-[#8a8a8a] hover:text-white"
+              >
+                Non
+              </button>
+            </div>
+            {impact && (
+              <div className="flex items-start gap-1.5 pl-7">
+                <AlertTriangle size={12} strokeWidth={1.5} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-300 leading-relaxed">{impact}</p>
+              </div>
+            )}
           </div>
         );
       }
@@ -270,7 +330,7 @@ export default function CategoryManager() {
           cat={cat}
           allCategories={flatList}
           onEdit={setEditingCat}
-          onDelete={setConfirmDelete}
+          onDelete={requestDelete}
           canEdit={isAdmin}
         />
       );

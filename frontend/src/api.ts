@@ -118,6 +118,10 @@ export const api = {
   createCategory: (cat: any) => request<any>("/categories/", { method: "POST", body: JSON.stringify(cat) }),
   updateCategory: (id: number, cat: any) => request<any>(`/categories/${id}`, { method: "PUT", body: JSON.stringify(cat) }),
   deleteCategory: (id: number) => request<any>(`/categories/${id}`, { method: "DELETE" }),
+  getCategoryUsage: (id: number) =>
+    request<{ transactions: number; allocations: number; children: number; accruals: number }>(
+      `/categories/${id}/usage`
+    ),
   getBudgets: (period?: string) => {
     const query = period ? `?period=${encodeURIComponent(period)}` : "";
     return request<any[]>(`/budget/${query}`);

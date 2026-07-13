@@ -155,6 +155,53 @@ def get_category(cat_id: int):
         conn.close()
 
 
+@router.get("/{cat_id}/usage")
+def get_category_usage(cat_id: int):
+    """Impact d'une éventuelle suppression : comptes utilisés par la cascade de delete_category.
+
+    Même approche que la cascade elle-même : les tables des modules optionnels
+    (budget_allocations, report_accruals) sont enveloppées dans un try/except
+    car ces modules peuvent être désactivés.
+    """
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Category not found")
+
+        transactions = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE category_id = ?", (cat_id,)
+        ).fetchone()[0]
+        children = conn.execute(
+            "SELECT COUNT(*) FROM categories WHERE parent_id = ?", (cat_id,)
+        ).fetchone()[0]
+
+        allocations = 0
+        try:
+            allocations = conn.execute(
+                "SELECT COUNT(*) FROM budget_allocations WHERE category_id = ?", (cat_id,)
+            ).fetchone()[0]
+        except sqlite3.OperationalError:
+            pass
+
+        accruals = 0
+        try:
+            accruals = conn.execute(
+                "SELECT COUNT(*) FROM report_accruals WHERE category_id = ?", (cat_id,)
+            ).fetchone()[0]
+        except sqlite3.OperationalError:
+            pass
+
+        return {
+            "transactions": transactions,
+            "allocations": allocations,
+            "children": children,
+            "accruals": accruals,
+        }
+    finally:
+        conn.close()
+
+
 @router.put("/{cat_id}")
 def update_category(cat_id: int, data: CategoryUpdate):
     conn = get_conn()

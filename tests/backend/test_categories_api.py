@@ -28,6 +28,52 @@ def test_delete_category(client):
     assert response.status_code == 200
     assert client.get(f"/api/categories/{cat['id']}").status_code == 404
 
+
+# ─── Impact d'une suppression (GET /{cat_id}/usage) ───────────────────────────
+
+def test_category_usage_new_category_is_all_zero(client):
+    cat = client.post("/api/categories/", json={"name": "Neuve"}).json()
+    response = client.get(f"/api/categories/{cat['id']}/usage")
+    assert response.status_code == 200
+    assert response.json() == {"transactions": 0, "allocations": 0, "children": 0, "accruals": 0}
+
+
+def test_category_usage_not_found(client):
+    response = client.get("/api/categories/999999/usage")
+    assert response.status_code == 404
+
+
+def test_category_usage_reflects_transactions_children_and_allocations(client):
+    cat = client.post("/api/categories/", json={"name": "Utilisée"}).json()
+    client.post("/api/categories/", json={"name": "Enfant", "parent_id": cat["id"]})
+
+    # 2 transactions rattachées à la catégorie
+    client.post("/api/transactions/", json={
+        "date": "2025-01-01", "label": "tx1", "amount": 10, "category_id": cat["id"],
+    })
+    client.post("/api/transactions/", json={
+        "date": "2025-01-02", "label": "tx2", "amount": 20, "category_id": cat["id"],
+    })
+
+    # 1 allocation budgétaire rattachée à la catégorie
+    entity = client.post("/api/entities/", json={"name": "EntiteUsage", "type": "internal"}).json()
+    fy = client.post(
+        "/api/budget/fiscal-years",
+        json={"name": "Exercice Usage", "start_date": "2025-09-01"},
+    ).json()
+    alloc_resp = client.post(f"/api/budget/fiscal-years/{fy['id']}/allocations", json={
+        "entity_id": entity["id"], "category_id": cat["id"], "amount": 1000,
+    })
+    assert alloc_resp.status_code == 201
+
+    response = client.get(f"/api/categories/{cat['id']}/usage")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transactions"] == 2
+    assert data["allocations"] == 1
+    assert data["children"] == 1
+    assert data["accruals"] == 0
+
 def test_get_tree(client):
     response = client.get("/api/categories/tree")
     assert response.status_code == 200
