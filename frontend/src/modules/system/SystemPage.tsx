@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import ConfirmDialog from "../../core/ConfirmDialog";
 import { useAuth } from "../../core/AuthContext";
+import PageLoader from "../../core/PageLoader";
 
 interface SystemStatus {
   version: string;
@@ -142,7 +143,7 @@ export default function SystemPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
+        <PageLoader fullScreen={false} />
       </div>
     );
   }
@@ -190,7 +191,7 @@ export default function SystemPage() {
 
       {/* Health overview */}
       <section className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+        <div className="bg-bg-card border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">
             <Database size={13} /> Données utilisateur
           </div>
@@ -199,7 +200,7 @@ export default function SystemPage() {
             DB + attachments + backups
           </p>
         </div>
-        <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+        <div className="bg-bg-card border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">
             <FileUp size={13} /> Temporaire
           </div>
@@ -208,7 +209,7 @@ export default function SystemPage() {
             {status.temp_imports.length} fichier(s) import en attente
           </p>
         </div>
-        <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+        <div className="bg-bg-card border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">
             <HardDrive size={13} /> Code
           </div>
@@ -220,7 +221,7 @@ export default function SystemPage() {
       </section>
 
       {/* DB health */}
-      <section className="bg-[#111] border border-[#222] rounded-xl p-5 mb-5">
+      <section className="bg-bg-card border border-border rounded-xl p-5 mb-5">
         <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
           <Database size={15} /> Base de données
         </h2>
@@ -236,7 +237,7 @@ export default function SystemPage() {
       </section>
 
       {/* Pristine / Repair */}
-      <section className="bg-[#111] border border-[#222] rounded-xl p-5 mb-5">
+      <section className="bg-bg-card border border-border rounded-xl p-5 mb-5">
         <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
           <Shield size={15} /> Intégrité du code
         </h2>
@@ -252,7 +253,7 @@ export default function SystemPage() {
               <button
                 onClick={() => createPristine(false)}
                 disabled={action === "pristine"}
-                className="px-4 py-2 bg-[#F2C48D] text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-sm"
+                className="px-4 py-2 bg-accent-sand text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-sm"
               >
                 {action === "pristine" ? "Création..." : "Créer le snapshot"}
               </button>
@@ -273,7 +274,7 @@ export default function SystemPage() {
                   <button
                     onClick={() => createPristine(true)}
                     disabled={action !== ""}
-                    className="px-3 py-1.5 text-xs border border-[#333] text-[#999] hover:text-white rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-xs border border-border-hover text-[#999] hover:text-white rounded-lg transition-colors"
                     title="Écraser le snapshot avec l'état actuel — réservé à l'admin"
                   >
                     <RefreshCw size={12} className="inline mr-1" />
@@ -284,7 +285,7 @@ export default function SystemPage() {
                   <button
                     onClick={() => setConfirmRepairOpen(true)}
                     disabled={action !== ""}
-                    className="px-4 py-1.5 bg-[#F2C48D] text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-xs flex items-center gap-1.5"
+                    className="px-4 py-1.5 bg-accent-sand text-black font-medium rounded-lg hover:bg-[#e5b87e] disabled:opacity-50 text-xs flex items-center gap-1.5"
                   >
                     <Wrench size={12} />
                     {action === "repair" ? "Réparation..." : "Réparer"}
@@ -293,7 +294,7 @@ export default function SystemPage() {
               </div>
             </div>
             {!pristine.healthy && (
-              <div className="bg-[#0a0a0a] border border-[#222] rounded-lg p-3 max-h-32 overflow-y-auto">
+              <div className="bg-[#0a0a0a] border border-border rounded-lg p-3 max-h-32 overflow-y-auto">
                 {pristine.differences.modified.slice(0, 20).map((f) => (
                   <p key={f} className="text-xs text-yellow-400 font-mono">~ {f}</p>
                 ))}
@@ -310,7 +311,7 @@ export default function SystemPage() {
       </section>
 
       {/* Backups */}
-      <section className="bg-[#111] border border-[#222] rounded-xl p-5 mb-5">
+      <section className="bg-bg-card border border-border rounded-xl p-5 mb-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
             <Archive size={15} /> Sauvegardes automatiques
@@ -324,7 +325,7 @@ export default function SystemPage() {
                   type="number" min={1} max={50}
                   value={maxBackupsInput}
                   onChange={(e) => setMaxBackupsInput(parseInt(e.target.value) || 1)}
-                  className="w-14 bg-[#0a0a0a] border border-[#F2C48D] rounded px-2 py-1 text-white text-xs focus:outline-none"
+                  className="w-14 bg-[#0a0a0a] border border-accent-sand rounded px-2 py-1 text-white text-xs focus:outline-none"
                 />
                 <button onClick={saveMaxBackups} className="text-green-400 hover:text-green-300">✓</button>
                 <button onClick={() => { setEditingBackups(false); setMaxBackupsInput(status.settings.max_backups); }} className="text-red-400 hover:text-red-300" aria-label="Annuler"><X size={14} /></button>
@@ -332,7 +333,7 @@ export default function SystemPage() {
             ) : (
               <button
                 onClick={() => setEditingBackups(true)}
-                className="flex items-center gap-1 text-[#F2C48D] hover:underline"
+                className="flex items-center gap-1 text-accent-sand hover:underline"
               >
                 {status.settings.max_backups} <SettingsIcon size={11} />
               </button>
@@ -369,7 +370,7 @@ export default function SystemPage() {
 
       {/* Temp imports */}
       {status.temp_imports.length > 0 && (
-        <section className="bg-[#111] border border-[#222] rounded-xl p-5 mb-5">
+        <section className="bg-bg-card border border-border rounded-xl p-5 mb-5">
           <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
             <FileUp size={15} /> Imports en attente ({status.temp_imports.length})
           </h2>
@@ -391,13 +392,13 @@ export default function SystemPage() {
       )}
 
       {/* Actions */}
-      <section className="bg-[#111] border border-[#222] rounded-xl p-5">
+      <section className="bg-bg-card border border-border rounded-xl p-5">
         <h2 className="text-sm font-semibold text-white mb-4">Actions de maintenance</h2>
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={doCleanup}
             disabled={action !== ""}
-            className="flex flex-col items-start gap-1 p-4 bg-[#0a0a0a] hover:bg-[#151515] border border-[#222] hover:border-[#333] rounded-xl text-left disabled:opacity-50 transition-colors"
+            className="flex flex-col items-start gap-1 p-4 bg-[#0a0a0a] hover:bg-[#151515] border border-border hover:border-border-hover rounded-xl text-left disabled:opacity-50 transition-colors"
           >
             <div className="flex items-center gap-2 text-white font-medium text-sm">
               <Trash2 size={14} /> Nettoyer les temporaires
@@ -409,7 +410,7 @@ export default function SystemPage() {
           <button
             onClick={() => setConfirmRepairOpen(true)}
             disabled={action !== "" || !status.pristine.available}
-            className="flex flex-col items-start gap-1 p-4 bg-[#0a0a0a] hover:bg-[#151515] border border-[#222] hover:border-[#333] rounded-xl text-left disabled:opacity-50 transition-colors"
+            className="flex flex-col items-start gap-1 p-4 bg-[#0a0a0a] hover:bg-[#151515] border border-border hover:border-border-hover rounded-xl text-left disabled:opacity-50 transition-colors"
           >
             <div className="flex items-center gap-2 text-white font-medium text-sm">
               <Wrench size={14} /> Réparer l'application

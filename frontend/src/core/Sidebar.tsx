@@ -89,10 +89,10 @@ function EntitySelectorOption({
           className="w-2 h-2 rounded-full flex-shrink-0"
           style={{ backgroundColor: entity.color || "#F2C48D" }}
         />
-        <span className={`flex-1 truncate ${selectedId === entity.id ? "text-[#F2C48D]" : "text-[#B0B0B0]"}`}>
+        <span className={`flex-1 truncate ${selectedId === entity.id ? "text-accent-sand" : "text-text-secondary"}`}>
           {entity.name}
         </span>
-        {selectedId === entity.id && <Check size={12} className="text-[#F2C48D] flex-shrink-0" />}
+        {selectedId === entity.id && <Check size={12} className="text-accent-sand flex-shrink-0" />}
       </button>
       {entity.children?.map((child) => (
         <EntitySelectorOption
@@ -138,10 +138,10 @@ function EntitySelector() {
     <div ref={ref} className="relative px-3 pb-3">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[#111] border border-[#222] hover:border-[#333] transition-colors text-sm"
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-card border border-border hover:border-border-hover transition-colors text-sm"
       >
-        <GitBranch size={13} className="text-[#F2C48D] flex-shrink-0" strokeWidth={1.5} />
-        <span className="flex-1 truncate text-left text-[#B0B0B0]">
+        <GitBranch size={13} className="text-accent-sand flex-shrink-0" strokeWidth={1.5} />
+        <span className="flex-1 truncate text-left text-text-secondary">
           {selectedEntity ? selectedEntity.name : "Toutes les entités"}
         </span>
         <ChevronDown
@@ -151,14 +151,14 @@ function EntitySelector() {
       </button>
 
       {open && (
-        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-bg-card border border-border rounded-xl shadow-xl overflow-hidden">
           {isAdmin && (
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
               onClick={handleClear}
             >
               <span className="flex-1 text-[#8a8a8a]">Toutes les entités</span>
-              {selectedEntityId === null && <Check size={12} className="text-[#F2C48D]" />}
+              {selectedEntityId === null && <Check size={12} className="text-accent-sand" />}
             </button>
           )}
           <div className="max-h-48 overflow-y-auto py-1">
@@ -199,10 +199,10 @@ function FiscalYearSelector() {
     <div ref={ref} className="relative px-3 pb-3">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[#111] border border-[#222] hover:border-[#333] transition-colors text-sm"
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-card border border-border hover:border-border-hover transition-colors text-sm"
       >
-        <CalendarDays size={13} className="text-[#F2C48D] flex-shrink-0" strokeWidth={1.5} />
-        <span className="flex-1 truncate text-left text-[#B0B0B0]">
+        <CalendarDays size={13} className="text-accent-sand flex-shrink-0" strokeWidth={1.5} />
+        <span className="flex-1 truncate text-left text-text-secondary">
           {selectedYear ? selectedYear.name : "Aucun exercice"}
         </span>
         <ChevronDown
@@ -212,7 +212,7 @@ function FiscalYearSelector() {
       </button>
 
       {open && (
-        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-bg-card border border-border rounded-xl shadow-xl overflow-hidden">
           <div className="max-h-48 overflow-y-auto py-1">
             {years.map((y) => (
               <button
@@ -223,10 +223,10 @@ function FiscalYearSelector() {
                   setOpen(false);
                 }}
               >
-                <span className={`flex-1 truncate ${selectedYear?.id === y.id ? "text-[#F2C48D]" : "text-[#B0B0B0]"}`}>
+                <span className={`flex-1 truncate ${selectedYear?.id === y.id ? "text-accent-sand" : "text-text-secondary"}`}>
                   {y.name}{y.end_date === null ? " ●" : ""}
                 </span>
-                {selectedYear?.id === y.id && <Check size={12} className="text-[#F2C48D] flex-shrink-0" />}
+                {selectedYear?.id === y.id && <Check size={12} className="text-accent-sand flex-shrink-0" />}
               </button>
             ))}
           </div>
@@ -245,22 +245,22 @@ function NavItem({ to, label, icon: Icon, badge, badgeTitle }: { to: string; lab
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
           isActive
-            ? "text-white bg-[#111]"
-            : "text-[#8a8a8a] hover:bg-[#111] hover:text-white"
+            ? "text-white bg-bg-card"
+            : "text-[#8a8a8a] hover:bg-bg-card hover:text-white"
         }`
       }
     >
       {({ isActive }) => (
         <>
           {isActive && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#F2C48D] rounded-r" />
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-accent-sand rounded-r" />
           )}
           <Icon size={17} strokeWidth={1.5} />
           <span className="flex-1">{label}</span>
           {badge !== undefined && badge > 0 && (
             <span
               title={badgeTitle}
-              className="text-[10px] font-semibold text-black bg-[#F2C48D] rounded-full px-1.5 py-0.5 min-w-[18px] text-center"
+              className="text-[10px] font-semibold text-black bg-accent-sand rounded-full px-1.5 py-0.5 min-w-[18px] text-center"
             >
               {badge}
             </span>
@@ -384,11 +384,11 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   }));
 
   return (
-    <aside className="w-60 bg-[#080808] border-r border-[#222] flex flex-col h-full flex-shrink-0">
-      <div className="px-5 py-6 border-b border-[#222]">
+    <aside className="w-60 bg-bg-subtle border-r border-border flex flex-col h-full flex-shrink-0">
+      <div className="px-5 py-6 border-b border-border">
         <span className="text-xl font-bold tracking-tight">
           <span className="text-white">Open</span>
-          <span className="text-[#F2C48D]">Flow</span>
+          <span className="text-accent-sand">Flow</span>
         </span>
       </div>
       <div className="pt-3 border-b border-[#1a1a1a]">
@@ -413,9 +413,9 @@ export default function Sidebar({ activeModules }: SidebarProps) {
       </nav>
 
       {/* Bottom section: user + settings */}
-      <div className="px-3 pb-3 space-y-0.5 border-t border-[#222] pt-3">
+      <div className="px-3 pb-3 space-y-0.5 border-t border-border pt-3">
         {user && (
-          <div className="px-3 pb-2 text-xs text-[#B0B0B0] truncate" title={user.email}>
+          <div className="px-3 pb-2 text-xs text-text-secondary truncate" title={user.email}>
             {user.display_name}
           </div>
         )}

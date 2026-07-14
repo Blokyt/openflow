@@ -3,8 +3,11 @@ import { Plus, Pencil, Trash2, X, Copy, Check, ShieldCheck, Users, KeyRound } fr
 import { api } from "../../api";
 import { useAuth } from "../../core/AuthContext";
 import { useEntity } from "../../core/EntityContext";
+import { useToast } from "../../core/ToastContext";
 import { Entity } from "../../types";
 import EmptyState from "../../core/EmptyState";
+import PageLoader from "../../core/PageLoader";
+import { inputClass, labelClass } from "../../core/formStyles";
 
 type RoleName = "treasurer" | "viewer";
 
@@ -58,9 +61,6 @@ interface LoginEvent {
 
 const ROLE_LABELS: Record<RoleName, string> = { treasurer: "Trésorier", viewer: "Lecteur" };
 
-const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
-const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
-
 function flattenEntities(nodes: Entity[], depth = 0, out: FlatEntity[] = []): FlatEntity[] {
   for (const n of nodes) {
     out.push({ id: n.id, name: n.name, depth });
@@ -79,8 +79,8 @@ function formatDateTime(iso: string | null | undefined): string {
 function segBtnClass(active: boolean): string {
   return `flex-1 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors ${
     active
-      ? "bg-[#F2C48D] text-black border-[#F2C48D]"
-      : "bg-[#0a0a0a] text-[#B0B0B0] border-[#222] hover:border-[#333]"
+      ? "bg-accent-sand text-black border-accent-sand"
+      : "bg-[#0a0a0a] text-text-secondary border-border hover:border-border-hover"
   }`;
 }
 
@@ -114,7 +114,7 @@ function RolesEditor({
           <select
             value={r.entity_id}
             onChange={(e) => updateRow(idx, { entity_id: Number(e.target.value) })}
-            className="flex-1 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+            className="flex-1 bg-[#0a0a0a] border border-border rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
           >
             {entities.map((e) => (
               <option key={e.id} value={e.id}>
@@ -125,7 +125,7 @@ function RolesEditor({
           <select
             value={r.role}
             onChange={(e) => updateRow(idx, { role: e.target.value as RoleName })}
-            className="w-32 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+            className="w-32 bg-[#0a0a0a] border border-border rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
           >
             <option value="treasurer">Trésorier</option>
             <option value="viewer">Lecteur</option>
@@ -133,7 +133,7 @@ function RolesEditor({
           <button
             type="button"
             onClick={() => removeRow(idx)}
-            className="p-2 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+            className="p-2 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors"
             title="Retirer ce rôle"
           >
             <Trash2 size={14} strokeWidth={1.5} />
@@ -143,7 +143,7 @@ function RolesEditor({
       <button
         type="button"
         onClick={addRow}
-        className="flex items-center gap-1.5 text-xs font-medium text-[#F2C48D] hover:text-[#e8b87a] transition-colors"
+        className="flex items-center gap-1.5 text-xs font-medium text-accent-sand hover:text-[#e8b87a] transition-colors"
       >
         <Plus size={13} /> Ajouter un rôle
       </button>
@@ -161,6 +161,7 @@ export default function UsersAdmin() {
   const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   // Modal : édition des rôles d'un compte existant
   const [rolesUser, setRolesUser] = useState<UserAccount | null>(null);
@@ -206,7 +207,7 @@ export default function UsersAdmin() {
       setInvitations(inv);
       setLoginEvents(events);
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setLoading(false);
     }
@@ -235,6 +236,7 @@ export default function UsersAdmin() {
     try {
       const updated = await api.setUserRoles(rolesUser.id, rolesDraft);
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)));
+      toast.success("Rôles enregistrés avec succès.");
       closeRoles();
     } catch (e: any) {
       setRolesError(e.message);
@@ -248,8 +250,9 @@ export default function UsersAdmin() {
     try {
       const updated = await api.updateUser(u.id, { is_active: !u.is_active });
       setUsers((prev) => prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
+      toast.success(`Compte ${updated.is_active ? "réactivé" : "suspendu"}.`);
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setTogglingId(null);
     }
@@ -261,8 +264,9 @@ export default function UsersAdmin() {
       await api.revokeUserSessions(u.id);
       setRevokedOkId(u.id);
       setTimeout(() => setRevokedOkId((cur) => (cur === u.id ? null : cur)), 2000);
+      toast.success("Sessions révoquées.");
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setRevokingId(null);
     }
@@ -289,6 +293,7 @@ export default function UsersAdmin() {
         email: editEmail.trim() || undefined,
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)));
+      toast.success("Compte mis à jour avec succès.");
       closeEdit();
     } catch (e: any) {
       setEditError(e.message);
@@ -303,8 +308,9 @@ export default function UsersAdmin() {
       const result = await api.createResetLink(u.id);
       setResetLinkResult(result);
       setResetLinkCopied(false);
+      toast.success("Lien de réinitialisation généré.");
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setGeneratingReset(null);
     }
@@ -317,8 +323,9 @@ export default function UsersAdmin() {
       await navigator.clipboard.writeText(fullUrl);
       setResetLinkCopied(true);
       setTimeout(() => setResetLinkCopied(false), 2000);
+      toast.success("Lien copié dans le presse-papier !");
     } catch {
-      setError("Impossible de copier le lien automatiquement.");
+      toast.error("Impossible de copier le lien automatiquement.");
     }
   }
 
@@ -384,21 +391,21 @@ export default function UsersAdmin() {
           <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>Utilisateurs</h1>
           <p className="text-sm text-[#8a8a8a] mt-1">Comptes, connexions et rôles par entité.</p>
         </div>
-        <button onClick={openInvite} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
+        <button onClick={openInvite} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors">
           <Plus size={15} /> Inviter
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={16} /></button>
+          <button onClick={() => setError(null)} className="text-alert/70 hover:text-alert"><X size={16} /></button>
         </div>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+          <PageLoader fullScreen={false} />
         </div>
       ) : users.length === 0 ? (
         <EmptyState
@@ -409,7 +416,7 @@ export default function UsersAdmin() {
           onCta={openInvite}
         />
       ) : (
-        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden mb-10">
+        <div className="bg-bg-card border border-border rounded-2xl overflow-hidden mb-10">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
@@ -427,12 +434,12 @@ export default function UsersAdmin() {
                 return (
                   <tr key={u.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
                     <td className="px-5 py-3.5 font-medium text-white">{u.email}</td>
-                    <td className="px-5 py-3.5 text-[#B0B0B0]">
+                    <td className="px-5 py-3.5 text-text-secondary">
                       {u.display_name || <span className="text-[#444]">Non renseigné</span>}
                     </td>
                     <td className="px-5 py-3.5">
                       {u.is_admin ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-[#F2C48D]/40 bg-[#F2C48D]/10 text-[#F2C48D]">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-accent-sand/40 bg-accent-sand/10 text-accent-sand">
                           <ShieldCheck size={12} /> Admin
                         </span>
                       ) : u.roles.length === 0 ? (
@@ -440,30 +447,30 @@ export default function UsersAdmin() {
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {u.roles.map((r) => (
-                            <span key={r.entity_id} className="inline-block px-2 py-0.5 rounded-full text-xs border border-[#333] text-[#B0B0B0]">
+                            <span key={r.entity_id} className="inline-block px-2 py-0.5 rounded-full text-xs border border-border-hover text-text-secondary">
                               {entityName(r.entity_id)} · {ROLE_LABELS[r.role]}
                             </span>
                           ))}
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-[#B0B0B0]">{formatDateTime(u.last_login_at)}</td>
+                    <td className="px-5 py-3.5 text-text-secondary">{formatDateTime(u.last_login_at)}</td>
                     <td className="px-5 py-3.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${
                         u.is_active
                           ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                          : "bg-[#FF5252]/10 text-[#FF5252] border-[#FF5252]/30"
+                          : "bg-alert/10 text-alert border-alert/30"
                       }`}>
                         {u.is_active ? "Actif" : "Désactivé"}
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-3 text-xs whitespace-nowrap">
-                        <button onClick={() => openEdit(u)} className="font-medium text-[#F2C48D] hover:text-[#e8b87a] transition-colors flex items-center gap-1">
+                        <button onClick={() => openEdit(u)} className="font-medium text-accent-sand hover:text-[#e8b87a] transition-colors flex items-center gap-1">
                           <Pencil size={12} /> Modifier
                         </button>
                         {!u.is_admin && (
-                          <button onClick={() => openRoles(u)} className="font-medium text-[#F2C48D] hover:text-[#e8b87a] transition-colors flex items-center gap-1">
+                          <button onClick={() => openRoles(u)} className="font-medium text-accent-sand hover:text-[#e8b87a] transition-colors flex items-center gap-1">
                             <Pencil size={12} /> Rôles
                           </button>
                         )}
@@ -471,14 +478,14 @@ export default function UsersAdmin() {
                           onClick={() => toggleActive(u)}
                           disabled={isSelf || togglingId === u.id}
                           title={isSelf ? "Impossible de désactiver son propre compte" : undefined}
-                          className="font-medium text-[#B0B0B0] hover:text-white disabled:opacity-30 disabled:hover:text-[#B0B0B0] transition-colors"
+                          className="font-medium text-text-secondary hover:text-white disabled:opacity-30 disabled:hover:text-text-secondary transition-colors"
                         >
                           {togglingId === u.id ? "..." : u.is_active ? "Désactiver" : "Réactiver"}
                         </button>
                         <button
                           onClick={() => revokeSessions(u)}
                           disabled={revokingId === u.id}
-                          className="font-medium text-[#B0B0B0] hover:text-white disabled:opacity-30 transition-colors"
+                          className="font-medium text-text-secondary hover:text-white disabled:opacity-30 transition-colors"
                         >
                           {revokedOkId === u.id ? "Déconnecté" : revokingId === u.id ? "..." : "Déconnecter partout"}
                         </button>
@@ -486,7 +493,7 @@ export default function UsersAdmin() {
                           <button
                             onClick={() => generateResetLink(u)}
                             disabled={generatingReset === u.id}
-                            className="font-medium text-[#B0B0B0] hover:text-white disabled:opacity-30 transition-colors"
+                            className="font-medium text-text-secondary hover:text-white disabled:opacity-30 transition-colors"
                           >
                             {generatingReset === u.id ? "..." : "Réinitialiser mdp"}
                           </button>
@@ -508,11 +515,11 @@ export default function UsersAdmin() {
         )}
       </div>
       {!loading && invitations.length === 0 ? (
-        <p className="text-sm text-[#555] bg-[#111] border border-[#222] rounded-2xl p-6 text-center">
+        <p className="text-sm text-[#555] bg-bg-card border border-border rounded-2xl p-6 text-center">
           Aucune invitation en attente.
         </p>
       ) : !loading && (
-        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+        <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
@@ -526,23 +533,23 @@ export default function UsersAdmin() {
               {invitations.map((inv, idx) => (
                 <tr key={inv.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
                   <td className="px-5 py-3.5 text-white">{inv.email}</td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">
+                  <td className="px-5 py-3.5 text-text-secondary">
                     {inv.is_admin
                       ? "Admin"
                       : inv.roles.length === 0
                         ? "Aucun rôle"
                         : inv.roles.map((r) => `${entityName(r.entity_id)} · ${ROLE_LABELS[r.role]}`).join(", ")}
                   </td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">{formatDateTime(inv.expires_at)}</td>
+                  <td className="px-5 py-3.5 text-text-secondary">{formatDateTime(inv.expires_at)}</td>
                   <td className="px-5 py-3.5 text-right">
                     {confirmDeleteInvite === inv.id ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
-                        <button onClick={() => handleDeleteInvitation(inv.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
+                        <button onClick={() => handleDeleteInvitation(inv.id)} className="text-xs font-medium text-alert hover:text-red-400">Oui</button>
                         <button onClick={() => setConfirmDeleteInvite(null)} className="text-xs font-medium text-[#8a8a8a] hover:text-white">Non</button>
                       </span>
                     ) : (
-                      <button onClick={() => setConfirmDeleteInvite(inv.id)} className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
+                      <button onClick={() => setConfirmDeleteInvite(inv.id)} className="p-1.5 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
                         <Trash2 size={14} strokeWidth={1.5} />
                       </button>
                     )}
@@ -561,11 +568,11 @@ export default function UsersAdmin() {
         )}
       </div>
       {!loading && loginEvents.length === 0 ? (
-        <p className="text-sm text-[#555] bg-[#111] border border-[#222] rounded-2xl p-6 text-center">
+        <p className="text-sm text-[#555] bg-bg-card border border-border rounded-2xl p-6 text-center">
           Aucune tentative de connexion enregistrée pour l'instant.
         </p>
       ) : !loading && (
-        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+        <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1a1a1a]">
@@ -578,14 +585,14 @@ export default function UsersAdmin() {
             <tbody>
               {loginEvents.map((ev, idx) => (
                 <tr key={ev.id} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
-                  <td className="px-5 py-3.5 text-[#B0B0B0] whitespace-nowrap">{formatDateTime(ev.created_at)}</td>
+                  <td className="px-5 py-3.5 text-text-secondary whitespace-nowrap">{formatDateTime(ev.created_at)}</td>
                   <td className="px-5 py-3.5 text-white">{ev.email}</td>
-                  <td className="px-5 py-3.5 text-[#B0B0B0]">{ev.ip || "Inconnue"}</td>
+                  <td className="px-5 py-3.5 text-text-secondary">{ev.ip || "Inconnue"}</td>
                   <td className="px-5 py-3.5">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${
                       ev.success
                         ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                        : "bg-[#FF5252]/10 text-[#FF5252] border-[#FF5252]/30"
+                        : "bg-alert/10 text-alert border-alert/30"
                     }`}>
                       {ev.success ? "Réussie" : "Échouée"}
                     </span>
@@ -600,7 +607,7 @@ export default function UsersAdmin() {
       {/* Modal : modifier les rôles d'un compte */}
       {rolesUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !savingRoles && closeRoles()}>
-          <div className="w-full max-w-lg bg-[#111] border border-[#222] rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Modifier les rôles</h2>
@@ -609,14 +616,14 @@ export default function UsersAdmin() {
               <button onClick={closeRoles} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
             </div>
             {rolesError && (
-              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{rolesError}</div>
+              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{rolesError}</div>
             )}
             <div className="px-6 py-6">
               <RolesEditor rows={rolesDraft} onChange={setRolesDraft} entities={flatEntities} />
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
-              <button type="button" onClick={closeRoles} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
-              <button type="button" onClick={saveRoles} disabled={savingRoles} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">
+              <button type="button" onClick={closeRoles} className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
+              <button type="button" onClick={saveRoles} disabled={savingRoles} className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors">
                 {savingRoles ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
@@ -627,7 +634,7 @@ export default function UsersAdmin() {
       {/* Modal : modifier nom et email */}
       {editUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !savingEdit && closeEdit()}>
-          <div className="w-full max-w-lg bg-[#111] border border-[#222] rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Modifier le compte</h2>
@@ -636,7 +643,7 @@ export default function UsersAdmin() {
               <button onClick={closeEdit} className="text-[#8a8a8a] hover:text-white"><X size={18} /></button>
             </div>
             {editError && (
-              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{editError}</div>
+              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{editError}</div>
             )}
             <div className="px-6 py-6 space-y-4">
               <div>
@@ -660,8 +667,8 @@ export default function UsersAdmin() {
               </div>
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
-              <button type="button" onClick={closeEdit} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
-              <button type="button" onClick={saveEdit} disabled={savingEdit} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">
+              <button type="button" onClick={closeEdit} className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
+              <button type="button" onClick={saveEdit} disabled={savingEdit} className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors">
                 {savingEdit ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
@@ -672,7 +679,7 @@ export default function UsersAdmin() {
       {/* Modal : lien de réinitialisation */}
       {resetLinkResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setResetLinkResult(null)}>
-          <div className="w-full max-w-lg bg-[#111] border border-[#222] rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Lien de réinitialisation</h2>
@@ -698,17 +705,17 @@ export default function UsersAdmin() {
                   <button
                     type="button"
                     onClick={copyResetLink}
-                    className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-xl hover:bg-[#e8b87a] transition-colors"
+                    className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-xl hover:bg-accent-sand transition-colors"
                   >
                     {resetLinkCopied ? <><Check size={14} /> Copié</> : <><Copy size={14} /> Copier</>}
                   </button>
                 </div>
-                <p className="text-xs text-[#FF5252] mt-2">
+                <p className="text-xs text-alert mt-2">
                   Ce lien ne sera affiché qu'une seule fois. Il expire dans 72 h.
                 </p>
               </div>
               <div className="flex justify-end pt-2">
-                <button type="button" onClick={() => setResetLinkResult(null)} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
+                <button type="button" onClick={() => setResetLinkResult(null)} className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
                   Fermer
                 </button>
               </div>
@@ -720,7 +727,7 @@ export default function UsersAdmin() {
       {/* Modal : inviter un utilisateur */}
       {showInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !inviting && closeInvite()}>
-          <div className="w-full max-w-lg bg-[#111] border border-[#222] rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Inviter un utilisateur</h2>
@@ -730,7 +737,7 @@ export default function UsersAdmin() {
             </div>
 
             {inviteError && (
-              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{inviteError}</div>
+              <div className="mx-6 mt-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{inviteError}</div>
             )}
 
             {createdInvitation ? (
@@ -752,17 +759,17 @@ export default function UsersAdmin() {
                     <button
                       type="button"
                       onClick={copyLink}
-                      className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-xl hover:bg-[#e8b87a] transition-colors"
+                      className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-xl hover:bg-accent-sand transition-colors"
                     >
                       {linkCopied ? <><Check size={14} /> Lien copié</> : <><Copy size={14} /> Copier le lien</>}
                     </button>
                   </div>
-                  <p className="text-xs text-[#FF5252] mt-2">
+                  <p className="text-xs text-alert mt-2">
                     Ce lien ne sera affiché qu'une seule fois : note-le ou transmets-le maintenant.
                   </p>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <button type="button" onClick={closeInvite} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
+                  <button type="button" onClick={closeInvite} className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
                     Fermer
                   </button>
                 </div>
@@ -795,10 +802,10 @@ export default function UsersAdmin() {
                   </div>
                 )}
                 <div className="flex justify-end gap-3 pt-2">
-                  <button type="button" onClick={closeInvite} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
+                  <button type="button" onClick={closeInvite} className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
                     Annuler
                   </button>
-                  <button type="submit" disabled={inviting} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">
+                  <button type="submit" disabled={inviting} className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors">
                     {inviting ? "Envoi..." : "Envoyer l'invitation"}
                   </button>
                 </div>

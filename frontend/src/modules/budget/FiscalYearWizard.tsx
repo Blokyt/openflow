@@ -81,10 +81,10 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
       onClick={step === 1 && !createdFyId ? onClose : undefined}
     >
       <div
-        className="bg-[#0a0a0a] border border-[#222] rounded-2xl max-w-lg w-full"
+        className="bg-[#0a0a0a] border border-border rounded-2xl max-w-lg w-full"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-5 border-b border-[#222]">
+        <div className="flex items-center justify-between p-5 border-b border-border">
           <h2 className="text-base font-semibold text-white">
             Nouvel exercice — étape {step}/2
           </h2>
@@ -95,7 +95,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
 
         <div className="p-5 space-y-4">
           {error && (
-            <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+            <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">
               {error}
             </div>
           )}
@@ -103,43 +103,43 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Nom</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">Nom</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white"
+                  className="w-full bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Date de début</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">Date de début</label>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white [color-scheme:dark]"
+                  className="w-full bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white [color-scheme:dark]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">
+                  <label className="block text-sm font-medium text-text-secondary mb-1.5">
                     Président <span className="text-[#555]">(optionnel)</span>
                   </label>
                   <input
                     value={presidentName}
                     onChange={(e) => setPresidentName(e.target.value)}
                     placeholder="Nom du président"
-                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#444]"
+                    className="w-full bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#444]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">
+                  <label className="block text-sm font-medium text-text-secondary mb-1.5">
                     Trésorier <span className="text-[#555]">(optionnel)</span>
                   </label>
                   <input
                     value={tresorierName}
                     onChange={(e) => setTresorierName(e.target.value)}
                     placeholder="Nom du trésorier"
-                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#444]"
+                    className="w-full bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#444]"
                   />
                 </div>
               </div>
@@ -153,13 +153,13 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
             <div className="space-y-3">
               {previousYearId !== null ? (
                 <fieldset className="space-y-2">
-                  <legend className="text-sm font-medium text-[#B0B0B0] mb-1">Initialiser le budget</legend>
+                  <legend className="text-sm font-medium text-text-secondary mb-1">Initialiser le budget</legend>
                   {([
                     { v: "realized", label: "Pré-remplir avec le réel de l'an dernier", hint: "À partir des transactions réelles, par catégorie. Recommandé." },
                     { v: "copy", label: "Copier le budget prévisionnel de l'an dernier", hint: "Reprend les allocations saisies l'an dernier." },
                     { v: "empty", label: "Partir d'un budget vide", hint: "Tout saisir à la main." },
                   ] as const).map((opt) => (
-                    <label key={opt.v} className="flex items-start gap-2 text-sm text-[#B0B0B0] cursor-pointer">
+                    <label key={opt.v} className="flex items-start gap-2 text-sm text-text-secondary cursor-pointer">
                       <input
                         type="radio"
                         name="initMode"
@@ -186,12 +186,12 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-5 border-t border-[#222]">
+        <div className="flex items-center justify-end gap-3 p-5 border-t border-border">
           {step === 1 && (
             <button
               onClick={goToStep2}
               disabled={submitting || !name.trim() || !startDate}
-              className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 inline-flex items-center gap-1"
+              className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 inline-flex items-center gap-1"
             >
               Suivant <ArrowRight size={14} />
             </button>
@@ -200,7 +200,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
             <button
               onClick={finish}
               disabled={submitting}
-              className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50"
+              className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50"
             >
               Créer l'exercice
             </button>

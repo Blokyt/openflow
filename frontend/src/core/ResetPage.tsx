@@ -1,9 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
+import PageLoader from "./PageLoader";
 import { useAuth } from "./AuthContext";
-
-const inputClass =
-  "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
+import { inputClass } from "./formStyles";
 
 export default function ResetPage() {
   const { reload } = useAuth();
@@ -39,16 +38,14 @@ export default function ResetPage() {
   if (invalid) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-black gap-3 p-6 text-center">
-        <p className="text-[#FF5252] font-semibold">Lien de réinitialisation invalide ou expiré</p>
-        <p className="text-sm text-[#B0B0B0]">Demande un nouveau lien à l'administrateur.</p>
+        <p className="text-alert font-semibold">Lien de réinitialisation invalide ou expiré</p>
+        <p className="text-sm text-text-secondary">Demande un nouveau lien à l'administrateur.</p>
       </div>
     );
   }
   if (email === null) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-      </div>
+      <PageLoader />
     );
   }
   return (
@@ -56,7 +53,7 @@ export default function ResetPage() {
       <form onSubmit={onSubmit} className="w-full max-w-sm p-8 space-y-5">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-white">Nouveau mot de passe</h1>
-          <p className="text-sm text-[#B0B0B0]">Choisis un nouveau mot de passe pour {email}</p>
+          <p className="text-sm text-text-secondary">Choisis un nouveau mot de passe pour {email}</p>
         </div>
         <div className="space-y-3">
           <input type="password" required autoFocus minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
@@ -66,9 +63,9 @@ export default function ResetPage() {
             placeholder="Confirme le mot de passe"
             className={inputClass} />
         </div>
-        {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+        {error && <p className="text-sm text-alert">{error}</p>}
         <button type="submit" disabled={busy}
-          className="w-full px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50">
+          className="w-full px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors disabled:opacity-50">
           {busy ? "Réinitialisation..." : "Réinitialiser mon mot de passe"}
         </button>
       </form>

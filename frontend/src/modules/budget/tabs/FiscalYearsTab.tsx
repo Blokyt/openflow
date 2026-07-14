@@ -92,7 +92,7 @@ export default function FiscalYearsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-[#B0B0B0]">
+        <p className="text-sm text-text-secondary">
           {years.length} exercice(s).
           {hasOpenMandate
             ? " Un exercice est en cours : clos-le avant d'en ouvrir un nouveau."
@@ -102,7 +102,7 @@ export default function FiscalYearsTab() {
           <button
             onClick={() => setShowWizard(true)}
             disabled={hasOpenMandate}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus size={14} /> Nouvel exercice
           </button>
@@ -110,12 +110,12 @@ export default function FiscalYearsTab() {
       </div>
 
       {error && (
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">
           {error}
         </div>
       )}
 
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+      <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
         {years.length === 0 ? (
           <div className="py-8 text-center text-sm text-[#8a8a8a]">
             Aucun exercice. Crée le premier pour activer le suivi budgétaire.
@@ -141,7 +141,7 @@ export default function FiscalYearsTab() {
                           <input
                             value={editForm.name}
                             onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+                            className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1.5 text-sm text-white"
                           />
                         </div>
                         <div>
@@ -150,7 +150,7 @@ export default function FiscalYearsTab() {
                             type="date"
                             value={editForm.start_date}
                             onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
-                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white [color-scheme:dark]"
+                            className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1.5 text-sm text-white [color-scheme:dark]"
                           />
                         </div>
                         <div>
@@ -158,7 +158,7 @@ export default function FiscalYearsTab() {
                           <input
                             value={editForm.president_name}
                             onChange={(e) => setEditForm({ ...editForm, president_name: e.target.value })}
-                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+                            className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1.5 text-sm text-white"
                           />
                         </div>
                         <div>
@@ -166,14 +166,14 @@ export default function FiscalYearsTab() {
                           <input
                             value={editForm.tresorier_name}
                             onChange={(e) => setEditForm({ ...editForm, tresorier_name: e.target.value })}
-                            className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white"
+                            className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1.5 text-sm text-white"
                           />
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <button
                             onClick={() => doSaveEdit(y.id)}
                             disabled={editSubmitting}
-                            className="text-[#F2C48D] font-semibold disabled:opacity-50"
+                            className="text-accent-sand font-semibold disabled:opacity-50"
                           >
                             Enregistrer
                           </button>
@@ -182,7 +182,7 @@ export default function FiscalYearsTab() {
                           </button>
                         </div>
                       </div>
-                      {editError && <p className="mt-2 text-xs text-[#FF5252]">{editError}</p>}
+                      {editError && <p className="mt-2 text-xs text-alert">{editError}</p>}
                     </td>
                   </tr>
                 ) : (
@@ -190,7 +190,7 @@ export default function FiscalYearsTab() {
                   <td className="px-4 py-3 text-white font-medium">
                     {y.name}
                     {y.end_date === null && (
-                      <span className="ml-2 text-xs text-[#F2C48D] border border-[#F2C48D]/30 bg-[#F2C48D]/5 px-2 py-0.5 rounded-full">
+                      <span className="ml-2 text-xs text-accent-sand border border-accent-sand/30 bg-accent-sand/5 px-2 py-0.5 rounded-full">
                         en cours
                       </span>
                     )}
@@ -202,13 +202,13 @@ export default function FiscalYearsTab() {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.start_date)}</td>
-                  <td className="px-4 py-3 text-[#B0B0B0]">{formatDate(y.end_date)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(y.start_date)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(y.end_date)}</td>
                   <td className="px-4 py-3 text-right">
                     {isAdmin && closingId !== y.id && confirmDelete !== y.id && (
                       <button
                         onClick={() => startEdit(y)}
-                        className="text-xs text-[#B0B0B0] hover:text-white mr-3 border border-[#333] px-2.5 py-1 rounded-full inline-flex items-center gap-1"
+                        className="text-xs text-text-secondary hover:text-white mr-3 border border-border-hover px-2.5 py-1 rounded-full inline-flex items-center gap-1"
                       >
                         <Pencil size={12} /> Modifier
                       </button>
@@ -223,7 +223,7 @@ export default function FiscalYearsTab() {
                           // systématique du backend (date de clôture < date de début).
                           setCloseDate(y.start_date > today ? y.start_date : today);
                         }}
-                        className="text-xs text-[#B0B0B0] hover:text-white mr-3 border border-[#333] px-2.5 py-1 rounded-full"
+                        className="text-xs text-text-secondary hover:text-white mr-3 border border-border-hover px-2.5 py-1 rounded-full"
                       >
                         Clore
                       </button>
@@ -234,12 +234,12 @@ export default function FiscalYearsTab() {
                           type="date"
                           value={closeDate}
                           onChange={(e) => setCloseDate(e.target.value)}
-                          className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-white [color-scheme:dark]"
+                          className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1 text-white [color-scheme:dark]"
                         />
                         <button
                           onClick={() => doClose(y)}
                           disabled={submitting}
-                          className="text-[#F2C48D] font-semibold disabled:opacity-50"
+                          className="text-accent-sand font-semibold disabled:opacity-50"
                         >
                           Confirmer
                         </button>
@@ -252,14 +252,14 @@ export default function FiscalYearsTab() {
                       confirmDelete === y.id ? (
                         <span className="inline-flex items-center gap-2 text-xs">
                           <span className="text-[#8a8a8a]">Supprimer ?</span>
-                          <button onClick={() => doDelete(y.id)} className="text-[#FF5252] font-semibold">Oui</button>
+                          <button onClick={() => doDelete(y.id)} className="text-alert font-semibold">Oui</button>
                           <button onClick={() => setConfirmDelete(null)} className="text-[#8a8a8a]">Non</button>
                         </span>
                       ) : (
                         closingId !== y.id && (
                           <button
                             onClick={() => setConfirmDelete(y.id)}
-                            className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252]"
+                            className="p-1.5 text-[#8a8a8a] hover:text-alert"
                             title="Supprimer"
                           >
                             <Trash2 size={14} strokeWidth={1.5} />

@@ -109,7 +109,7 @@ export default function BackupManager() {
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h1 className="text-3xl font-bold text-white mb-3" style={{ letterSpacing: "-0.02em" }}>Sauvegarde &amp; Restauration</h1>
-      <p className="text-sm text-[#B0B0B0] mb-8 leading-relaxed">
+      <p className="text-sm text-text-secondary mb-8 leading-relaxed">
         Exporte ou restaure <strong>l'intégralité</strong> de la base (toutes les entités,
         catégories, transactions, contacts, etc.) dans un fichier ZIP. Garde une sauvegarde
         régulière avant toute opération sensible.
@@ -137,7 +137,7 @@ export default function BackupManager() {
       )}
 
       {/* Export section */}
-      <section className="bg-[#1a1a1a] border border-[#333] rounded-xl p-6 mb-6">
+      <section className="bg-[#1a1a1a] border border-border-hover rounded-xl p-6 mb-6">
         <h2 className="text-lg font-semibold text-white mb-2">Exporter</h2>
         <p className="text-[#999] text-sm mb-4">
           Téléchargez un fichier ZIP contenant toutes vos données : entités,
@@ -146,10 +146,10 @@ export default function BackupManager() {
 
         {/* Preview of what will be exported */}
         {preview && (
-          <div className="bg-[#111] rounded-lg p-4 mb-4">
+          <div className="bg-bg-card rounded-lg p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-[#999]">Contenu de la sauvegarde</span>
-              <span className="text-sm font-mono text-[#F2C48D]">
+              <span className="text-sm font-mono text-accent-sand">
                 {preview.total_records} enregistrements
               </span>
             </div>
@@ -170,7 +170,7 @@ export default function BackupManager() {
         <button
           onClick={handleExport}
           disabled={exporting || loading}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#F2C48D] text-black font-medium rounded-full hover:bg-[#e5b57a] disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-accent-sand text-black font-medium rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors"
         >
           <Download className="w-4 h-4" />
           {exporting ? "Export en cours..." : "Exporter (.zip)"}
@@ -178,7 +178,7 @@ export default function BackupManager() {
       </section>
 
       {/* Import section */}
-      <section className="bg-[#1a1a1a] border border-[#333] rounded-xl p-6">
+      <section className="bg-[#1a1a1a] border border-border-hover rounded-xl p-6">
         <h2 className="text-lg font-semibold text-white mb-2">Importer</h2>
         <p className="text-[#999] text-sm mb-4">
           Restaurez une sauvegarde précédemment exportée. Toutes les données
@@ -228,8 +228,8 @@ export default function BackupManager() {
           }}
           className={`flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
             importing
-              ? "border-[#555] bg-[#111] cursor-not-allowed"
-              : "border-[#444] hover:border-[#F2C48D] hover:bg-[#111]"
+              ? "border-[#555] bg-bg-card cursor-not-allowed"
+              : "border-[#444] hover:border-accent-sand hover:bg-bg-card"
           }`}
         >
           <Upload className="w-8 h-8 text-[#8a8a8a]" />

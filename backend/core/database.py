@@ -68,6 +68,40 @@ def backup_database(src_path: str | Path, dest_path: str | Path) -> None:
         src.close()
 
 
+def build_update_query(
+    table: str,
+    fields: dict,
+    id_column: str = "id",
+    id_value: any = None,
+) -> tuple[str, list]:
+    """Construit une requête UPDATE dynamique sécurisée.
+
+    Retourne un tuple (sql, params) prêt à être passé à cursor.execute().
+    Les noms de colonnes sont quotés en identifiants SQLite pour éviter toute
+    injection. Les champs à None ou absents du dict sont ignorés.
+
+    Exemple ::
+
+        sql, params = build_update_query(
+            "users",
+            {"name": "Alice", "email": "a@b.com"},
+            id_column="id",
+            id_value=42,
+        )
+        conn.execute(sql, params)
+    """
+    if not fields:
+        raise ValueError("build_update_query: fields dict must not be empty")
+    set_clauses = []
+    params = []
+    for col, val in fields.items():
+        set_clauses.append(f'"{col}" = ?')
+        params.append(val)
+    params.append(id_value)
+    sql = f'UPDATE "{table}" SET {", ".join(set_clauses)} WHERE "{id_column}" = ?'
+    return sql, params
+
+
 def row_to_dict(row: sqlite3.Row) -> dict:
     """Convert a sqlite3.Row to a plain dict."""
     return dict(row)

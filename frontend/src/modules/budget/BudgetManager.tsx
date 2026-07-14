@@ -31,7 +31,7 @@ export default function BudgetManager() {
           <select
             value={selectedYear?.id ?? ""}
             onChange={(e) => setSelectedYearId(parseInt(e.target.value, 10))}
-            className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+            className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand"
           >
             {years.map((y) => (
               <option key={y.id} value={y.id}>
@@ -42,14 +42,14 @@ export default function BudgetManager() {
         )}
       </div>
 
-      <div className="flex gap-1 border-b border-[#222]">
+      <div className="flex gap-1 border-b border-border">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
-                ? "border-[#F2C48D] text-white"
+                ? "border-accent-sand text-white"
                 : "border-transparent text-[#8a8a8a] hover:text-white"
             }`}
           >

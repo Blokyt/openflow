@@ -46,6 +46,7 @@ def test_non_admin_mutations_allowlist_is_minimal():
     assert NON_ADMIN_MUTATIONS == {
         "/api/users/login",
         "/api/users/logout",
+        "/api/users/me",
         "/api/users/me/password",
         "/api/users/invitations/accept",
         "/api/submissions/",

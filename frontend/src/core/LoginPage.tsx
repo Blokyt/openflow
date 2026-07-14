@@ -1,8 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useAuth } from "./AuthContext";
-
-const inputClass =
-  "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
+import { inputClass } from "./formStyles";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -29,7 +27,7 @@ export default function LoginPage() {
       <form onSubmit={onSubmit} className="w-full max-w-sm p-8 space-y-5">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-white">OpenFlow</h1>
-          <p className="text-sm text-[#B0B0B0]">Connecte-toi pour accéder à la trésorerie</p>
+          <p className="text-sm text-text-secondary">Connecte-toi pour accéder à la trésorerie</p>
         </div>
         <div className="space-y-3">
           <input
@@ -50,11 +48,11 @@ export default function LoginPage() {
             className={inputClass}
           />
         </div>
-        {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+        {error && <p className="text-sm text-alert">{error}</p>}
         <button
           type="submit"
           disabled={busy}
-          className="w-full px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
+          className="w-full px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors disabled:opacity-50"
         >
           {busy ? "Connexion..." : "Se connecter"}
         </button>

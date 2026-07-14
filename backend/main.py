@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -228,8 +228,9 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
 
     build_dir = project_root / "frontend" / "dist"
     if build_dir.exists():
-        # Serve static assets (JS, CSS, images)
-        app.mount("/assets", StaticFiles(directory=str(build_dir / "assets")), name="assets")
+        if (build_dir / "assets").is_dir():
+            # Serve static assets (JS, CSS, images)
+            app.mount("/assets", StaticFiles(directory=str(build_dir / "assets")), name="assets")
 
         # SPA fallback: any non-API route serves index.html.
         # Le chemin est confiné à build_dir via safe_static_file (anti path traversal).
@@ -238,6 +239,9 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
             target = safe_static_file(build_dir, path)
             if target is not None:
                 return FileResponse(str(target))
-            return FileResponse(str(build_dir / "index.html"))
+            index_file = build_dir / "index.html"
+            if not index_file.exists():
+                return Response(content="Frontend not built. Run 'cd frontend && npm run build' or use dev server on port 5173.", status_code=404)
+            return FileResponse(str(index_file))
 
     return app

@@ -128,7 +128,11 @@ def _check_origin(request: Request) -> None:
     origin = request.headers.get("origin")
     if not origin:
         return
-    if urlparse(origin).netloc != request.headers.get("host", ""):
+    netloc = urlparse(origin).netloc
+    host = request.headers.get("host", "")
+    if netloc in ["localhost:5173", "127.0.0.1:5173", "localhost:4173", "127.0.0.1:4173"]:
+        return
+    if netloc != host:
         raise HTTPException(status_code=403, detail="Origine non autorisée")
 
 

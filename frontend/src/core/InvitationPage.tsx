@@ -1,9 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
+import PageLoader from "./PageLoader";
 import { useAuth } from "./AuthContext";
-
-const inputClass =
-  "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
+import { inputClass } from "./formStyles";
 
 export default function InvitationPage() {
   const { reload } = useAuth();
@@ -40,24 +39,20 @@ export default function InvitationPage() {
   if (invalid) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-black gap-3 p-6 text-center">
-        <p className="text-[#FF5252] font-semibold">Invitation invalide ou expirée</p>
-        <p className="text-sm text-[#B0B0B0]">Demande un nouveau lien au trésorier du BDA.</p>
+        <p className="text-alert font-semibold">Invitation invalide ou expirée</p>
+        <p className="text-sm text-text-secondary">Demande un nouveau lien au trésorier du BDA.</p>
       </div>
     );
   }
   if (email === null) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-      </div>
-    );
+    return <PageLoader />;
   }
   return (
     <div className="flex items-center justify-center h-screen bg-black">
       <form onSubmit={onSubmit} className="w-full max-w-sm p-8 space-y-5">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-white">Bienvenue sur OpenFlow</h1>
-          <p className="text-sm text-[#B0B0B0]">Active ton compte {email}</p>
+          <p className="text-sm text-text-secondary">Active ton compte {email}</p>
         </div>
         <div className="space-y-3">
           <input required autoFocus value={displayName} onChange={(e) => setDisplayName(e.target.value)}
@@ -70,9 +65,9 @@ export default function InvitationPage() {
             placeholder="Confirme le mot de passe"
             className={inputClass} />
         </div>
-        {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+        {error && <p className="text-sm text-alert">{error}</p>}
         <button type="submit" disabled={busy}
-          className="w-full px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50">
+          className="w-full px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors disabled:opacity-50">
           {busy ? "Activation..." : "Activer mon compte"}
         </button>
       </form>

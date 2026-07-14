@@ -6,6 +6,7 @@ import { useFiscalYear } from "../../core/FiscalYearContext";
 import { useAuth } from "../../core/AuthContext";
 import { formatEuros } from "../../utils/format";
 import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Check, AlertTriangle } from "lucide-react";
+import PageLoader from "../../core/PageLoader";
 
 interface CategoryUsage {
   transactions: number;
@@ -103,7 +104,7 @@ function CategoryNode({
             </button>
             <button
               onClick={() => onDelete(cat.id)}
-              className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+              className="p-1.5 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors"
               title="Supprimer"
             >
               <Trash2 size={12} strokeWidth={1.5} />
@@ -112,7 +113,7 @@ function CategoryNode({
         )}
       </div>
       {hasChildren && open && (
-        <div className="ml-6 border-l border-[#222] pl-2">
+        <div className="ml-6 border-l border-border pl-2">
           {cat.children!.map((child) => (
             <CategoryNode
               key={child.id}
@@ -149,18 +150,18 @@ function EditRow({
   const eligible = allCategories.filter((c) => c.id !== cat.id);
 
   return (
-    <div className="flex items-center gap-2 py-2 px-2 bg-[#1a1a1a] rounded-lg border border-[#F2C48D]/30">
+    <div className="flex items-center gap-2 py-2 px-2 bg-[#1a1a1a] rounded-lg border border-accent-sand/30">
       <span className="w-5" />
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="flex-1 bg-[#0a0a0a] border border-[#222] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+        className="flex-1 bg-[#0a0a0a] border border-border rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
       />
       <select
         value={parentId}
         onChange={(e) => setParentId(e.target.value)}
-        className="bg-[#0a0a0a] border border-[#222] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+        className="bg-[#0a0a0a] border border-border rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
       >
         <option value="">— Racine —</option>
         {eligible.map((c) => (
@@ -171,7 +172,7 @@ function EditRow({
       </select>
       <button
         onClick={() => onSave(cat.id, name, parentId ? parseInt(parentId) : undefined)}
-        className="p-1.5 text-[#00C853] hover:text-green-400 rounded-lg hover:bg-[#222] transition-colors"
+        className="p-1.5 text-success hover:text-green-400 rounded-lg hover:bg-[#222] transition-colors"
       >
         <Check size={14} strokeWidth={1.5} />
       </button>
@@ -297,14 +298,14 @@ export default function CategoryManager() {
       if (confirmDelete === cat.id) {
         const impact = deleteUsage ? describeUsageImpact(deleteUsage) : null;
         return (
-          <div key={cat.id} className="flex flex-col gap-1.5 py-2 px-2 bg-[#1a0a0a] border border-[#FF5252]/20 rounded-lg">
+          <div key={cat.id} className="flex flex-col gap-1.5 py-2 px-2 bg-[#1a0a0a] border border-alert/20 rounded-lg">
             <div className="flex items-center gap-2">
               <span className="w-5" />
-              <span className="flex-1 text-sm text-[#FF5252] font-medium">{cat.name}</span>
-              <span className="text-xs text-[#FF5252]/70">Supprimer ?</span>
+              <span className="flex-1 text-sm text-alert font-medium">{cat.name}</span>
+              <span className="text-xs text-alert/70">Supprimer ?</span>
               <button
                 onClick={() => handleDelete(cat.id)}
-                className="text-xs font-medium text-[#FF5252] hover:text-red-400"
+                className="text-xs font-medium text-alert hover:text-red-400"
               >
                 Oui
               </button>
@@ -342,34 +343,34 @@ export default function CategoryManager() {
       <h1 className="text-3xl font-bold text-white mb-2" style={{ letterSpacing: "-0.02em" }}>
         Catégories
       </h1>
-      <p className="text-sm text-[#B0B0B0] mb-2 leading-relaxed">
+      <p className="text-sm text-text-secondary mb-2 leading-relaxed">
         Les catégories décrivent <span className="text-white font-medium">la nature</span> d'une
         transaction (ex&nbsp;: <em>matériel, transport, cotisations, sponsoring</em>).
       </p>
       <p className="text-xs text-[#8a8a8a] mb-2 leading-relaxed">
-        Pour modéliser <span className="text-[#B0B0B0]">qui gère le budget</span> (sous-clubs,
+        Pour modéliser <span className="text-text-secondary">qui gère le budget</span> (sous-clubs,
         pôles, sections), utilise plutôt{" "}
-        <a href="/entities" className="text-[#F2C48D] hover:underline">Entités</a>.
+        <a href="/entities" className="text-accent-sand hover:underline">Entités</a>.
       </p>
       {(selectedEntity || selectedYear) && (
         <p className="text-xs text-[#8a8a8a] mb-8">
           Statistiques comptées pour{" "}
           {selectedEntity ? (
-            <span className="text-[#F2C48D] font-medium">{selectedEntity.name} et sous-entités</span>
+            <span className="text-accent-sand font-medium">{selectedEntity.name} et sous-entités</span>
           ) : (
             "toutes les entités"
           )}
           {selectedYear && (
-            <> sur l'exercice <span className="text-[#F2C48D] font-medium">{selectedYear.name}</span></>
+            <> sur l'exercice <span className="text-accent-sand font-medium">{selectedYear.name}</span></>
           )}.
         </p>
       )}
       {!selectedEntity && !selectedYear && <div className="mb-6" />}
 
       {error && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
+          <button onClick={() => setError(null)} className="text-alert/70 hover:text-alert">
             <X size={16} />
           </button>
         </div>
@@ -377,7 +378,7 @@ export default function CategoryManager() {
 
       {/* Create form */}
       {isAdmin && (
-        <form onSubmit={handleCreate} className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
+        <form onSubmit={handleCreate} className="mb-6 bg-bg-card border border-border rounded-2xl p-5">
           <h2 className="text-sm font-semibold text-white mb-4">Nouvelle catégorie</h2>
           <div className="flex gap-3 flex-wrap">
             <input
@@ -386,12 +387,12 @@ export default function CategoryManager() {
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nom de la catégorie"
               required
-              className="flex-1 min-w-40 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]"
+              className="flex-1 min-w-40 bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors placeholder-text-muted"
             />
             <select
               value={newParentId}
               onChange={(e) => setNewParentId(e.target.value)}
-              className="bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+              className="bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
             >
               <option value="">— Racine —</option>
               {flatList.map((cat) => (
@@ -403,7 +404,7 @@ export default function CategoryManager() {
             <button
               type="submit"
               disabled={creating}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors"
             >
               <Plus size={14} /> Créer
             </button>
@@ -412,10 +413,10 @@ export default function CategoryManager() {
       )}
 
       {/* Tree */}
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-4">
+      <div className="bg-bg-card border border-border rounded-2xl p-4">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+            <PageLoader fullScreen={false} />
           </div>
         ) : tree.length === 0 ? (
           <p className="text-center text-[#8a8a8a] text-sm py-8">

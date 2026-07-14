@@ -20,6 +20,7 @@ EXPECTED_GET = {
     # users
     "/api/users/me": "connected",
     "/api/users/invitations/preview": "public",
+    "/api/users/reset/preview": "public",
     "/api/users/": "admin",
     "/api/users/invitations": "admin",
     "/api/users/login-events": "admin",

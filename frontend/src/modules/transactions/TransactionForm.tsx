@@ -126,7 +126,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">
           {error}
         </div>
       )}
@@ -268,14 +268,14 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         <button
           type="button"
           onClick={onCancel}
-          className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
+          className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
         >
           Annuler
         </button>
         <button
           type="submit"
           disabled={submitting}
-          className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+          className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors"
         >
           {submitting ? "Enregistrement..." : "Enregistrer"}
         </button>

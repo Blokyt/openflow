@@ -97,14 +97,14 @@ export default function ContactCombobox({
   return (
     <div ref={wrapRef} className="relative">
       {value ? (
-        <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5">
+        <div className="flex items-center justify-between bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5">
           <span className="text-sm text-white">{selectedName ?? "…"}</span>
           <button
             type="button"
             onClick={clearContact}
             aria-label="Retirer le contact"
             title="Retirer le contact"
-            className="text-[#555] hover:text-[#FF5252] transition-colors ml-2"
+            className="text-[#555] hover:text-alert transition-colors ml-2"
           >
             <X size={14} />
           </button>
@@ -122,7 +122,7 @@ export default function ContactCombobox({
       )}
 
       {open && !value && (
-        <div className="absolute z-50 mt-1 w-full bg-[#111] border border-[#222] rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+        <div className="absolute z-50 mt-1 w-full bg-bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
           {results.length > 0 ? (
             results.map((c) => (
               <button
@@ -143,7 +143,7 @@ export default function ContactCombobox({
             <button
               type="button"
               onMouseDown={() => { setCreating(true); setOpen(true); }}
-              className="w-full text-left px-3 py-2 text-sm text-[#F2C48D] hover:bg-[#1a1a1a] transition-colors flex items-center gap-2 border-t border-[#1a1a1a]"
+              className="w-full text-left px-3 py-2 text-sm text-accent-sand hover:bg-[#1a1a1a] transition-colors flex items-center gap-2 border-t border-[#1a1a1a]"
             >
               <UserPlus size={13} /> Créer un nouveau contact
             </button>
@@ -154,14 +154,14 @@ export default function ContactCombobox({
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Nom du contact"
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder-[#444]"
+                className="w-full bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-accent-sand placeholder-text-muted"
                 autoFocus
                 onKeyDown={(e) => { if (e.key === "Enter" && !saving) { e.preventDefault(); handleCreate(); } }}
               />
               <select
                 value={newType}
                 onChange={(e) => setNewType(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+                className="w-full bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-accent-sand"
               >
                 {CONTACT_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -172,14 +172,14 @@ export default function ContactCombobox({
                   type="button"
                   onMouseDown={handleCreate}
                   disabled={saving || !newName.trim()}
-                  className="flex-1 px-3 py-1.5 text-xs font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+                  className="flex-1 px-3 py-1.5 text-xs font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors"
                 >
                   {saving ? "Création..." : "Créer"}
                 </button>
                 <button
                   type="button"
                   onMouseDown={() => setCreating(false)}
-                  className="px-3 py-1.5 text-xs text-[#8a8a8a] border border-[#333] rounded-full hover:text-white transition-colors"
+                  className="px-3 py-1.5 text-xs text-[#8a8a8a] border border-border-hover rounded-full hover:text-white transition-colors"
                 >
                   Annuler
                 </button>

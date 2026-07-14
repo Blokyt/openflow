@@ -55,8 +55,8 @@ export default function DirensPage() {
         </p>
       </div>
 
-      <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#999]">
-        <Info size={15} className="text-[#F2C48D] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+      <div className="flex items-start gap-2 rounded-xl border border-border bg-[#0d0d0d] px-4 py-3 text-xs text-[#999]">
+        <Info size={15} className="text-accent-sand flex-shrink-0 mt-0.5" strokeWidth={1.5} />
         <p>
           Aucune configuration. Les lignes reprennent tes catégories OpenFlow en respectant la
           hiérarchie (catégorie parente en gras, sous-catégories indentées en dessous), et chaque
@@ -68,23 +68,23 @@ export default function DirensPage() {
       </div>
 
       {error && (
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm max-w-2xl">
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm max-w-2xl">
           {error}
         </div>
       )}
 
       {!years.length ? (
-        <div className="rounded-2xl border border-[#222] bg-[#111] p-10 text-center text-sm text-[#777] max-w-2xl">
+        <div className="rounded-2xl border border-border bg-bg-card p-10 text-center text-sm text-[#777] max-w-2xl">
           Aucun exercice. Crée d'abord un exercice dans le module Budget.
         </div>
       ) : (
         <div className="space-y-5 max-w-2xl">
-          <div className="rounded-2xl border border-[#222] bg-[#111] p-5 space-y-4">
+          <div className="rounded-2xl border border-border bg-bg-card p-5 space-y-4">
             <Field label="Onglet 1 — Bilan financier (exercice réalisé)">
               <select
                 value={bilanId ?? ""}
                 onChange={(e) => setBilanId(parseInt(e.target.value, 10))}
-                className="bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-2 text-sm text-white w-full"
+                className="bg-[#0d0d0d] border border-border rounded-lg px-3 py-2 text-sm text-white w-full"
               >
                 {years.map((y: any) => (
                   <option key={y.id} value={y.id}>
@@ -98,7 +98,7 @@ export default function DirensPage() {
               <select
                 value={budgetId ?? ""}
                 onChange={(e) => setBudgetId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-2 text-sm text-white w-full"
+                className="bg-[#0d0d0d] border border-border rounded-lg px-3 py-2 text-sm text-white w-full"
               >
                 <option value="">Ne pas remplir l'onglet budget</option>
                 {years.map((y: any) => (
@@ -114,21 +114,21 @@ export default function DirensPage() {
                 value={assocName}
                 onChange={(e) => setAssocName(e.target.value)}
                 placeholder="Nom de l'association"
-                className="bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-2 text-sm text-white w-full"
+                className="bg-[#0d0d0d] border border-border rounded-lg px-3 py-2 text-sm text-white w-full"
               />
             </Field>
 
             <button
               onClick={handleDownload}
               disabled={busy || !bilanId}
-              className="flex items-center gap-2 rounded-full bg-[#F2C48D] px-5 py-2.5 text-sm font-semibold text-black hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 rounded-full bg-accent-sand px-5 py-2.5 text-sm font-semibold text-black hover:bg-accent-sand transition-colors disabled:opacity-50"
             >
               <FileDown size={16} strokeWidth={2} />
               {busy ? "Génération…" : "Télécharger l'Excel DirENS"}
             </button>
           </div>
 
-          <div className="flex items-start gap-2 rounded-xl border border-[#222] bg-[#0d0d0d] px-4 py-3 text-xs text-[#888]">
+          <div className="flex items-start gap-2 rounded-xl border border-border bg-[#0d0d0d] px-4 py-3 text-xs text-[#888]">
             <Table2 size={15} className="text-[#8a8a8a] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <p>
               Le solde de trésorerie est estimé à partir de l'app ; les lignes « Solde compte bancaire »

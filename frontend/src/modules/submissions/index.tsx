@@ -119,11 +119,11 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
   }
 
   const inputCls =
-    "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2 text-sm text-white " +
-    "focus:border-[#F2C48D] focus:outline-none [color-scheme:dark]";
+    "w-full bg-[#0a0a0a] border border-border rounded-xl px-3 py-2 text-sm text-white " +
+    "focus:border-accent-sand focus:outline-none [color-scheme:dark]";
 
   return (
-    <form onSubmit={submit} className="bg-[#111] border border-[#222] rounded-2xl p-6 space-y-4">
+    <form onSubmit={submit} className="bg-bg-card border border-border rounded-2xl p-6 space-y-4">
       <h2 className="text-sm font-semibold text-white">Soumettre une dépense ou une recette</h2>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -204,15 +204,15 @@ function SubmissionForm({ onCreated }: { onCreated: () => void }) {
       <div>
         <label className="text-xs uppercase tracking-wider text-[#8a8a8a]">Justificatifs (PDF, images)</label>
         <input type="file" multiple accept=".pdf,image/*" ref={fileInputRef}
-          className="block w-full text-sm text-[#B0B0B0] file:mr-3 file:rounded-full file:border-0 file:bg-[#222] file:px-3 file:py-1.5 file:text-sm file:text-white"
+          className="block w-full text-sm text-text-secondary file:mr-3 file:rounded-full file:border-0 file:bg-[#222] file:px-3 file:py-1.5 file:text-sm file:text-white"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
         {files.length > 0 && (
           <p className="mt-1 text-xs text-[#8a8a8a]">{files.length} fichier(s) sélectionné(s)</p>
         )}
       </div>
-      {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+      {error && <p className="text-sm text-alert">{error}</p>}
       <button type="submit" disabled={saving}
-        className="rounded-full bg-[#F2C48D] px-5 py-2 text-sm font-semibold text-black hover:bg-[#e8b87a] transition-colors disabled:opacity-50">
+        className="rounded-full bg-accent-sand px-5 py-2 text-sm font-semibold text-black hover:bg-accent-sand transition-colors disabled:opacity-50">
         {saving ? "Envoi…" : "Soumettre"}
       </button>
     </form>
@@ -229,7 +229,7 @@ function AttachmentLinks({ submissionId }: { submissionId: number }) {
     <div className="flex flex-wrap gap-2 mt-1">
       {items.map((a) => (
         <a key={a.id} href={`/api/attachments/${a.id}/preview`} target="_blank" rel="noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-[#B0B0B0] hover:text-white">
+          className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-white">
           <Paperclip size={12} /> {a.original_name}
         </a>
       ))}
@@ -275,8 +275,8 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
   const cancelTarget = items.find((s) => s.id === confirmCancel);
   return (
     <div className="space-y-2">
-      {error && <p className="text-sm text-[#FF5252]">{error}</p>}
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+      {error && <p className="text-sm text-alert">{error}</p>}
+      <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wider text-[#8a8a8a] text-left">
@@ -291,18 +291,18 @@ function MySubmissions({ refreshKey }: { refreshKey: number }) {
         <tbody>
           {items.map((s) => (
             <tr key={s.id} className="border-t border-[#1a1a1a] hover:bg-[#1a1a1a]">
-              <td className="px-4 py-3 text-[#B0B0B0]">{s.date}</td>
+              <td className="px-4 py-3 text-text-secondary">{s.date}</td>
               <td className="px-4 py-3 text-white">
                 {s.label}
                 <AttachmentLinks submissionId={s.id} />
                 {s.payer_name && (
-                  <p className="text-xs text-[#F2C48D] mt-1">Avance de frais : {s.payer_name}</p>
+                  <p className="text-xs text-accent-sand mt-1">Avance de frais : {s.payer_name}</p>
                 )}
                 {s.status === "rejected" && s.review_comment && (
-                  <p className="text-xs text-[#FF5252] mt-1">Motif du refus : {s.review_comment}</p>
+                  <p className="text-xs text-alert mt-1">Motif du refus : {s.review_comment}</p>
                 )}
               </td>
-              <td className="px-4 py-3 text-[#B0B0B0]">{s.entity_name}</td>
+              <td className="px-4 py-3 text-text-secondary">{s.entity_name}</td>
               <td className="px-4 py-3 text-right font-semibold"
                 style={{ color: s.direction === "income" ? "#00C853" : "#FF5252" }}>
                 {formatEuros(s.amount)}
@@ -342,12 +342,30 @@ function AdminQueue() {
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [forceApproveId, setForceApproveId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     const p = tab === "pending" ? api.getSubmissions("pending") : api.getSubmissions();
     p.then(setItems).catch(() => {});
   }, [tab]);
   useEffect(load, [load]);
+
+  async function forceApprove() {
+    if (forceApproveId === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.approveSubmission(forceApproveId, true);
+      setForceApproveId(null);
+      notifyBadgesChanged();
+      load();
+    } catch (err: any) {
+      setError(err?.message || "Erreur lors de l'approbation forcée.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function approve(id: number) {
     setError(null);
@@ -356,13 +374,8 @@ function AdminQueue() {
     } catch (err: any) {
       // Verrou d'exercice clôturé : on propose de forcer.
       if (String(err?.message || "").includes("Exercice clôturé")) {
-        if (!window.confirm("Exercice clôturé : approuver quand même ?")) return;
-        try {
-          await api.approveSubmission(id, true);
-        } catch (err2: any) {
-          setError(err2?.message || "Erreur lors de l'approbation forcée.");
-          return;
-        }
+        setForceApproveId(id);
+        return;
       } else {
         setError(err?.message || "Erreur lors de l'approbation.");
         return;
@@ -387,7 +400,7 @@ function AdminQueue() {
 
   const tabCls = (active: boolean) =>
     `px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-      active ? "bg-[#F2C48D] text-black" : "text-[#8a8a8a] hover:text-white"
+      active ? "bg-accent-sand text-black" : "text-[#8a8a8a] hover:text-white"
     }`;
 
   return (
@@ -400,7 +413,7 @@ function AdminQueue() {
           Historique
         </button>
       </div>
-      {error && <p className="text-sm text-[#FF5252]">{error}</p>}
+      {error && <p className="text-sm text-alert">{error}</p>}
       {items.length === 0 ? (
         <p className="text-sm text-[#8a8a8a]">
           {tab === "pending"
@@ -410,7 +423,7 @@ function AdminQueue() {
       ) : (
         <div className="space-y-3">
           {items.map((s) => (
-            <div key={s.id} className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-2">
+            <div key={s.id} className="bg-bg-card border border-border rounded-2xl p-5 space-y-2">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-white font-medium">{s.label}</p>
@@ -419,14 +432,14 @@ function AdminQueue() {
                     {s.category_name ? ` · ${s.category_name}` : ""} · par {s.submitted_by_name || s.submitted_by_email}
                   </p>
                   {s.payer_name && (
-                    <p className="text-xs text-[#F2C48D] mt-1">
+                    <p className="text-xs text-accent-sand mt-1">
                       Avance de frais : {s.payer_name} (fiche de remboursement créée à l'approbation)
                     </p>
                   )}
-                  {s.description && <p className="text-sm text-[#B0B0B0] mt-1">{s.description}</p>}
+                  {s.description && <p className="text-sm text-text-secondary mt-1">{s.description}</p>}
                   <AttachmentLinks submissionId={s.id} />
                   {s.status === "rejected" && s.review_comment && (
-                    <p className="text-xs text-[#FF5252] mt-1">Motif du refus : {s.review_comment}</p>
+                    <p className="text-xs text-alert mt-1">Motif du refus : {s.review_comment}</p>
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -441,10 +454,10 @@ function AdminQueue() {
                 rejectingId === s.id ? (
                   <div className="flex items-center gap-2 pt-1">
                     <input autoFocus value={comment} placeholder="Motif du refus (obligatoire)"
-                      className="flex-1 bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2 text-sm text-white focus:border-[#F2C48D] focus:outline-none"
+                      className="flex-1 bg-[#0a0a0a] border border-border rounded-xl px-3 py-2 text-sm text-white focus:border-accent-sand focus:outline-none"
                       onChange={(e) => setComment(e.target.value)} />
                     <button onClick={() => reject(s.id)} disabled={!comment.trim()}
-                      className="rounded-full bg-[#FF5252] px-4 py-2 text-sm font-semibold text-black disabled:opacity-40">
+                      className="rounded-full bg-alert px-4 py-2 text-sm font-semibold text-black disabled:opacity-40">
                       Refuser
                     </button>
                     <button onClick={() => { setRejectingId(null); setComment(""); }}
@@ -455,11 +468,11 @@ function AdminQueue() {
                 ) : (
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => approve(s.id)}
-                      className="rounded-full bg-[#F2C48D] px-4 py-2 text-sm font-semibold text-black hover:bg-[#e8b87a] transition-colors">
+                      className="rounded-full bg-accent-sand px-4 py-2 text-sm font-semibold text-black hover:bg-accent-sand transition-colors">
                       Approuver
                     </button>
                     <button onClick={() => setRejectingId(s.id)}
-                      className="rounded-full border border-[#333] px-4 py-2 text-sm text-white hover:border-[#555] transition-colors">
+                      className="rounded-full border border-border-hover px-4 py-2 text-sm text-white hover:border-[#555] transition-colors">
                       Refuser…
                     </button>
                   </div>
@@ -469,6 +482,16 @@ function AdminQueue() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={forceApproveId !== null}
+        title="Approbation sur exercice clôturé"
+        message="L'exercice fiscal lié à cette soumission est clôturé. Voulez-vous vraiment l'approuver et générer des transactions dans un exercice fermé ?"
+        confirmLabel="Forcer l'approbation"
+        danger={true}
+        busy={busy}
+        onConfirm={forceApprove}
+        onCancel={() => setForceApproveId(null)}
+      />
     </div>
   );
 }
@@ -481,7 +504,7 @@ export default function SubmissionsPage() {
   return (
     <div className="p-8 max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
-        <FileUp size={22} className="text-[#F2C48D]" strokeWidth={1.5} />
+        <FileUp size={22} className="text-accent-sand" strokeWidth={1.5} />
         <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>
           Soumissions
         </h1>
@@ -493,7 +516,7 @@ export default function SubmissionsPage() {
           {hasTreasurerRole ? (
             <SubmissionForm onCreated={() => setRefreshKey((k) => k + 1)} />
           ) : (
-            <div className="bg-[#111] border border-[#222] rounded-2xl p-6 text-sm text-[#8a8a8a]">
+            <div className="bg-bg-card border border-border rounded-2xl p-6 text-sm text-[#8a8a8a]">
               Vous n'êtes trésorier d'aucune entité. Vous ne pouvez pas créer de soumission.
               Contactez un administrateur si cela vous semble incorrect.
             </div>

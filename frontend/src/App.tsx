@@ -8,6 +8,7 @@ import ContextBar from "./core/ContextBar";
 import { EntityProvider } from "./core/EntityContext";
 import { FiscalYearProvider } from "./core/FiscalYearContext";
 import { AuthProvider, useAuth } from "./core/AuthContext";
+import { ToastProvider } from "./core/ToastContext";
 import LoginPage from "./core/LoginPage";
 import InvitationPage from "./core/InvitationPage";
 import ResetPage from "./core/ResetPage";
@@ -17,11 +18,11 @@ import Spinner from "./core/Spinner";
 function ErrorScreen({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-black gap-4 p-6 text-center">
-      <p className="text-[#FF5252] font-semibold">Impossible de charger l'application</p>
-      <p className="text-sm text-[#B0B0B0] max-w-md">{message}</p>
+      <p className="text-alert font-semibold">Impossible de charger l'application</p>
+      <p className="text-sm text-text-secondary max-w-md">{message}</p>
       <button
         onClick={() => window.location.reload()}
-        className="px-4 py-2 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+        className="px-4 py-2 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors"
       >
         Réessayer
       </button>
@@ -92,7 +93,9 @@ function AuthGate() {
 export default function App() {
   return (
     <AuthProvider>
-      <AuthGate />
+      <ToastProvider>
+        <AuthGate />
+      </ToastProvider>
     </AuthProvider>
   );
 }

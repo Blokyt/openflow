@@ -7,6 +7,7 @@ import { useEntity } from "../../core/EntityContext";
 import { useAuth } from "../../core/AuthContext";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 import ConfirmDialog from "../../core/ConfirmDialog";
+import PageLoader from "../../core/PageLoader";
 
 /** Retourne la date locale du jour au format YYYY-MM-DD. */
 function localToday(): string {
@@ -61,7 +62,7 @@ function EntityNode({
         <span className="text-sm text-white flex-1 truncate">{entity.name}</span>
 
         {entity.is_default === 1 && (
-          <span className="text-[10px] text-[#F2C48D] border border-[#F2C48D]/30 rounded px-1.5 py-0.5">
+          <span className="text-[10px] text-accent-sand border border-accent-sand/30 rounded px-1.5 py-0.5">
             défaut
           </span>
         )}
@@ -76,7 +77,7 @@ function EntityNode({
               <Pencil size={13} />
             </button>
             <button
-              className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-[#FF5252] transition-opacity"
+              className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-alert transition-opacity"
               onClick={(e) => { e.stopPropagation(); onDelete(entity.id); }}
               title="Supprimer"
             >
@@ -164,7 +165,7 @@ function EntityModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      <div className="bg-bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-base font-semibold text-white">
             {isEdit ? "Modifier l'entité" : "Nouvelle entité"} {type === "internal" ? "interne" : "externe"}
@@ -176,12 +177,12 @@ function EntityModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Nom *</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Nom *</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#F2C48D]/50"
+              className="w-full bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-accent-sand/50"
               placeholder="Nom de l'entité"
               required
               autoFocus
@@ -189,23 +190,23 @@ function EntityModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#F2C48D]/50"
+              className="w-full bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-accent-sand/50"
               placeholder="Description optionnelle"
             />
           </div>
 
           {type === "internal" && parentChoices.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Entité parente</label>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Entité parente</label>
               <select
                 value={parentId}
                 onChange={(e) => setParentId(e.target.value !== "" ? parseInt(e.target.value, 10) : "")}
-                className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D]/50"
+                className="w-full bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-sand/50"
               >
                 <option value="">Aucune (racine)</option>
                 {parentChoices.map((e) => (
@@ -216,20 +217,20 @@ function EntityModal({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-[#B0B0B0] mb-1.5">Couleur</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Couleur</label>
             <div className="flex items-center gap-3">
               <input
                 type="color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                className="w-10 h-10 rounded-lg border border-[#333] bg-[#1a1a1a] cursor-pointer"
+                className="w-10 h-10 rounded-lg border border-border-hover bg-[#1a1a1a] cursor-pointer"
               />
               <span className="text-sm text-[#8a8a8a]">{color}</span>
             </div>
           </div>
 
           {error && (
-            <div className="text-sm text-[#FF5252] bg-[#1a0a0a] border border-[#FF5252]/20 rounded-lg px-3 py-2">
+            <div className="text-sm text-alert bg-[#1a0a0a] border border-alert/20 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -238,14 +239,14 @@ function EntityModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-lg border border-[#333] text-sm text-[#8a8a8a] hover:text-white hover:border-[#444] transition-colors"
+              className="flex-1 px-4 py-2 rounded-lg border border-border-hover text-sm text-[#8a8a8a] hover:text-white hover:border-[#444] transition-colors"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={saving || !name.trim()}
-              className="flex-1 px-4 py-2 rounded-lg bg-[#F2C48D] text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 px-4 py-2 rounded-lg bg-accent-sand text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isEdit ? (saving ? "..." : "Enregistrer") : (saving ? "Création..." : "Créer")}
             </button>
@@ -361,12 +362,12 @@ function EntityBalancePanel({
   const calculatedOwn = bankTotalCents !== null ? bankTotalCents - sumChildren : null;
 
   return (
-    <div className="bg-[#0d0d0d] border border-[#222] rounded-2xl p-5">
+    <div className="bg-[#0d0d0d] border border-border rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-white">{entityName}</h3>
           {isAggregate && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#F2C48D]/10 text-[#F2C48D] border border-[#F2C48D]/30">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-sand/10 text-accent-sand border border-accent-sand/30">
               Agrégé
             </span>
           )}
@@ -374,7 +375,7 @@ function EntityBalancePanel({
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setSelectedEntityId(entityId); navigate("/transactions"); }}
-            className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-1"
+            className="text-xs text-accent-sand hover:underline inline-flex items-center gap-1"
             title="Voir les transactions de cette entité"
           >
             Transactions <ArrowRight size={11} />
@@ -387,12 +388,12 @@ function EntityBalancePanel({
 
       {loading ? (
         <div className="flex justify-center py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#F2C48D]" />
+          <PageLoader fullScreen={false} />
         </div>
       ) : (
         <div className="space-y-3">
           {balance && (
-            <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+            <div className="bg-bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-[#8a8a8a] uppercase tracking-wider">
                   {isAggregate ? "Solde propre (calculé)" : "Solde propre"}
@@ -400,7 +401,7 @@ function EntityBalancePanel({
                 {isAdmin && !isAggregate && !editingRef && (
                   <button
                     onClick={openEditForm}
-                    className="text-[#8a8a8a] hover:text-[#F2C48D] transition-colors"
+                    className="text-[#8a8a8a] hover:text-accent-sand transition-colors"
                     title="Modifier le solde de référence"
                   >
                     <Pencil size={13} />
@@ -409,13 +410,13 @@ function EntityBalancePanel({
                 {isAggregate && isAdmin && (
                   <Link
                     to="/settings#balances"
-                    className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5"
+                    className="text-xs text-accent-sand hover:underline inline-flex items-center gap-0.5"
                   >
                     Modifier dans Paramètres →
                   </Link>
                 )}
               </div>
-              <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-[#FF5252]"}`}>
+              <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-alert"}`}>
                 {formatEuros(balance.balance)}
               </p>
               {isAggregate ? (
@@ -437,7 +438,7 @@ function EntityBalancePanel({
                       type="date"
                       value={refDate}
                       onChange={(e) => setRefDate(e.target.value)}
-                      className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D]/50"
+                      className="flex-1 bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-sand/50"
                       required
                     />
                     <input
@@ -446,25 +447,25 @@ function EntityBalancePanel({
                       value={refAmount}
                       onChange={(e) => setRefAmount(e.target.value)}
                       placeholder="Montant"
-                      className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#F2C48D]/50"
+                      className="flex-1 bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-accent-sand/50"
                       required
                     />
                   </div>
                   {refError && (
-                    <p className="text-xs text-[#FF5252]">{refError}</p>
+                    <p className="text-xs text-alert">{refError}</p>
                   )}
                   <div className="flex gap-2">
                     <button
                       type="submit"
                       disabled={refSaving}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-[#F2C48D] text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-accent-sand text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {refSaving ? "..." : "Enregistrer"}
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingRef(false)}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-[#333] text-sm text-[#8a8a8a] hover:text-white hover:border-[#444] transition-colors"
+                      className="flex-1 px-3 py-1.5 rounded-lg border border-border-hover text-sm text-[#8a8a8a] hover:text-white hover:border-[#444] transition-colors"
                     >
                       Annuler
                     </button>
@@ -475,9 +476,9 @@ function EntityBalancePanel({
           )}
 
           {hasChildren && (
-            <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+            <div className="bg-bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Solde consolidé</p>
-              <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-[#F2C48D]" : "text-[#FF5252]"}`}>
+              <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-accent-sand" : "text-alert"}`}>
                 {formatEuros(consolidated!.consolidated_balance)}
               </p>
               {isAggregate && (
@@ -486,8 +487,8 @@ function EntityBalancePanel({
               <div className="mt-3 space-y-1">
                 {consolidated!.children.map((child) => (
                   <div key={child.entity_id} className="flex justify-between text-xs">
-                    <span className="text-[#B0B0B0]">{findName(entityTree, child.entity_id) ?? `Entité #${child.entity_id}`}</span>
-                    <span className={child.balance >= 0 ? "text-[#B0B0B0]" : "text-[#FF5252]"}>
+                    <span className="text-text-secondary">{findName(entityTree, child.entity_id) ?? `Entité #${child.entity_id}`}</span>
+                    <span className={child.balance >= 0 ? "text-text-secondary" : "text-alert"}>
                       {formatEuros(child.balance)}
                     </span>
                   </div>
@@ -497,7 +498,7 @@ function EntityBalancePanel({
           )}
 
           {isAdmin && hasChildren && !isAggregate && (
-            <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+            <div className="bg-bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Calculer le solde propre</p>
               <p className="text-xs text-[#8a8a8a] mb-3 leading-relaxed">
                 Si tu connais le total du compte bancaire, le solde propre se déduit automatiquement.
@@ -508,17 +509,17 @@ function EntityBalancePanel({
                 value={bankTotal}
                 onChange={(e) => setBankTotal(e.target.value)}
                 placeholder="Total compte bancaire"
-                className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#F2C48D]/50"
+                className="w-full bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-accent-sand/50"
               />
               {calculatedOwn !== null && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs text-[#8a8a8a]">
                     Solde propre calculé ={" "}
-                    <span className="text-[#B0B0B0]">{formatEuros(bankTotalCents!)}</span>
+                    <span className="text-text-secondary">{formatEuros(bankTotalCents!)}</span>
                     {" − "}
-                    <span className="text-[#B0B0B0]">{formatEuros(sumChildren)}</span>
+                    <span className="text-text-secondary">{formatEuros(sumChildren)}</span>
                     {" = "}
-                    <span className={`font-bold ${calculatedOwn >= 0 ? "text-white" : "text-[#FF5252]"}`}>
+                    <span className={`font-bold ${calculatedOwn >= 0 ? "text-white" : "text-alert"}`}>
                       {formatEuros(calculatedOwn)}
                     </span>
                   </p>
@@ -531,7 +532,7 @@ function EntityBalancePanel({
                       setRefError(null);
                       setEditingRef(true);
                     }}
-                    className="w-full px-3 py-1.5 rounded-lg border border-[#F2C48D]/40 text-sm text-[#F2C48D] hover:bg-[#F2C48D]/5 hover:border-[#F2C48D]/70 transition-colors"
+                    className="w-full px-3 py-1.5 rounded-lg border border-accent-sand/40 text-sm text-accent-sand hover:bg-accent-sand/5 hover:border-accent-sand/70 transition-colors"
                   >
                     Utiliser cette valeur
                   </button>
@@ -619,22 +620,22 @@ export default function EntityTree() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2" style={{ letterSpacing: "-0.02em" }}>Entités</h1>
-        <p className="text-sm text-[#B0B0B0] leading-relaxed">
+        <p className="text-sm text-text-secondary leading-relaxed">
           Les entités représentent <span className="text-white font-medium">qui gère le budget</span> :
           ta structure et ses <em>sous-clubs, pôles, sections</em>, ainsi que les{" "}
           <em>tiers externes</em> (banque, fournisseurs).
         </p>
         <p className="text-xs text-[#8a8a8a] mt-1 leading-relaxed">
-          Pour classer <span className="text-[#B0B0B0]">la nature</span> des dépenses (matériel,
+          Pour classer <span className="text-text-secondary">la nature</span> des dépenses (matériel,
           transport…), utilise plutôt{" "}
-          <a href="/categories" className="text-[#F2C48D] hover:underline">Catégories</a>.
+          <a href="/categories" className="text-accent-sand hover:underline">Catégories</a>.
         </p>
       </div>
 
       {pageError && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-center justify-between">
           {pageError}
-          <button onClick={() => setPageError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
+          <button onClick={() => setPageError(null)} className="text-alert/70 hover:text-alert">
             <X size={16} />
           </button>
         </div>
@@ -644,10 +645,10 @@ export default function EntityTree() {
         {/* Left column: trees */}
         <div className="lg:col-span-2 space-y-6">
           {/* Internal entities */}
-          <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#222]">
+          <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <Building2 size={16} className="text-[#F2C48D]" strokeWidth={1.5} />
+                <Building2 size={16} className="text-accent-sand" strokeWidth={1.5} />
                 <span className="text-sm font-semibold text-white">Entités internes</span>
                 <span className="text-xs text-[#555] bg-[#1a1a1a] border border-[#2a2a2a] rounded-full px-2 py-0.5">
                   {flatInternal.length}
@@ -656,7 +657,7 @@ export default function EntityTree() {
               {isAdmin && (
                 <button
                   onClick={() => setShowCreateModal("internal")}
-                  className="flex items-center gap-1.5 text-xs text-[#F2C48D] border border-[#F2C48D]/30 hover:border-[#F2C48D]/60 hover:bg-[#F2C48D]/5 rounded-lg px-3 py-1.5 transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-accent-sand border border-accent-sand/30 hover:border-accent-sand/60 hover:bg-accent-sand/5 rounded-lg px-3 py-1.5 transition-colors"
                 >
                   <Plus size={13} />
                   Nouvelle
@@ -685,10 +686,10 @@ export default function EntityTree() {
           </div>
 
           {/* External entities */}
-          <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#222]">
+          <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <Users size={16} className="text-[#B0B0B0]" strokeWidth={1.5} />
+                <Users size={16} className="text-text-secondary" strokeWidth={1.5} />
                 <span className="text-sm font-semibold text-white">Entités externes</span>
                 <span className="text-xs text-[#555] bg-[#1a1a1a] border border-[#2a2a2a] rounded-full px-2 py-0.5">
                   {externalEntities.length}
@@ -697,7 +698,7 @@ export default function EntityTree() {
               {isAdmin && (
                 <button
                   onClick={() => setShowCreateModal("external")}
-                  className="flex items-center gap-1.5 text-xs text-[#B0B0B0] border border-[#333] hover:border-[#555] hover:bg-[#1a1a1a] rounded-lg px-3 py-1.5 transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-text-secondary border border-border-hover hover:border-[#555] hover:bg-[#1a1a1a] rounded-lg px-3 py-1.5 transition-colors"
                 >
                   <Plus size={13} />
                   Nouvelle
@@ -735,7 +736,7 @@ export default function EntityTree() {
                           <Pencil size={13} />
                         </button>
                         <button
-                          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-[#FF5252] transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-alert transition-opacity"
                           onClick={(e2) => { e2.stopPropagation(); requestDelete(e.id); }}
                           title="Supprimer"
                         >

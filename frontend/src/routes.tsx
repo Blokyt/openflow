@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import PageLoader from "./core/PageLoader";
 
 // Pages chargées à la demande : le bundle initial ne contient que le shell
 // et le dashboard ; chaque module n'est téléchargé qu'à la première visite.
@@ -21,7 +22,7 @@ function Page({ children }: { children: React.ReactNode }) {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
+          <PageLoader fullScreen={false} />
         </div>
       }
     >

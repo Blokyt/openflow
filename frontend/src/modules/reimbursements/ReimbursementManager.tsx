@@ -5,6 +5,8 @@ import EmptyState from "../../core/EmptyState";
 import { useAuth } from "../../core/AuthContext";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 import { notifyBadgesChanged } from "../../utils/events";
+import { inputClass, labelClass } from "../../core/formStyles";
+import PageLoader from "../../core/PageLoader";
 
 async function apiReimb<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await rawFetch(`/reimbursements${path}`, {
@@ -220,8 +222,6 @@ export default function ReimbursementManager() {
   const totalPending = summary.reduce((s, r) => s + r.total_pending, 0);
   const countPending = summary.reduce((s, r) => s + r.count, 0);
 
-  const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
-  const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
 
   return (
     <div className="p-8">
@@ -237,7 +237,7 @@ export default function ReimbursementManager() {
         {isAdmin && (
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors"
           >
             <Plus size={15} /> Nouveau remboursement
           </button>
@@ -245,39 +245,39 @@ export default function ReimbursementManager() {
       </div>
 
       {error && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
+          <button onClick={() => setError(null)} className="text-alert/70 hover:text-alert">
             <X size={16} />
           </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Total en attente</div>
-          <div className="text-2xl font-bold text-[#F2C48D]">{formatEuros(totalPending)}</div>
+          <div className="text-2xl font-bold text-accent-sand">{formatEuros(totalPending)}</div>
         </div>
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Avances ouvertes</div>
           <div className="text-2xl font-bold text-white">{countPending}</div>
         </div>
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Personnes concernées</div>
           <div className="text-2xl font-bold text-white">{summary.length}</div>
         </div>
       </div>
 
       {summary.length > 0 && (
-        <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="mb-6 bg-bg-card border border-border rounded-2xl p-5">
           <h2 className="text-sm font-semibold text-white mb-3">Ce que {orgName} doit rembourser</h2>
           <div className="space-y-2">
             {summary.map((s) => (
               <div key={s.person_name} className="flex items-center justify-between py-1.5">
-                <div className="text-sm text-[#B0B0B0]">
+                <div className="text-sm text-text-secondary">
                   {s.person_name} <span className="text-[#555] text-xs ml-2">({s.count} avance{s.count > 1 ? "s" : ""})</span>
                 </div>
-                <div className="text-sm font-semibold text-[#F2C48D]">{formatEuros(s.total_pending)}</div>
+                <div className="text-sm font-semibold text-accent-sand">{formatEuros(s.total_pending)}</div>
               </div>
             ))}
           </div>
@@ -289,7 +289,7 @@ export default function ReimbursementManager() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+          className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand"
         >
           <option value="">Tous</option>
           <option value="pending">En attente</option>
@@ -298,7 +298,7 @@ export default function ReimbursementManager() {
       </div>
 
       {isAdmin && showForm && (
-        <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
+        <div className="mb-6 bg-bg-card border border-border rounded-2xl p-6">
           <h2 className="text-base font-semibold text-white mb-5">
             {editing ? "Modifier le remboursement" : "Nouveau remboursement"}
           </h2>
@@ -376,14 +376,14 @@ export default function ReimbursementManager() {
               <button
                 type="button"
                 onClick={cancelForm}
-                className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors"
               >
                 Annuler
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors"
               >
                 {saving ? "Enregistrement..." : "Enregistrer"}
               </button>
@@ -405,10 +405,10 @@ export default function ReimbursementManager() {
           onCta={isAdmin ? openCreate : undefined}
         />
       ) : (
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+      <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+            <PageLoader fullScreen={false} />
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -448,14 +448,14 @@ export default function ReimbursementManager() {
                       <span className="text-[#444]">—</span>
                     )}
                   </td>
-                  <td className="px-5 py-3.5 text-right font-semibold text-[#F2C48D] whitespace-nowrap">
+                  <td className="px-5 py-3.5 text-right font-semibold text-accent-sand whitespace-nowrap">
                     {formatEuros(r.amount)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {!isAdmin ? null : confirmDelete === r.id ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
-                        <button onClick={() => handleDelete(r.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
+                        <button onClick={() => handleDelete(r.id)} className="text-xs font-medium text-alert hover:text-red-400">Oui</button>
                         <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#8a8a8a] hover:text-white">Non</button>
                       </span>
                     ) : (
@@ -477,7 +477,7 @@ export default function ReimbursementManager() {
                         </button>
                         <button
                           onClick={() => setConfirmDelete(r.id)}
-                          className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                          className="p-1.5 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors"
                           title="Supprimer"
                         >
                           <Trash2 size={14} strokeWidth={1.5} />

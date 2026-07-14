@@ -11,6 +11,7 @@ Claude execute directement :
 - **Apres toute nouvelle fonctionnalite** → `python -m pytest tests/ -v` (ou le fichier de test concerne)
 - **Toujours tuer les anciens processus** avant de relancer : `taskkill /F /IM python.exe` + `taskkill /F /IM node.exe`
 - **Toujours utiliser des chemins absolus** pour `python dev.py` car le CWD peut avoir derive (`cd frontend && ...`)
+- **Vérifier l'existence du dossier assets** : Lors du montage des fichiers statiques dans `main.py`, toujours vérifier `(build_dir / "assets").is_dir()` avant de monter le dossier, pour ne pas casser l'application si le frontend n'est pas encore buildé.
 - dev.py lance uvicorn --reload (port 8000) + npm dev (port 5173 ou suivant si occupe)
 
 ## Philosophie

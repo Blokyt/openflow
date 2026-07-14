@@ -6,5 +6,23 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>OpenFlow</title>
 </head>
-<body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        var pre = document.createElement('pre');
+        pre.style = "color: red; position: fixed; top: 0; left: 0; z-index: 9999; background: black; padding: 20px;";
+        pre.textContent = [msg, url, lineNo, columnNo, error && error.stack].join('\n');
+        document.body.appendChild(pre);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(event) {
+        var pre = document.createElement('pre');
+        pre.style = "color: orange; position: fixed; top: 0; left: 0; z-index: 9999; background: black; padding: 20px;";
+        pre.textContent = "Unhandled Rejection: " + (event.reason && event.reason.stack || event.reason);
+        document.body.appendChild(pre);
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

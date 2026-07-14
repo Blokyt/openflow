@@ -6,10 +6,11 @@ import { Pencil, Check, X, Info, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
 import { formatEuros, eurosToCents, centsToEuros } from "../utils/format";
 import BalanceRefsSection from "./BalanceRefsSection";
+import PageLoader from "./PageLoader";
 import { useAuth } from "./AuthContext";
 
 const accountInputClass =
-  "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
+  "w-full bg-[#0a0a0a] border border-border rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors placeholder-text-muted";
 
 function MyAccountSection() {
   const { user, logout } = useAuth();
@@ -78,7 +79,7 @@ function MyAccountSection() {
   return (
     <section className="mb-8">
       <h2 className="text-base font-semibold text-white mb-3">Mon compte</h2>
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-5">
+      <div className="bg-bg-card border border-border rounded-2xl p-5 space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-white">{user?.display_name}</p>
@@ -87,13 +88,13 @@ function MyAccountSection() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { setEditingProfile(true); setProfileName(user?.display_name || ""); setProfileEmail(user?.email || ""); setProfileError(null); setProfileSuccess(false); }}
-              className="px-4 py-2 text-xs font-semibold text-[#F2C48D] border border-[#333] rounded-full hover:border-[#F2C48D] transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-accent-sand border border-border-hover rounded-full hover:border-accent-sand transition-colors"
             >
               Modifier
             </button>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 text-xs font-semibold text-white bg-[#1a1a1a] border border-[#222] rounded-full hover:border-[#FF5252] hover:text-[#FF5252] transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-white bg-[#1a1a1a] border border-border rounded-full hover:border-alert hover:text-alert transition-colors"
             >
               Se déconnecter
             </button>
@@ -115,20 +116,20 @@ function MyAccountSection() {
               placeholder="Email"
               className={accountInputClass}
             />
-            {profileError && <p className="text-sm text-[#FF5252]">{profileError}</p>}
-            {profileSuccess && <p className="text-sm text-[#00C853]">Profil modifié</p>}
+            {profileError && <p className="text-sm text-alert">{profileError}</p>}
+            {profileSuccess && <p className="text-sm text-success">Profil modifié</p>}
             <div className="flex gap-2">
               <button
                 type="submit"
                 disabled={profileBusy}
-                className="px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
+                className="px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors disabled:opacity-50"
               >
                 {profileBusy ? "Enregistrement..." : "Enregistrer"}
               </button>
               <button
                 type="button"
                 onClick={() => setEditingProfile(false)}
-                className="px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] transition-colors"
+                className="px-4 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] transition-colors"
               >
                 Annuler
               </button>
@@ -164,12 +165,12 @@ function MyAccountSection() {
               placeholder="Confirme le nouveau mot de passe"
               className={accountInputClass}
             />
-            {error && <p className="text-sm text-[#FF5252]">{error}</p>}
-            {success && <p className="text-sm text-[#00C853]">Mot de passe modifié</p>}
+            {error && <p className="text-sm text-alert">{error}</p>}
+            {success && <p className="text-sm text-success">Mot de passe modifié</p>}
             <button
               type="submit"
               disabled={busy}
-              className="px-4 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors disabled:opacity-50"
+              className="px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors disabled:opacity-50"
             >
               {busy ? "Modification..." : "Changer le mot de passe"}
             </button>
@@ -246,7 +247,7 @@ function EditableField({
           <select
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="flex-1 bg-[#0a0a0a] border border-[#F2C48D] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+            className="flex-1 bg-[#0a0a0a] border border-accent-sand rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
           >
             {options.map((o) => (
               <option key={o} value={o}>{o}</option>
@@ -257,7 +258,7 @@ function EditableField({
             type={type}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="flex-1 bg-[#0a0a0a] border border-[#F2C48D] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+            className="flex-1 bg-[#0a0a0a] border border-accent-sand rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
@@ -265,10 +266,10 @@ function EditableField({
             }}
           />
         )}
-        <button onClick={handleSave} disabled={saving} className="text-[#00C853] hover:text-white p-1">
+        <button onClick={handleSave} disabled={saving} className="text-success hover:text-white p-1">
           <Check size={16} />
         </button>
-        <button onClick={handleCancel} className="text-[#FF5252] hover:text-white p-1">
+        <button onClick={handleCancel} className="text-alert hover:text-white p-1">
           <X size={16} />
         </button>
       </div>
@@ -282,7 +283,7 @@ function EditableField({
         <span className="font-medium text-white text-sm">{displayValue ?? (value || "—")}</span>
         <button
           onClick={() => setEditing(true)}
-          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-[#F2C48D] transition-opacity p-1"
+          className="opacity-0 group-hover:opacity-100 text-[#8a8a8a] hover:text-accent-sand transition-opacity p-1"
         >
           <Pencil size={14} />
         </button>
@@ -418,11 +419,11 @@ export default function Settings() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-white">{mod.name}</p>
-              {mod.active && <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />}
+              {mod.active && <span className="w-1.5 h-1.5 rounded-full bg-success" />}
               {mod.help && (
                 <button
                   onClick={() => setExpandedHelp(isExpanded ? null : mod.id)}
-                  className="text-[#8a8a8a] hover:text-[#F2C48D] p-0.5"
+                  className="text-[#8a8a8a] hover:text-accent-sand p-0.5"
                   aria-label={`Aide pour ${mod.name}`}
                 >
                   <Info size={14} />
@@ -430,7 +431,7 @@ export default function Settings() {
               )}
             </div>
             {isCore ? (
-              <span className="text-xs text-[#8a8a8a] bg-[#1a1a1a] border border-[#222] px-2.5 py-1 rounded-full">
+              <span className="text-xs text-[#8a8a8a] bg-[#1a1a1a] border border-border px-2.5 py-1 rounded-full">
                 Toujours actif
               </span>
             ) : (
@@ -438,7 +439,7 @@ export default function Settings() {
                 onClick={() => handleToggle(mod)}
                 disabled={toggling === mod.id}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
-                  mod.active ? "bg-[#F2C48D]" : "bg-[#333]"
+                  mod.active ? "bg-accent-sand" : "bg-[#333]"
                 }`}
               >
                 <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
@@ -449,14 +450,14 @@ export default function Settings() {
           </div>
 
           {location && (
-            <div className="flex items-center gap-1.5 text-xs text-[#B0B0B0]">
+            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
               <MapPin size={11} className="text-[#8a8a8a]" />
               <span>{location}</span>
             </div>
           )}
 
           {mod.description && (
-            <p className="text-xs text-[#B0B0B0] leading-relaxed">{mod.description}</p>
+            <p className="text-xs text-text-secondary leading-relaxed">{mod.description}</p>
           )}
 
           {mod.example && (
@@ -466,7 +467,7 @@ export default function Settings() {
           )}
 
           {actionPath && (
-            <Link to={actionPath} className="inline-flex items-center gap-1 text-xs text-[#F2C48D] hover:underline">
+            <Link to={actionPath} className="inline-flex items-center gap-1 text-xs text-accent-sand hover:underline">
               Voir en action <ArrowRight size={11} />
             </Link>
           )}
@@ -494,22 +495,20 @@ export default function Settings() {
       {isAdmin && (
         <>
           {error && (
-            <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex justify-between items-center">
+            <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex justify-between items-center">
               <span>{error}</span>
               <button onClick={() => setError(null)} className="text-xs underline ml-2">Fermer</button>
             </div>
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-            </div>
+            <PageLoader fullScreen={false} />
           ) : (
             <>
               {config && (
                 <section className="mb-8">
                   <h2 className="text-base font-semibold text-white mb-3">Entité</h2>
-                  <div className="bg-[#111] border border-[#222] rounded-2xl p-5 space-y-4">
+                  <div className="bg-bg-card border border-border rounded-2xl p-5 space-y-4">
                     <EditableField
                       label="Nom"
                       value={config.entity.name}
@@ -579,7 +578,7 @@ export default function Settings() {
                           {isCoreGroup && (
                             <button
                               onClick={() => setShowCoreModules((v) => !v)}
-                              className="text-xs text-[#F2C48D] hover:underline"
+                              className="text-xs text-accent-sand hover:underline"
                             >
                               {collapsed ? "Afficher" : "Masquer"}
                             </button>
@@ -587,7 +586,7 @@ export default function Settings() {
                         </div>
                       </div>
                       {!collapsed && (
-                        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+                        <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
                           {catModules.map((mod, idx) => renderModuleRow(mod, idx))}
                         </div>
                       )}
@@ -607,7 +606,7 @@ export default function Settings() {
                           {orphans.filter((m) => m.active).length}/{orphans.length} actifs
                         </span>
                       </div>
-                      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+                      <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
                         {orphans.map((mod, idx) => renderModuleRow(mod, idx))}
                       </div>
                     </div>

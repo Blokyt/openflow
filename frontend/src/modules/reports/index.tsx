@@ -73,7 +73,7 @@ export default function Reports() {
             <select
               value={entityId ?? ""}
               onChange={(e) => setSelectedEntityId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+              className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand"
             >
               <option value="">Toute l'association</option>
               {entities.map((e) => (
@@ -85,7 +85,7 @@ export default function Reports() {
             <select
               value={selectedYear?.id ?? ""}
               onChange={(e) => setSelectedYearId(parseInt(e.target.value, 10))}
-              className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D]"
+              className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand"
             >
               {years.map((y) => (
                 <option key={y.id} value={y.id}>
@@ -97,14 +97,14 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-[#222]">
+      <div className="flex gap-1 border-b border-border">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
-                ? "border-[#F2C48D] text-white"
+                ? "border-accent-sand text-white"
                 : "border-transparent text-[#8a8a8a] hover:text-white"
             }`}
           >
@@ -125,7 +125,7 @@ export default function Reports() {
 
 function EmptyYear() {
   return (
-    <div className="rounded-2xl border border-[#222] bg-[#111] p-10 text-center text-sm text-[#777]">
+    <div className="rounded-2xl border border-border bg-bg-card p-10 text-center text-sm text-[#777]">
       Aucun exercice sélectionné. Crée d'abord un exercice dans le module Budget.
     </div>
   );
@@ -141,7 +141,7 @@ function PdfButton({ onClick }: { onClick: () => void }) {
   return (
     <div className="flex flex-col items-end gap-2">
       {pdfError && (
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">
           {pdfError}
         </div>
       )}
@@ -158,7 +158,7 @@ function PdfButton({ onClick }: { onClick: () => void }) {
           }
         }}
         disabled={busy}
-        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors disabled:opacity-50"
       >
         <FileDown size={15} strokeWidth={1.5} />
         {busy ? "Génération…" : "Télécharger le PDF"}
@@ -222,8 +222,8 @@ function ResultatSection({
   titre, postes, total, accent, totalLabel,
 }: { titre: string; postes: any[]; total: number; accent: string; totalLabel: string }) {
   return (
-    <div className="rounded-2xl border border-[#222] bg-[#111] overflow-x-auto">
-      <div className="px-5 py-3 border-b border-[#222] flex items-center gap-2">
+    <div className="rounded-2xl border border-border bg-bg-card overflow-x-auto">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white">{titre}</h2>
       </div>
@@ -258,7 +258,7 @@ function ResultatSection({
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t border-[#222] bg-[#0d0d0d]">
+          <tr className="border-t border-border bg-[#0d0d0d]">
             <td className="px-5 py-3 font-semibold text-white uppercase text-xs tracking-wide">{totalLabel}</td>
             <td className="px-5 py-3 text-right font-bold text-white whitespace-nowrap">{formatEuros(total)}</td>
           </tr>
@@ -324,8 +324,8 @@ function BilanTab({ year, entityId }: { year: any; entityId: number | null }) {
 
 function BilanColumn({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#222] bg-[#111] overflow-hidden">
-      <div className="px-5 py-3 border-b border-[#222]">
+    <div className="rounded-2xl border border-border bg-bg-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-border">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white">{title}</h2>
       </div>
       <div>{children}</div>
@@ -455,15 +455,15 @@ function PlanComptableTab() {
       )}
 
       {planError && (
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">
           {planError}
         </div>
       )}
 
       {suggestions.length > 0 && (
-        <div className="rounded-2xl border border-[#F2C48D]/30 bg-[#F2C48D]/[0.06] p-4 flex items-start justify-between gap-4">
+        <div className="rounded-2xl border border-accent-sand/30 bg-accent-sand/[0.06] p-4 flex items-start justify-between gap-4">
           <div className="flex items-start gap-2 min-w-0">
-            <Sparkles size={16} className="text-[#F2C48D] flex-shrink-0 mt-0.5" />
+            <Sparkles size={16} className="text-accent-sand flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-white">
                 {suggestions.length} catégorie{suggestions.length > 1 ? "s" : ""} {suggestions.length > 1 ? "peuvent" : "peut"} être classée{suggestions.length > 1 ? "s" : ""} automatiquement
@@ -478,7 +478,7 @@ function PlanComptableTab() {
             <button
               onClick={applyAllSuggestions}
               disabled={applying}
-              className="flex items-center gap-1.5 rounded-xl bg-[#F2C48D] px-3 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
+              className="flex items-center gap-1.5 rounded-xl bg-accent-sand px-3 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
             >
               <Sparkles size={14} /> {applying ? "Application…" : `Appliquer (${suggestions.length})`}
             </button>
@@ -487,16 +487,16 @@ function PlanComptableTab() {
       )}
 
       {rows.length === 0 && (
-        <div className="rounded-2xl border border-[#222] bg-[#111] p-10 text-center text-sm text-[#777]">
+        <div className="rounded-2xl border border-border bg-bg-card p-10 text-center text-sm text-[#777]">
           Aucune catégorie. Crée d'abord des catégories dans le module Catégories.
         </div>
       )}
 
       {rows.length > 0 && (
-        <div className="rounded-2xl border border-[#222] bg-[#111] overflow-x-auto">
+        <div className="rounded-2xl border border-border bg-bg-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[#8a8a8a] text-xs font-medium uppercase border-b border-[#222]">
+              <tr className="text-[#8a8a8a] text-xs font-medium uppercase border-b border-border">
                 <th className="px-5 py-3 text-left">Catégorie</th>
                 <th className="px-5 py-3 text-left">Compte comptable</th>
               </tr>
@@ -513,7 +513,7 @@ function PlanComptableTab() {
                         onChange={(e) =>
                           change(r.category_id, e.target.value ? parseInt(e.target.value, 10) : null)
                         }
-                        className="bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-1.5 text-sm text-white min-w-[18rem] disabled:opacity-50"
+                        className="bg-[#0d0d0d] border border-border rounded-lg px-3 py-1.5 text-sm text-white min-w-[18rem] disabled:opacity-50"
                       >
                         <option value="">Non mappée (compte Autres par défaut)</option>
                         <optgroup label="Produits (classe 7)">
@@ -543,7 +543,7 @@ function PlanComptableTab() {
 
 // ─── Clôture : saisie des créances et dettes (engagement) ───────────────────
 
-const inputCls = "bg-[#0d0d0d] border border-[#222] rounded-lg px-3 py-2 text-sm text-white";
+const inputCls = "bg-[#0d0d0d] border border-border rounded-lg px-3 py-2 text-sm text-white";
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -640,13 +640,13 @@ function ClotureTab({ year }: { year: any }) {
       </p>
 
       {clotureError && (
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">
           {clotureError}
         </div>
       )}
 
       {isAdmin ? (
-        <div className="rounded-2xl border border-[#222] bg-[#111] p-4 grid gap-3 md:grid-cols-6 items-end">
+        <div className="rounded-2xl border border-border bg-bg-card p-4 grid gap-3 md:grid-cols-6 items-end">
           <Field label="Nature">
             <select value={kind} onChange={(e) => setKind(e.target.value as any)} className={inputCls}>
               <option value="creance">Créance (à recevoir)</option>
@@ -686,7 +686,7 @@ function ClotureTab({ year }: { year: any }) {
             <button
               onClick={add}
               disabled={saving}
-              className="flex items-center gap-2 rounded-xl bg-[#F2C48D] px-4 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-accent-sand px-4 py-2 text-sm font-medium text-black hover:opacity-90 transition disabled:opacity-50"
             >
               <Plus size={15} strokeWidth={2} />
               Ajouter
@@ -720,8 +720,8 @@ function AccrualList({
   title, items, onDelete, accent, isAdmin,
 }: { title: string; items: any[]; onDelete: (id: number) => void; accent: string; isAdmin: boolean }) {
   return (
-    <div className="rounded-2xl border border-[#222] bg-[#111] overflow-hidden">
-      <div className="px-5 py-3 border-b border-[#222] flex items-center gap-2">
+    <div className="rounded-2xl border border-border bg-bg-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
         <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white">{title}</h2>
       </div>
@@ -745,7 +745,7 @@ function AccrualList({
                   {isAdmin && (
                     <button
                       onClick={() => onDelete(a.id)}
-                      className="text-[#8a8a8a] hover:text-[#FF5252] transition"
+                      className="text-[#8a8a8a] hover:text-alert transition"
                       title="Supprimer"
                     >
                       <Trash2 size={15} strokeWidth={1.5} />

@@ -6,6 +6,8 @@ import { rawFetch } from "../../api";
 import { formatEuros, formatDate, txTone } from "../../utils/format";
 import { CONTACT_TYPES } from "../../core/ContactCombobox";
 import useDebounce from "../../utils/useDebounce";
+import { inputClass, labelClass } from "../../core/formStyles";
+import PageLoader from "../../core/PageLoader";
 
 const PAGE_SIZE = 80;
 
@@ -52,7 +54,7 @@ const TYPE_COLORS: Record<string, string> = {
   fournisseur: "bg-orange-500/15 text-orange-400 border-orange-500/30",
   membre: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   sponsor: "bg-purple-500/15 text-purple-400 border-purple-500/30",
-  other: "bg-[#222] text-[#B0B0B0] border-[#333]",
+  other: "bg-[#222] text-text-secondary border-border-hover",
 };
 
 export default function TiersList() {
@@ -210,8 +212,6 @@ export default function TiersList() {
 
   const hasMore = contacts.length < total;
 
-  const inputClass = "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]";
-  const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
 
   return (
     <div className="p-8">
@@ -221,16 +221,16 @@ export default function TiersList() {
           <p className="text-sm text-[#8a8a8a] mt-1">Clients, fournisseurs, membres, sponsors.</p>
         </div>
         {isAdmin && (
-          <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors">
+          <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors">
             <Plus size={15} /> Nouveau contact
           </button>
         )}
       </div>
 
       {error && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={16} /></button>
+          <button onClick={() => setError(null)} className="text-alert/70 hover:text-alert"><X size={16} /></button>
         </div>
       )}
 
@@ -242,13 +242,13 @@ export default function TiersList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher nom, email, téléphone…"
-            className="w-full bg-[#111] border border-[#222] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444]"
+            className="w-full bg-bg-card border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors placeholder-text-muted"
           />
         </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+          className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
         >
           <option value="">Tous les types</option>
           <option value="client">Client</option>
@@ -270,7 +270,7 @@ export default function TiersList() {
       </div>
 
       {isAdmin && showForm && (
-        <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
+        <div className="mb-6 bg-bg-card border border-border rounded-2xl p-6">
           <h2 className="text-base font-semibold text-white mb-5">{editing ? "Modifier le contact" : "Nouveau contact"}</h2>
           <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -304,8 +304,8 @@ export default function TiersList() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} rows={3} placeholder="Optionnel" />
             </div>
             <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
-              <button type="button" onClick={cancelForm} className="px-5 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
-              <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors">{saving ? "Enregistrement..." : "Enregistrer"}</button>
+              <button type="button" onClick={cancelForm} className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">Annuler</button>
+              <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors">{saving ? "Enregistrement..." : "Enregistrer"}</button>
             </div>
           </form>
         </div>
@@ -321,10 +321,10 @@ export default function TiersList() {
           onCta={isAdmin ? openCreate : undefined}
         />
       ) : (
-        <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+        <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+              <PageLoader fullScreen={false} />
             </div>
           ) : (
             <>
@@ -351,13 +351,13 @@ export default function TiersList() {
                           {TYPE_LABELS[c.type] || c.type}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-[#B0B0B0]">{c.email || <span className="text-[#444]">—</span>}</td>
-                      <td className="px-5 py-3.5 text-[#B0B0B0]">{c.phone || <span className="text-[#444]">—</span>}</td>
+                      <td className="px-5 py-3.5 text-text-secondary">{c.email || <span className="text-[#444]">—</span>}</td>
+                      <td className="px-5 py-3.5 text-text-secondary">{c.phone || <span className="text-[#444]">—</span>}</td>
                       <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         {!isAdmin ? null : confirmDelete === c.id ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="text-xs text-[#8a8a8a]">Supprimer ?</span>
-                            <button onClick={() => handleDelete(c.id)} className="text-xs font-medium text-[#FF5252] hover:text-red-400">Oui</button>
+                            <button onClick={() => handleDelete(c.id)} className="text-xs font-medium text-alert hover:text-red-400">Oui</button>
                             <button onClick={() => setConfirmDelete(null)} className="text-xs font-medium text-[#8a8a8a] hover:text-white">Non</button>
                           </span>
                         ) : (
@@ -365,7 +365,7 @@ export default function TiersList() {
                             <button onClick={() => openEdit(c)} className="p-1.5 text-[#8a8a8a] hover:text-white rounded-lg hover:bg-[#222] transition-colors" title="Modifier">
                               <Pencil size={14} strokeWidth={1.5} />
                             </button>
-                            <button onClick={() => setConfirmDelete(c.id)} className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
+                            <button onClick={() => setConfirmDelete(c.id)} className="p-1.5 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors" title="Supprimer">
                               <Trash2 size={14} strokeWidth={1.5} />
                             </button>
                           </span>
@@ -382,7 +382,7 @@ export default function TiersList() {
                   <button
                     onClick={loadMore}
                     disabled={loadingMore}
-                    className="px-4 py-2 text-sm font-medium text-[#F2C48D] border border-[#F2C48D]/30 rounded-full hover:bg-[#F2C48D]/10 disabled:opacity-50 transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-accent-sand border border-accent-sand/30 rounded-full hover:bg-accent-sand/10 disabled:opacity-50 transition-colors"
                   >
                     {loadingMore ? "Chargement…" : `Charger ${Math.min(PAGE_SIZE, total - contacts.length)} de plus`}
                   </button>
@@ -396,7 +396,7 @@ export default function TiersList() {
       {/* Panneau de détail */}
       {selected && (
         <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-md bg-[#0a0a0a] border-l border-[#222] h-full overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-[#0a0a0a] border-l border-border h-full overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h2 className="text-xl font-bold text-white">{selected.name}</h2>
@@ -409,25 +409,25 @@ export default function TiersList() {
 
             <div className="space-y-3 mb-6">
               {selected.email && (
-                <div className="flex items-center gap-2 text-sm text-[#B0B0B0]">
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
                   <Mail size={14} className="text-[#8a8a8a]" />
-                  <a href={`mailto:${selected.email}`} className="hover:text-[#F2C48D]">{selected.email}</a>
+                  <a href={`mailto:${selected.email}`} className="hover:text-accent-sand">{selected.email}</a>
                 </div>
               )}
               {selected.phone && (
-                <div className="flex items-center gap-2 text-sm text-[#B0B0B0]">
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
                   <Phone size={14} className="text-[#8a8a8a]" />
                   {selected.phone}
                 </div>
               )}
               {selected.address && (
-                <div className="flex items-start gap-2 text-sm text-[#B0B0B0]">
+                <div className="flex items-start gap-2 text-sm text-text-secondary">
                   <MapPin size={14} className="text-[#8a8a8a] mt-0.5" />
                   <span>{selected.address}</span>
                 </div>
               )}
               {selected.notes && (
-                <div className="mt-3 text-sm text-[#B0B0B0] bg-[#111] border border-[#222] rounded-xl p-3">{selected.notes}</div>
+                <div className="mt-3 text-sm text-text-secondary bg-bg-card border border-border rounded-xl p-3">{selected.notes}</div>
               )}
             </div>
 
@@ -440,7 +440,7 @@ export default function TiersList() {
               ) : (
                 <div className="space-y-2">
                   {txns.map((t) => (
-                    <div key={t.id} className="bg-[#111] border border-[#222] rounded-xl p-3 flex items-center justify-between">
+                    <div key={t.id} className="bg-bg-card border border-border rounded-xl p-3 flex items-center justify-between">
                       <div>
                         <div className="text-sm text-white">{t.label || "—"}</div>
                         <div className="text-xs text-[#8a8a8a]">{formatDate(t.date)}</div>
@@ -462,7 +462,7 @@ export default function TiersList() {
             {isAdmin && (
             <div className="border-t border-[#1a1a1a] pt-4">
               {!mergeMode ? (
-                <button onClick={openMergeMode} className="flex items-center gap-2 text-sm text-[#8a8a8a] hover:text-[#F2C48D] transition-colors">
+                <button onClick={openMergeMode} className="flex items-center gap-2 text-sm text-[#8a8a8a] hover:text-accent-sand transition-colors">
                   <GitMerge size={14} /> Fusionner avec un autre contact…
                 </button>
               ) : mergeTarget ? (
@@ -477,7 +477,7 @@ export default function TiersList() {
                     <button onClick={handleMerge} disabled={merging} className="flex-1 px-4 py-2 text-sm font-semibold text-black bg-amber-400 rounded-full hover:bg-amber-300 disabled:opacity-50 transition-colors">
                       {merging ? "Fusion..." : "Confirmer la fusion"}
                     </button>
-                    <button onClick={() => setMergeTarget(null)} className="px-4 py-2 text-sm text-[#8a8a8a] border border-[#333] rounded-full hover:text-white transition-colors">
+                    <button onClick={() => setMergeTarget(null)} className="px-4 py-2 text-sm text-[#8a8a8a] border border-border-hover rounded-full hover:text-white transition-colors">
                       Changer
                     </button>
                   </div>
@@ -493,7 +493,7 @@ export default function TiersList() {
                       onChange={(e) => setMergeSearch(e.target.value)}
                       placeholder="Rechercher le contact cible…"
                       autoFocus
-                      className="w-full bg-[#111] border border-[#333] rounded-xl pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-[#F2C48D] placeholder-[#444]"
+                      className="w-full bg-bg-card border border-border-hover rounded-xl pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-accent-sand placeholder-text-muted"
                     />
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-1">
@@ -522,7 +522,7 @@ export default function TiersList() {
 
             {isAdmin && (
             <div className="mt-6 flex gap-3">
-              <button onClick={() => openEdit(selected)} className="flex-1 px-4 py-2 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
+              <button onClick={() => openEdit(selected)} className="flex-1 px-4 py-2 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] transition-colors">
                 Modifier
               </button>
             </div>

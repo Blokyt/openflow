@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend.core.auth import require_admin
-from backend.core.database import get_conn, row_to_dict
+from backend.core.database import backup_database, get_conn, row_to_dict
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -76,24 +76,6 @@ def _restore_table(conn, table_name: str, rows: list[dict], existing: set[str]):
         values = [row.get(c) for c in columns]
         conn.execute(f'INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})', values)
 
-
-def _snapshot_db(src_path: str, dest_path: str) -> None:
-    """Copie cohérente d'une base SQLite via l'API backup native.
-
-    Contrairement à une copie brute du fichier (shutil.copy2), l'API backup
-    intègre les pages encore dans le journal WAL : le résultat est cohérent
-    même à chaud (serveur en cours d'exécution, connexions concurrentes).
-    Sert aussi au rollback : la destination est écrasée proprement, sans
-    laisser de sidecars -wal/-shm en décalage."""
-    src = sqlite3.connect(src_path)
-    try:
-        dest = sqlite3.connect(dest_path)
-        try:
-            src.backup(dest)
-        finally:
-            dest.close()
-    finally:
-        src.close()
 
 
 @router.get("/export")
@@ -210,7 +192,7 @@ async def import_backup(file: UploadFile = File(...)):
     backup_path = db_path + f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     if os.path.exists(db_path):
         # Snapshot cohérent sous WAL (les pages du -wal sont incluses).
-        _snapshot_db(db_path, backup_path)
+        backup_database(db_path, backup_path)
 
     # Restore config.yaml if present
     if "config.yaml" in zf.namelist():
@@ -233,7 +215,7 @@ async def import_backup(file: UploadFile = File(...)):
         # Rollback : restaure le snapshot dans la vraie base via l'API backup
         # (pas de copie brute qui laisserait des sidecars -wal/-shm en décalage).
         if os.path.exists(backup_path):
-            _snapshot_db(backup_path, db_path)
+            backup_database(backup_path, db_path)
         raise HTTPException(status_code=500, detail=f"Erreur lors de la restauration : {str(e)}")
     finally:
         conn.close()

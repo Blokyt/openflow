@@ -4,6 +4,8 @@ import { api } from "../../api";
 import { useFiscalYear } from "../../core/FiscalYearContext";
 import { formatEuros } from "../../utils/format";
 import EmptyState from "../../core/EmptyState";
+import { inputClass, labelClass } from "../../core/formStyles";
+import PageLoader from "../../core/PageLoader";
 
 type Campaign = {
   id: number;
@@ -35,12 +37,8 @@ const TYPE_LABELS: Record<string, string> = {
 };
 const typeLabel = (t: string) => TYPE_LABELS[t] || t || "—";
 
-const inputClass =
-  "w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#444] [color-scheme:dark]";
-const labelClass = "block text-sm font-medium text-[#B0B0B0] mb-1.5";
-
 const TypeBadge = ({ t }: { t: string }) => (
-  <span className="inline-flex px-2 py-0.5 rounded-full text-xs bg-[#1a1a1a] text-[#B0B0B0] border border-[#2a2a2a]">{typeLabel(t)}</span>
+  <span className="inline-flex px-2 py-0.5 rounded-full text-xs bg-[#1a1a1a] text-text-secondary border border-[#2a2a2a]">{typeLabel(t)}</span>
 );
 
 export default function HelloAssoPage() {
@@ -93,7 +91,7 @@ export default function HelloAssoPage() {
       <div className="p-8">
         <h1 className="text-3xl font-bold text-white" style={{ letterSpacing: "-0.02em" }}>HelloAsso</h1>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+          <PageLoader fullScreen={false} />
         </div>
       </div>
     );
@@ -135,7 +133,7 @@ export default function HelloAssoPage() {
         <button
           onClick={refresh}
           disabled={syncing}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-50 transition-colors whitespace-nowrap"
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors whitespace-nowrap"
         >
           <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
           {syncing ? "Synchronisation…" : "Rafraîchir"}
@@ -143,24 +141,24 @@ export default function HelloAssoPage() {
       </div>
 
       {error && (
-        <div className="mb-6 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-start justify-between gap-3">
+        <div className="mb-6 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-start justify-between gap-3">
           <span className="flex items-center gap-2"><AlertCircle size={16} /> {error}</span>
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]"><X size={16} /></button>
+          <button onClick={() => setError(null)} className="text-alert/70 hover:text-alert"><X size={16} /></button>
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Reste à associer</div>
-          <div className={`text-2xl font-bold ${totalPending > 0 ? "text-[#FF8A5B]" : "text-[#00C853]"}`}>{formatEuros(totalPending)}</div>
+          <div className={`text-2xl font-bold ${totalPending > 0 ? "text-[#FF8A5B]" : "text-success"}`}>{formatEuros(totalPending)}</div>
         </div>
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Campagnes à traiter</div>
           <div className="text-2xl font-bold text-white">{toTreat.length}</div>
         </div>
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
+        <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Collecté (exercice)</div>
-          <div className="text-2xl font-bold text-[#F2C48D]">{formatEuros(totalCollected)}</div>
+          <div className="text-2xl font-bold text-accent-sand">{formatEuros(totalCollected)}</div>
         </div>
       </div>
 
@@ -175,7 +173,7 @@ export default function HelloAssoPage() {
       ) : (
         <>
           {toTreat.length > 0 ? (
-            <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+            <div className="bg-bg-card border border-border rounded-2xl overflow-hidden">
               <div className="px-5 py-3 border-b border-[#1a1a1a] text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">À prendre en compte</div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -194,13 +192,13 @@ export default function HelloAssoPage() {
                       <tr key={c.id} className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
                         <td className="px-5 py-3.5 font-medium text-white">{c.title || c.form_slug}</td>
                         <td className="px-5 py-3.5"><TypeBadge t={c.form_type} /></td>
-                        <td className="px-5 py-3.5 text-right text-[#B0B0B0] whitespace-nowrap">{formatEuros(c.collected_cents)}</td>
+                        <td className="px-5 py-3.5 text-right text-text-secondary whitespace-nowrap">{formatEuros(c.collected_cents)}</td>
                         <td className="px-5 py-3.5 text-right text-[#777] whitespace-nowrap">{formatEuros(c.linked_cents)}</td>
                         <td className="px-5 py-3.5 text-right font-semibold text-[#FF8A5B] whitespace-nowrap">{formatEuros(c.pending_cents)}</td>
                         <td className="px-5 py-3.5 text-right">
                           <button
                             onClick={() => setLinking(c)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-black bg-accent-sand hover:bg-accent-sand transition-colors"
                           >
                             <Link2 size={13} /> Associer
                           </button>
@@ -212,8 +210,8 @@ export default function HelloAssoPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-[#111] border border-[#222] rounded-2xl p-8 text-center">
-              <CheckCircle2 size={28} className="mx-auto text-[#00C853] mb-3" />
+            <div className="bg-bg-card border border-border rounded-2xl p-8 text-center">
+              <CheckCircle2 size={28} className="mx-auto text-success mb-3" />
               <p className="text-white font-semibold">Tout est à jour</p>
               <p className="text-sm text-[#8a8a8a] mt-1">Chaque campagne est entièrement couverte par des transactions. Clique sur Rafraîchir pour vérifier les nouveaux encaissements.</p>
             </div>
@@ -223,18 +221,18 @@ export default function HelloAssoPage() {
             <div className="mt-4">
               <button
                 onClick={() => setShowDone((v) => !v)}
-                className="text-sm text-[#8a8a8a] hover:text-[#B0B0B0] transition-colors"
+                className="text-sm text-[#8a8a8a] hover:text-text-secondary transition-colors"
               >
                 {showDone ? "Masquer" : "Voir"} les {done.length} campagne{done.length > 1 ? "s" : ""} déjà à jour
               </button>
               {showDone && (
-                <div className="mt-3 bg-[#111] border border-[#222] rounded-2xl overflow-hidden">
+                <div className="mt-3 bg-bg-card border border-border rounded-2xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <tbody>
                         {done.map((c, idx) => (
                           <tr key={c.id} className={`${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}>
-                            <td className="px-5 py-3 font-medium text-[#B0B0B0]">{c.title || c.form_slug}</td>
+                            <td className="px-5 py-3 font-medium text-text-secondary">{c.title || c.form_slug}</td>
                             <td className="px-5 py-3"><TypeBadge t={c.form_type} /></td>
                             <td className="px-5 py-3 text-right text-[#777] whitespace-nowrap">{formatEuros(c.collected_cents)}</td>
                             <td className="px-5 py-3">
@@ -344,10 +342,10 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-[#111] border border-[#222] rounded-2xl"
+        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-bg-card border border-border rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-[#111] border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+        <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-white">{campaign.title || campaign.form_slug}</h2>
             <p className="text-xs text-[#8a8a8a] mt-0.5">{typeLabel(campaign.form_type)} · associe les recettes correspondantes</p>
@@ -358,7 +356,7 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
         <div className="px-6 py-4 grid grid-cols-3 gap-3">
           <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
             <div className="text-[10px] font-medium text-[#8a8a8a] uppercase tracking-wider">Collecté</div>
-            <div className="text-base font-bold text-[#F2C48D]">{formatEuros(collected)}</div>
+            <div className="text-base font-bold text-accent-sand">{formatEuros(collected)}</div>
           </div>
           <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
             <div className="text-[10px] font-medium text-[#8a8a8a] uppercase tracking-wider">Associé</div>
@@ -366,17 +364,17 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
           </div>
           <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3">
             <div className="text-[10px] font-medium text-[#8a8a8a] uppercase tracking-wider">Reste</div>
-            <div className={`text-base font-bold ${pending > 0 ? "text-[#FF8A5B]" : "text-[#00C853]"}`}>{formatEuros(pending)}</div>
+            <div className={`text-base font-bold ${pending > 0 ? "text-[#FF8A5B]" : "text-success"}`}>{formatEuros(pending)}</div>
           </div>
         </div>
 
         {error && (
-          <div className="mx-6 mb-3 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{error}</div>
+          <div className="mx-6 mb-3 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{error}</div>
         )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#F2C48D]" />
+            <PageLoader fullScreen={false} />
           </div>
         ) : (
           <>
@@ -393,11 +391,11 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
                         <div className="text-xs text-[#8a8a8a] truncate">{txMeta(tx)}</div>
                       </div>
                       <div className="flex items-center gap-3 whitespace-nowrap">
-                        <span className="text-sm font-semibold text-[#00C853]">{formatEuros(tx.amount)}</span>
+                        <span className="text-sm font-semibold text-success">{formatEuros(tx.amount)}</span>
                         <button
                           onClick={() => dissociate(tx)}
                           disabled={busy === tx.transaction_id}
-                          className="text-[#8a8a8a] hover:text-[#FF5252] disabled:opacity-40"
+                          className="text-[#8a8a8a] hover:text-alert disabled:opacity-40"
                           title="Dissocier"
                         >
                           <Trash2 size={15} />
@@ -426,11 +424,11 @@ function LinkPanel({ campaign, onClose, onChanged }: { campaign: Campaign; onClo
                         <div className="text-xs text-[#8a8a8a] truncate">{txMeta(tx)}</div>
                       </div>
                       <div className="flex items-center gap-3 whitespace-nowrap">
-                        <span className="text-sm font-semibold text-[#B0B0B0]">{formatEuros(tx.amount)}</span>
+                        <span className="text-sm font-semibold text-text-secondary">{formatEuros(tx.amount)}</span>
                         <button
                           onClick={() => associate(tx)}
                           disabled={busy === tx.transaction_id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] disabled:opacity-40"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-black bg-accent-sand hover:bg-accent-sand disabled:opacity-40"
                         >
                           <Plus size={12} /> Associer
                         </button>
@@ -467,9 +465,9 @@ function ConfigForm({ onSaved }: { onSaved: () => void }) {
   };
 
   return (
-    <div className="max-w-lg bg-[#111] border border-[#222] rounded-2xl p-6">
+    <div className="max-w-lg bg-bg-card border border-border rounded-2xl p-6">
       <div className="flex items-center gap-3 mb-5">
-        <div className="h-10 w-10 rounded-xl bg-[#F2C48D]/10 border border-[#F2C48D]/20 flex items-center justify-center text-[#F2C48D]">
+        <div className="h-10 w-10 rounded-xl bg-accent-sand/10 border border-accent-sand/20 flex items-center justify-center text-accent-sand">
           <KeyRound size={18} />
         </div>
         <div>
@@ -477,7 +475,7 @@ function ConfigForm({ onSaved }: { onSaved: () => void }) {
           <p className="text-xs text-[#8a8a8a]">Espace admin de ton organisation, rubrique API / Intégrations.</p>
         </div>
       </div>
-      {error && <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-xl p-3 text-sm">{error}</div>}
+      {error && <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{error}</div>}
       <div className="space-y-4">
         <div>
           <label className={labelClass}>Identifiant (client_id)</label>
@@ -495,7 +493,7 @@ function ConfigForm({ onSaved }: { onSaved: () => void }) {
           <button
             onClick={save}
             disabled={saving || !clientId || !clientSecret || !slug}
-            className="px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] disabled:opacity-40 transition-colors"
+            className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 transition-colors"
           >
             {saving ? "Connexion…" : "Connecter"}
           </button>

@@ -29,7 +29,7 @@ export default function CategoriesTab({ year }: Props) {
 
   if (!year) return <p className="text-sm text-[#8a8a8a]">Crée un exercice pour voir le suivi.</p>;
   if (loading) return <p className="text-sm text-[#8a8a8a]">Chargement…</p>;
-  if (error) return <p className="text-sm text-[#FF5252]">{error}</p>;
+  if (error) return <p className="text-sm text-alert">{error}</p>;
   if (!data) return null;
 
   const hasNMinus1 = data.categories.some((c: any) => c.realized_n_minus_1 !== 0);
@@ -38,10 +38,10 @@ export default function CategoriesTab({ year }: Props) {
     <div>
       {selectedEntity && (
         <p className="mb-3 text-xs text-[#8a8a8a]">
-          Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités.
+          Filtré pour <span className="text-accent-sand font-medium">{selectedEntity.name}</span> et sous-entités.
         </p>
       )}
-    <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
+    <div className="bg-bg-card border border-border rounded-2xl overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#1a1a1a] text-[#8a8a8a]">
@@ -60,17 +60,34 @@ export default function CategoriesTab({ year }: Props) {
             return (
               <tr key={c.category_id ?? "uncategorized"} className={idx > 0 ? "border-t border-[#1a1a1a]" : ""}>
                 <td className="px-4 py-3 text-white font-medium">{c.category_name}</td>
-                <td className="px-4 py-3 text-right text-[#B0B0B0]">
+                <td className="px-4 py-3 text-right text-text-secondary">
                   {c.allocated > 0 ? formatEuros(c.allocated) : "—"}
                 </td>
-                <td className={`px-4 py-3 text-right font-semibold ${c.realized >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>
+                <td className={`px-4 py-3 text-right font-semibold ${c.allocated > 0 && c.realized > c.allocated ? "text-alert" : "text-white"}`}>
                   {formatEuros(c.realized)}
                 </td>
-                <td className="px-4 py-3 text-right" style={{ color: budgetColor(pct) }}>
-                  {c.allocated > 0 ? `${pct.toFixed(1)} %` : "—"}
+                <td className="px-4 py-3">
+                  {c.allocated > 0 ? (
+                    <div className="flex items-center gap-3 justify-end">
+                      <span className="font-medium" style={{ color: budgetColor(pct) }}>
+                        {pct.toFixed(1)} %
+                      </span>
+                      <div className="w-24 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(pct, 100)}%`,
+                            backgroundColor: budgetColor(pct),
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[#8a8a8a] block text-right">—</span>
+                  )}
                 </td>
                 {hasNMinus1 && (
-                  <td className="px-4 py-3 text-right text-[#B0B0B0]">
+                  <td className="px-4 py-3 text-right text-text-secondary">
                     {c.realized_n_minus_1 !== 0 ? formatEuros(c.realized_n_minus_1) : "—"}
                   </td>
                 )}
@@ -79,7 +96,7 @@ export default function CategoriesTab({ year }: Props) {
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-[#222] bg-[#0a0a0a]">
+          <tr className="border-t-2 border-border bg-[#0a0a0a]">
             <td className="px-4 py-3 text-white font-semibold">Total</td>
             <td className="px-4 py-3 text-right text-white font-semibold">
               {data.totals.allocated > 0 ? formatEuros(data.totals.allocated) : "—"}
