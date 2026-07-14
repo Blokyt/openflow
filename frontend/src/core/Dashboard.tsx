@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
+import PageLoader from "./PageLoader";
 import { api } from "../api";
 import { DashboardSummary } from "../types";
 import { TrendingUp, TrendingDown, Hash, ArrowRight } from "lucide-react";
@@ -8,13 +9,14 @@ import { useFiscalYear } from "./FiscalYearContext";
 import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
 import OnboardingChecklist from "./OnboardingChecklist";
 import BudgetOverview from "../modules/budget/widgets/BudgetOverview";
-import { formatEuros, formatDate, txTone, COLOR_EXPENSE, COLOR_INCOME } from "../utils/format";
+import { findGroupNode } from "../modules/budget/utils";
+import { formatEuros, formatDate, txTone, COLOR_EXPENSE, COLOR_INCOME, budgetColor } from "../utils/format";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
 interface TimePoint { month: string; balance: number; }
-interface TopCat { name: string; color: string; total: number; }
+
 interface RecentTx {
   id: number; date: string; label: string; amount: number;
   from_entity_name?: string; to_entity_name?: string;
@@ -28,9 +30,9 @@ function SummaryCard({
   label: string; value: string; icon: React.ElementType; valueColor: string;
 }) {
   return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl p-6 flex items-center gap-4">
-      <div className="p-3 rounded-xl bg-[#1a1a1a] border border-[#222]">
-        <Icon size={20} strokeWidth={1.5} className="text-[#B0B0B0]" />
+    <div className="bg-bg-card border border-border rounded-2xl p-6 flex items-center gap-4">
+      <div className="p-3 rounded-xl bg-[#1a1a1a] border border-border">
+        <Icon size={20} strokeWidth={1.5} className="text-text-secondary" />
       </div>
       <div>
         <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-1">{label}</p>
@@ -75,10 +77,13 @@ function BalanceTooltip({ active, payload, label }: {
   );
 }
 
-function BalanceChart({ series }: { series: TimePoint[] }) {
+// memo : le Dashboard re-rend à chaque résolution de fetch (summary, budget…) ;
+// sans memo, chaque re-rendu redémarre l'animation recharts de l'aire qui peut
+// rester figée à son premier frame. La série ne change d'identité qu'au (re)chargement.
+const BalanceChart = memo(function BalanceChart({ series }: { series: TimePoint[] }) {
   if (series.length < 2) {
     return (
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
+      <div className="bg-bg-card border border-border rounded-2xl p-6">
         <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-3">Évolution du solde</p>
         <p className="text-sm text-[#8a8a8a]">Pas assez de données pour afficher un graphique.</p>
       </div>
@@ -105,7 +110,7 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
   const xInterval = Math.max(0, Math.ceil(series.length / 6) - 1);
 
   return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
+    <div className="bg-bg-card border border-border rounded-2xl p-6">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Évolution du solde</p>
         <p className="text-xs text-[#8a8a8a]">{series.length} mois</p>
@@ -146,50 +151,137 @@ function BalanceChart({ series }: { series: TimePoint[] }) {
             fill={`url(#${gradientId})`}
             dot={false}
             activeDot={{ r: 4, fill: accentColor, strokeWidth: 0 }}
+            // Rendu immédiat : l'animation dépend de requestAnimationFrame, que le
+            // navigateur limite en arrière-plan — la courbe restait figée à vide.
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
     </div>
   );
+});
+
+function BudgetGauge({
+  label, realized, allocated, income,
+}: { label: string; realized: number; allocated: number; income?: boolean }) {
+  const pct = allocated > 0 ? (realized / allocated) * 100 : realized > 0 ? 100 : 0;
+  const over = !income && realized > allocated;
+  // Dépenses : vert -> doré -> rouge selon la consommation. Recettes : toujours
+  // vert, un budget de recettes atteint est une bonne nouvelle.
+  const barColor = income ? COLOR_INCOME : budgetColor(pct);
+  const remaining = allocated - realized;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs mb-1.5">
+        <span className="text-text-secondary">{label}</span>
+        <span className="font-medium text-white">
+          {formatEuros(realized)} <span className="text-[#8a8a8a] font-normal">/ {formatEuros(allocated)}</span>
+        </span>
+      </div>
+      <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden mb-1">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }}
+        />
+      </div>
+      <p className={`text-xs ${over ? "text-alert" : "text-[#8a8a8a]"}`}>
+        {over
+          ? `Dépassement de ${formatEuros(realized - allocated)}`
+          : income
+            ? `Reste à percevoir ${formatEuros(Math.max(remaining, 0))}`
+            : `Reste ${formatEuros(remaining)}`}
+        {" · "}{Math.round(pct)} %
+      </p>
+    </div>
+  );
 }
 
-function TopCategories({ cats }: { cats: TopCat[] }) {
-  if (cats.length === 0) return null;
-  const max = Math.max(...cats.map((c) => c.total));
-  return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
-      <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-4">Top dépenses par catégorie</p>
-      <div className="space-y-3">
-        {cats.map((c) => (
-          <div key={c.name}>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-[#B0B0B0]">{c.name}</span>
-              <span className="text-white font-medium">{formatEuros(c.total)}</span>
-            </div>
-            <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${(c.total / max) * 100}%`, backgroundColor: c.color }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+function GlobalBudgetSummary({ view, loading, error }: { view: any | null; loading: boolean; error: string | null }) {
+  const { selectedYear } = useFiscalYear();
+  const { selectedEntityId, selectedEntity } = useEntity();
+
+  const title = selectedEntity ? `Synthèse Budgétaire · ${selectedEntity.name}` : "Synthèse Budgétaire Globale";
+  const shell = (body: React.ReactNode) => (
+    <div className="bg-bg-card border border-border rounded-2xl p-6 h-full flex flex-col">
+      <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-4 truncate">{title}</p>
+      {body}
     </div>
+  );
+
+  if (!selectedYear) {
+    return shell(<p className="text-sm text-[#8a8a8a]">Sélectionnez un exercice budgétaire.</p>);
+  }
+  if (error) return shell(<p className="text-sm text-alert">{error}</p>);
+  if (loading || !view) {
+    return shell(
+      <>
+        <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden mb-3 animate-pulse" />
+        <p className="text-sm text-[#8a8a8a]">Chargement…</p>
+      </>,
+    );
+  }
+
+  // Même périmètre que le widget État des budgets et que la page Budget :
+  // l'entité sélectionnée et ses sous-entités (totaux consolidés).
+  const node = selectedEntityId ? findGroupNode(view.groups ?? [], selectedEntityId) : null;
+  const t = node ?? view.totals ?? {};
+  const allocExp = t.allocated_expense || 0;
+  const realExp = t.realized_expense || 0;
+  const allocInc = t.allocated_income || 0;
+  const realInc = t.realized_income || 0;
+  const realizedNet = realInc - realExp;
+  const plannedNet = allocInc - allocExp;
+
+  if (allocExp === 0 && allocInc === 0 && realExp === 0 && realInc === 0) {
+    return shell(
+      <p className="text-sm text-[#8a8a8a]">
+        Aucun budget alloué ni de flux sur ce périmètre.{" "}
+        <Link to="/budget" className="text-accent-sand hover:underline">Budgéter</Link>
+      </p>,
+    );
+  }
+
+  return shell(
+    <div className="flex flex-col gap-4">
+      <BudgetGauge label="Dépenses" realized={realExp} allocated={allocExp} />
+      <BudgetGauge label="Recettes" realized={realInc} allocated={allocInc} income />
+      <div className="border-t border-[#1a1a1a] pt-3 space-y-1.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-text-secondary">Solde réalisé</span>
+          <span className={`font-semibold ${realizedNet >= 0 ? "text-success" : "text-alert"}`}>
+            {formatEuros(realizedNet)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-[#8a8a8a]">Résultat prévu au budget</span>
+          <span className="text-[#8a8a8a]">{formatEuros(plannedNet)}</span>
+        </div>
+      </div>
+    </div>,
   );
 }
 
 function RecentTransactions({ txs }: { txs: RecentTx[] }) {
   return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl p-6">
+    <div className="bg-bg-card border border-border rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4">
         <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Dernières transactions</p>
-        <Link to="/transactions" className="text-xs text-[#F2C48D] hover:underline inline-flex items-center gap-0.5">
+        <Link to="/transactions" className="text-xs text-accent-sand hover:underline inline-flex items-center gap-0.5">
           Voir tout <ArrowRight size={11} />
         </Link>
       </div>
       {txs.length === 0 ? (
-        <p className="text-sm text-[#8a8a8a]">Aucune transaction.</p>
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+          <div className="w-12 h-12 bg-[#1a1a1a] rounded-full flex items-center justify-center mb-3">
+            <Hash size={20} className="text-[#8a8a8a]" />
+          </div>
+          <p className="text-sm font-medium text-white mb-1">Aucune transaction</p>
+          <p className="text-xs text-[#8a8a8a] mb-4">Commencez par ajouter une nouvelle transaction.</p>
+          <Link to="/transactions" className="px-4 py-2 text-xs font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors">
+            Créer une transaction
+          </Link>
+        </div>
       ) : (
         <div className="space-y-2">
           {txs.map((t) => (
@@ -219,12 +311,28 @@ function RecentTransactions({ txs }: { txs: RecentTx[] }) {
 export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [series, setSeries] = useState<TimePoint[]>([]);
-  const [cats, setCats] = useState<TopCat[]>([]);
   const [recent, setRecent] = useState<RecentTx[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [budgetView, setBudgetView] = useState<any | null>(null);
+  const [budgetLoading, setBudgetLoading] = useState(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
   const { selectedEntityId, selectedEntity } = useEntity();
   const { selectedYear } = useFiscalYear();
+
+  // Vue budgétaire composite, récupérée une seule fois et partagée par les
+  // widgets État des budgets et Synthèse budgétaire (scoping côté client).
+  useEffect(() => {
+    if (!selectedYear) { setBudgetView(null); return; }
+    let cancelled = false;
+    setBudgetLoading(true);
+    setBudgetError(null);
+    api.getBudgetView(selectedYear.id)
+      .then((d) => { if (!cancelled) setBudgetView(d); })
+      .catch((e: any) => { if (!cancelled) setBudgetError(e?.message || "Erreur lors du chargement du budget."); })
+      .finally(() => { if (!cancelled) setBudgetLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedYear?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,16 +345,14 @@ export default function Dashboard() {
       api.getSummary(eid, dateFrom, dateTo),
       // Le graphe suit la même fenêtre que le reste : l'exercice sélectionné.
       api.getTimeseries(eid, 12, dateFrom, dateTo),
-      api.getTopCategories(eid, 5, dateFrom, dateTo),
       api.getRecentTransactions(eid, 5, dateFrom, dateTo),
     ])
-      .then(([s, ts, tc, rt]) => {
+      .then(([s, ts, rt]) => {
         // Garde anti-course : si l'entité/exercice a changé pendant le
         // chargement, cet effet est déjà obsolète, on ignore sa réponse.
         if (cancelled) return;
         setSummary(s);
         setSeries(ts);
-        setCats(tc);
         setRecent(rt);
       })
       .catch((e) => {
@@ -259,17 +365,13 @@ export default function Dashboard() {
   }, [selectedEntityId, selectedYear?.id, selectedYear?.start_date, selectedYear?.end_date]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F2C48D]" />
-      </div>
-    );
+    return <PageLoader fullScreen={false} />;
   }
 
   if (error) {
     return (
       <div className="p-8">
-        <div className="bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4">{error}</div>
+        <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4">{error}</div>
       </div>
     );
   }
@@ -281,50 +383,67 @@ export default function Dashboard() {
     <div className="p-8 space-y-6">
       {summary.transaction_count === 0 && <OnboardingChecklist />}
       <ModuleDiscoveryHint />
-      <div>
-        <p className="text-sm font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Solde actuel</p>
-        <div className="relative inline-block">
-          {/* Halo dans l'accent doré de la marque (l'ancien bleu était un vestige). */}
-          <div className="absolute -inset-4 bg-[rgba(242,196,141,0.07)] rounded-3xl blur-xl pointer-events-none" />
-          <h1
-            className={`relative text-5xl font-bold tracking-tight ${balancePositive ? "text-white" : "text-[#FF5252]"}`}
-            style={{ letterSpacing: "-0.02em" }}
-          >
-            {formatEuros(summary.balance)}
-          </h1>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Solde actuel</p>
+          <div className="relative inline-block">
+            {/* Halo dans l'accent doré de la marque (l'ancien bleu était un vestige). */}
+            <div className="absolute -inset-4 bg-[rgba(242,196,141,0.07)] rounded-3xl blur-xl pointer-events-none" />
+            <h1
+              className={`relative text-5xl font-bold tracking-tight ${balancePositive ? "text-white" : "text-alert"}`}
+              style={{ letterSpacing: "-0.02em" }}
+            >
+              {formatEuros(summary.balance)}
+            </h1>
+          </div>
+          {selectedEntity && (
+            <p className="mt-3 text-sm text-[#8a8a8a]">
+              Périmètre : <span className="text-accent-sand font-medium">{selectedEntity.name}</span>
+              {selectedEntity.children && selectedEntity.children.length > 0 && " et sous-entités"}
+              {" "}(solde consolidé)
+            </p>
+          )}
+          {summary.reference_date && summary.reference_amount !== undefined && (
+            <p className="mt-3 text-sm text-[#8a8a8a]">
+              Référence au{" "}
+              <span className="text-text-secondary font-medium">{formatDate(summary.reference_date)}</span>{" "}:{" "}
+              <span className="text-text-secondary font-medium">{formatEuros(summary.reference_amount)}</span>
+            </p>
+          )}
         </div>
-        {selectedEntity && (
-          <p className="mt-3 text-sm text-[#8a8a8a]">
-            Périmètre : <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span>
-            {selectedEntity.children && selectedEntity.children.length > 0 && " et sous-entités"}
-            {" "}(solde consolidé)
-          </p>
-        )}
-        {summary.reference_date && summary.reference_amount !== undefined && (
-          <p className="mt-3 text-sm text-[#8a8a8a]">
-            Référence au{" "}
-            <span className="text-[#B0B0B0] font-medium">{formatDate(summary.reference_date)}</span>{" "}:{" "}
-            <span className="text-[#B0B0B0] font-medium">{formatEuros(summary.reference_amount)}</span>
-          </p>
-        )}
+        
+        <div className="flex items-center gap-3 pb-1">
+          <Link
+            to="/transactions"
+            className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors"
+          >
+            Transactions
+          </Link>
+          <Link
+            to="/budget"
+            className="px-5 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:bg-[#1a1a1a] transition-colors"
+          >
+            Budget
+          </Link>
+        </div>
       </div>
 
       {selectedYear && (
         <p className="-mb-2 text-xs text-[#8a8a8a]">
-          Activité de l'exercice <span className="text-[#F2C48D] font-medium">{selectedYear.name}</span>
+          Activité de l'exercice <span className="text-accent-sand font-medium">{selectedYear.name}</span>
         </p>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <SummaryCard label="Recettes" value={formatEuros(summary.total_income)} icon={TrendingUp} valueColor="text-[#00C853]" />
-        <SummaryCard label="Dépenses" value={formatEuros(summary.total_expenses)} icon={TrendingDown} valueColor="text-[#FF5252]" />
+        <SummaryCard label="Recettes" value={formatEuros(summary.total_income)} icon={TrendingUp} valueColor="text-success" />
+        <SummaryCard label="Dépenses" value={formatEuros(summary.total_expenses)} icon={TrendingDown} valueColor="text-alert" />
         <SummaryCard label="Transactions" value={String(summary.transaction_count)} icon={Hash} valueColor="text-white" />
       </div>
 
       <BalanceChart series={series} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <BudgetOverview />
-        <TopCategories cats={cats} />
+        <BudgetOverview view={budgetView} loading={budgetLoading} error={budgetError} />
+        <GlobalBudgetSummary view={budgetView} loading={budgetLoading} error={budgetError} />
         <RecentTransactions txs={recent} />
       </div>
     </div>

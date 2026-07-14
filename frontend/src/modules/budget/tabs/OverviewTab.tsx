@@ -7,21 +7,12 @@ import { Category } from "../../../types";
 import { formatEuros, eurosToCents, centsToEuros, COLOR_EXPENSE, COLOR_INCOME, COLOR_BUDGET_SEEDED, COLOR_BUDGET_MODIFIED } from "../../../utils/format";
 import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { notifyBadgesChanged } from "../../../utils/events";
+import { findGroupNode } from "../utils";
 
 interface Props { year: FiscalYear | null }
 
 const EXPENSE = COLOR_EXPENSE;
 const INCOME = COLOR_INCOME;
-
-/** Cherche le nœud d'entité `id` dans l'arbre budgétaire. */
-function findGroupNode(nodes: any[], id: number): any | null {
-  for (const n of nodes) {
-    if (n.entity_id === id) return n;
-    const found = findGroupNode(n.children ?? [], id);
-    if (found) return found;
-  }
-  return null;
-}
 
 export default function OverviewTab({ year }: Props) {
   const { isAdmin } = useAuth();
@@ -74,7 +65,7 @@ export default function OverviewTab({ year }: Props) {
 
   if (!year) return <p className="text-sm text-[#8a8a8a]">Crée un exercice pour voir le suivi.</p>;
   if (loading && !data) return <p className="text-sm text-[#8a8a8a]">Chargement…</p>;
-  if (error && !data) return <p className="text-sm text-[#FF5252]">Impossible de charger le budget : {error}</p>;
+  if (error && !data) return <p className="text-sm text-alert">Impossible de charger le budget : {error}</p>;
   if (!data) return null;
 
   // Périmètre : le focus entité global limite la vue à son sous-arbre, avec des
@@ -142,7 +133,7 @@ export default function OverviewTab({ year }: Props) {
     const net1 = cat.realized_income_n1 - cat.realized_expense_n1;
     rows.push(
       <tr key={`c-${key}`} className="border-t border-[#141414] bg-[#0c0c0c] text-[13px]">
-        <td className="px-3 py-2 text-[#B0B0B0]" style={{ paddingLeft: 12 + depth * 18 + 18 }}>
+        <td className="px-3 py-2 text-text-secondary" style={{ paddingLeft: 12 + depth * 18 + 18 }}>
           <div className="flex items-center gap-1.5">
             {hasKids ? (
               <button onClick={() => toggleCat(key)} className="text-[#8a8a8a] hover:text-white">
@@ -230,7 +221,7 @@ export default function OverviewTab({ year }: Props) {
               ) : (
                 <button
                   onClick={() => setAddingEntityId(node.entity_id)}
-                  className="inline-flex items-center gap-1 text-xs text-[#8a8a8a] hover:text-[#F2C48D]"
+                  className="inline-flex items-center gap-1 text-xs text-[#8a8a8a] hover:text-accent-sand"
                 >
                   <Plus size={13} /> Ajouter une catégorie à budgéter
                 </button>
@@ -261,7 +252,7 @@ export default function OverviewTab({ year }: Props) {
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-[#8a8a8a]">
           {scopedNode && selectedEntity ? (
-            <>Filtré pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités (totaux recalculés). </>
+            <>Filtré pour <span className="text-accent-sand font-medium">{selectedEntity.name}</span> et sous-entités (totaux recalculés). </>
           ) : selectedEntityId && !scopedNode ? (
             <>Entité sélectionnée absente du budget : vue complète affichée. </>
           ) : null}
@@ -274,14 +265,14 @@ export default function OverviewTab({ year }: Props) {
                 onClick={seed}
                 disabled={seeding}
                 title="Pré-remplit les budgets vides à partir des transactions réelles de l'exercice précédent"
-                className="text-xs font-semibold text-black bg-[#F2C48D] hover:bg-[#e8b87a] rounded-full px-3 py-1 disabled:opacity-50"
+                className="text-xs font-semibold text-black bg-accent-sand hover:bg-accent-sand rounded-full px-3 py-1 disabled:opacity-50"
               >
                 {seeding ? "Récupération…" : "Récupérer le réel de l'an dernier"}
               </button>
             )}
             <button
               onClick={() => setShowN1((v) => !v)}
-              className="text-xs text-[#8a8a8a] hover:text-white border border-[#222] rounded-full px-3 py-1"
+              className="text-xs text-[#8a8a8a] hover:text-white border border-border rounded-full px-3 py-1"
             >
               {showN1 ? "Masquer l'exercice précédent" : "Comparer à l'exercice précédent"}
             </button>
@@ -290,12 +281,12 @@ export default function OverviewTab({ year }: Props) {
       </div>
 
       {seedMsg && (
-        <p className="text-xs text-[#F2C48D] bg-[#1a140a] border border-[#F2C48D]/20 rounded-lg px-3 py-2">
+        <p className="text-xs text-accent-sand bg-[#1a140a] border border-accent-sand/20 rounded-lg px-3 py-2">
           {seedMsg}
         </p>
       )}
 
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
+      <div className="bg-bg-card border border-border rounded-2xl overflow-x-auto">
         <table className="w-full text-sm min-w-[1080px]">
           <thead>
             <tr className="border-b border-[#1a1a1a]">
@@ -322,18 +313,18 @@ export default function OverviewTab({ year }: Props) {
             )}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-[#222] bg-[#0a0a0a]">
+            <tr className="border-t-2 border-border bg-[#0a0a0a]">
               <td className="px-3 py-3 font-semibold text-white">Total</td>
               <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(t.allocated_expense)}</td>
               <td className="px-3 py-3 text-right font-semibold" style={{ color: EXPENSE }}>{formatEuros(t.realized_expense)}</td>
               <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(t.allocated_income)}</td>
               <td className="px-3 py-3 text-right font-semibold" style={{ color: INCOME }}>{formatEuros(t.realized_income)}</td>
-              <td className={`px-3 py-3 text-right font-bold ${t.realized_net >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>{formatEuros(t.realized_net)}</td>
+              <td className={`px-3 py-3 text-right font-bold ${t.realized_net >= 0 ? "text-success" : "text-alert"}`}>{formatEuros(t.realized_net)}</td>
               {showN1Cols && (
                 <>
                   <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(totalExpN1)}</td>
                   <td className="px-3 py-3 text-right font-semibold text-[#777]">{formatEuros(totalIncN1)}</td>
-                  <td className={`px-3 py-3 text-right font-bold ${totalIncN1 - totalExpN1 >= 0 ? "text-[#00C853]" : "text-[#FF5252]"}`}>{formatEuros(totalIncN1 - totalExpN1)}</td>
+                  <td className={`px-3 py-3 text-right font-bold ${totalIncN1 - totalExpN1 >= 0 ? "text-success" : "text-alert"}`}>{formatEuros(totalIncN1 - totalExpN1)}</td>
                 </>
               )}
             </tr>
@@ -398,7 +389,7 @@ function AddCategoryForm({
         value={catId}
         autoFocus
         onChange={(e) => setCatId(e.target.value)}
-        className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-xs text-white"
+        className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1 text-xs text-white"
       >
         <option value="">— Catégorie —</option>
         {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -406,7 +397,7 @@ function AddCategoryForm({
       <select
         value={dir}
         onChange={(e) => setDir(e.target.value as "expense" | "income")}
-        className="bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-xs text-white"
+        className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1 text-xs text-white"
       >
         <option value="expense">Dépense</option>
         <option value="income">Recette</option>
@@ -418,17 +409,17 @@ function AddCategoryForm({
         placeholder="Montant €"
         onChange={(e) => setAmount(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") onCancel(); }}
-        className="w-24 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-[#F2C48D]"
+        className="w-24 bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-accent-sand"
       />
       <button
         onClick={save}
         disabled={busy}
-        className="text-xs font-semibold text-black bg-[#F2C48D] rounded-full px-3 py-1 disabled:opacity-50"
+        className="text-xs font-semibold text-black bg-accent-sand rounded-full px-3 py-1 disabled:opacity-50"
       >
         {busy ? "…" : "Ajouter"}
       </button>
       <button onClick={onCancel} className="text-[#8a8a8a] hover:text-white" title="Annuler"><X size={14} /></button>
-      {err && <span className="text-xs text-[#FF5252]">{err}</span>}
+      {err && <span className="text-xs text-alert">{err}</span>}
     </div>
   );
 }
@@ -445,7 +436,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 function Num({ value, color, muted, signed }: { value: number; color?: string; muted?: boolean; signed?: boolean }) {
   let cls = "text-white";
   let style: React.CSSProperties = {};
-  if (signed) cls = value >= 0 ? "text-[#00C853]" : "text-[#FF5252]";
+  if (signed) cls = value >= 0 ? "text-success" : "text-alert";
   else if (muted) cls = "text-[#777]";
   else if (color) { style = { color }; cls = ""; }
   return (
@@ -515,9 +506,9 @@ function EditableBudget({
             if (e.key === "Enter") save();
             if (e.key === "Escape") setEditing(false);
           }}
-          className="w-24 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[#F2C48D]"
+          className="w-24 bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-accent-sand"
         />
-        {err && <div className="mt-1 text-xs text-[#FF5252] whitespace-normal max-w-[140px] ml-auto">{err}</div>}
+        {err && <div className="mt-1 text-xs text-alert whitespace-normal max-w-[140px] ml-auto">{err}</div>}
       </td>
     );
   }
