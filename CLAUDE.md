@@ -162,6 +162,11 @@ d'etre consideree terminee. Un code sans test n'est pas fonctionnel.**
   orpheline apparait.
 - **Solde centralise dans balance.py** : ne pas recalculer le solde dans les modules,
   toujours importer depuis `backend.core.balance`
+- **Champs de suivi sur transactions** : `justified`/`justified_at` (et le statut de la
+  fiche reimbursements) sont du pur suivi tresorier, PAS des donnees comptables. Leur
+  bascule seule est exemptee du verrou d'exercice cloture (`_FOLLOWUP_FIELDS` dans
+  `backend/modules/transactions/api.py`) ; ne pas retirer cette exemption, et ne pas
+  y ajouter de champ qui affecte un solde ou un rapport.
 - **from_entity_id / to_entity_id** : toujours specifies sur les transactions — le
   calcul de solde repose dessus. Ne jamais les laisser null en insertion.
 - **Snapshot pristine du module `system`** : la page Système affiche les fichiers différents
