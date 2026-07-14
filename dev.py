@@ -28,7 +28,7 @@ def main():
     )
 
     frontend = subprocess.Popen(
-        "npm run dev",
+        "bun run dev",
         cwd=str(FRONTEND),
         shell=True,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,

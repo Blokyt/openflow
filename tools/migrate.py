@@ -5,7 +5,7 @@ import importlib.util
 import json
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -63,7 +63,7 @@ def get_installed_version(conn, module_id):
 
 def set_installed_version(conn, module_id, version):
     """Insert or update the installed version of a module."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         """
         INSERT INTO _modules (id, installed_version, updated_at)
@@ -113,7 +113,7 @@ def apply_migrations(conn, module_id, migrations, installed_version, target_vers
                             print(f"    Skipping (already exists): {sql[:60]}...")
                         else:
                             raise
-                now = datetime.utcnow().isoformat()
+                now = datetime.now(timezone.utc).isoformat()
                 conn.execute(
                     """INSERT INTO _modules (id, installed_version, updated_at)
                        VALUES (?, ?, ?)
@@ -148,7 +148,7 @@ def main():
 
     # Step 2: Back up existing DB
     if db_path.exists():
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         backup_path = data_dir / f"openflow.db.backup.{timestamp}"
         # Copie à chaud via l'API backup SQLite (cohérente sous WAL) : une
         # copie brute du fichier .db omettrait les transactions commitées

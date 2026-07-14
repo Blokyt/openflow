@@ -13,10 +13,15 @@ def check_frontend_build():
     if not build_dir.exists():
         print("Frontend not built. Building...")
         frontend_dir = PROJECT_ROOT / "frontend"
+        from shutil import which
+        if which("bun") is None:
+            print("ERREUR: bun introuvable. Installez-le depuis https://bun.sh")
+            print("(le lockfile du projet est bun.lock ; ne pas utiliser npm)")
+            sys.exit(1)
         if not (frontend_dir / "node_modules").exists():
             print("Installing frontend dependencies...")
-            subprocess.run(["npm", "install"], cwd=str(frontend_dir), check=True)
-        subprocess.run(["npm", "run", "build"], cwd=str(frontend_dir), check=True)
+            subprocess.run(["bun", "install"], cwd=str(frontend_dir), check=True)
+        subprocess.run(["bun", "run", "build"], cwd=str(frontend_dir), check=True)
 
 def run_migrations():
     print("Running migrations...")

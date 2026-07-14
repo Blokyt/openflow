@@ -54,3 +54,6 @@ docs/superpowers/plans/
 # Audit artifacts
 audit/
 !audit/.gitkeep
+
+# Brouillons de session (scripts d analyse jetables)
+scratchpad/

@@ -476,8 +476,14 @@ export default function UsersAdmin() {
                         )}
                         <button
                           onClick={() => toggleActive(u)}
-                          disabled={isSelf || togglingId === u.id}
-                          title={isSelf ? "Impossible de désactiver son propre compte" : undefined}
+                          disabled={isSelf || (!!u.is_admin && !!u.is_active) || togglingId === u.id}
+                          title={
+                            isSelf
+                              ? "Impossible de désactiver son propre compte"
+                              : u.is_admin && u.is_active
+                                ? "Impossible de désactiver un compte administrateur"
+                                : undefined
+                          }
                           className="font-medium text-text-secondary hover:text-white disabled:opacity-30 disabled:hover:text-text-secondary transition-colors"
                         >
                           {togglingId === u.id ? "..." : u.is_active ? "Désactiver" : "Réactiver"}

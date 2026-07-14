@@ -38,12 +38,17 @@ def main():
     # 2. Frontend dependencies
     print("\n[2/4] Installation des dependances frontend...")
     frontend_dir = PROJECT_ROOT / "frontend"
-    subprocess.run(["npm", "install"], cwd=str(frontend_dir), check=True, capture_output=True)
+    from shutil import which
+    if which("bun") is None:
+        print("  ERREUR: bun introuvable. Installez-le depuis https://bun.sh")
+        print("  (le lockfile du projet est bun.lock ; ne pas utiliser npm)")
+        sys.exit(1)
+    subprocess.run(["bun", "install"], cwd=str(frontend_dir), check=True, capture_output=True)
     print("  OK")
 
     # 3. Build frontend
     print("\n[3/4] Build du frontend...")
-    subprocess.run(["npm", "run", "build"], cwd=str(frontend_dir), check=True, capture_output=True)
+    subprocess.run(["bun", "run", "build"], cwd=str(frontend_dir), check=True, capture_output=True)
     print("  OK")
 
     # 4. Initialize database

@@ -6,13 +6,13 @@
 Claude execute directement :
 
 - **Apres tout changement backend** → relancer `python dev.py` (ou verifier que le reload a pris)
-- **Apres tout changement frontend** → `cd frontend && npm run build` (build prod) ou verifier HMR si dev en cours
+- **Apres tout changement frontend** → `cd frontend && bun run build` (build prod) ou verifier HMR si dev en cours
 - **Apres tout ajout de route ou migration** → `python tools/migrate.py && python tools/check.py`
 - **Apres toute nouvelle fonctionnalite** → `python -m pytest tests/ -v` (ou le fichier de test concerne)
-- **Toujours tuer les anciens processus** avant de relancer : `taskkill /F /IM python.exe` + `taskkill /F /IM node.exe`
+- **Toujours tuer les anciens processus** avant de relancer : `taskkill /F /IM python.exe` + `taskkill /F /IM node.exe` + `taskkill /F /IM bun.exe`
 - **Toujours utiliser des chemins absolus** pour `python dev.py` car le CWD peut avoir derive (`cd frontend && ...`)
 - **Vérifier l'existence du dossier assets** : Lors du montage des fichiers statiques dans `main.py`, toujours vérifier `(build_dir / "assets").is_dir()` avant de monter le dossier, pour ne pas casser l'application si le frontend n'est pas encore buildé.
-- dev.py lance uvicorn --reload (port 8000) + npm dev (port 5173 ou suivant si occupe)
+- dev.py lance uvicorn --reload (port 8000) + bun run dev (port 5173 ou suivant si occupe)
 
 ## Philosophie
 
@@ -37,8 +37,8 @@ python tools/create_module.py <id> --name "Nom" --description "Desc"
 pip install -r requirements-dev.txt   # Deps de test
 python -m pytest tests/ -v            # 585 tests, ~8min
 
-cd frontend && npm run build   # Build prod (Vite + React + Tailwind)
-cd frontend && npm run dev     # Dev server HMR sur port 5173
+cd frontend && bun run build   # Build prod (Vite + React + Tailwind)
+cd frontend && bun run dev     # Dev server HMR sur port 5173
 
 python tools/backup_externe.py   # Sauvegarde externe (base + justificatifs), rotation
 ```
@@ -152,6 +152,9 @@ d'etre consideree terminee. Un code sans test n'est pas fonctionnel.**
 
 ## Gotchas
 
+- **Frontend géré par bun** : le lockfile est `frontend/bun.lock`. Ne jamais lancer
+  `npm install` (ça crée un package-lock.json parasite et un node_modules incohérent) ;
+  toute commande passe par `bun` (install, run build, run dev).
 - **Pas de SQLAlchemy** : tout est sqlite3 brut via `get_conn()` centralise
 - **config.yaml gitignored** : setup.py/start.py le creent depuis config.example.yaml
 - **PRAGMA foreign_keys OFF** partout — pas de contraintes FK au runtime

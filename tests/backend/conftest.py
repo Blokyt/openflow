@@ -43,6 +43,23 @@ MINIMAL_PNG = base64.b64decode(
 
 
 @pytest.fixture(autouse=True)
+def isolated_attachments_dir(tmp_path, monkeypatch):
+    """Redirige les uploads vers un dossier temporaire par test.
+
+    Sans cette fixture, chaque test d'upload écrit dans le data/attachments
+    du dépôt (les DB de test sont isolées mais pas le stockage fichiers) :
+    des centaines de fichiers orphelins s'y accumulent à chaque run pytest.
+    Les trois modules qui touchent au disque portent chacun leur constante
+    ATTACHMENTS_DIR ; on les patche toutes vers le même dossier jetable.
+    """
+    d = tmp_path / "attachments"
+    monkeypatch.setattr("backend.modules.attachments.api.ATTACHMENTS_DIR", d)
+    monkeypatch.setattr("backend.modules.transactions.api.ATTACHMENTS_DIR", d)
+    monkeypatch.setattr("backend.modules.system.api.ATTACHMENTS_DIR", d)
+    return d
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter():
     """Reset le compteur du limiter slowapi entre chaque test.
 

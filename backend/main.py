@@ -241,7 +241,7 @@ def create_app(config_path: str = "config.yaml", db_path: str = "data/openflow.d
                 return FileResponse(str(target))
             index_file = build_dir / "index.html"
             if not index_file.exists():
-                return Response(content="Frontend not built. Run 'cd frontend && npm run build' or use dev server on port 5173.", status_code=404)
+                return Response(content="Frontend not built. Run 'cd frontend && bun run build' or use dev server on port 5173.", status_code=404)
             return FileResponse(str(index_file))
 
     return app

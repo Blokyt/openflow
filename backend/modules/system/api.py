@@ -464,7 +464,7 @@ def repair(body: RepairRequest):
     if body.rebuild_frontend:
         try:
             result = subprocess.run(
-                ["npm", "run", "build"],
+                ["bun", "run", "build"],
                 capture_output=True, text=True, cwd=str(PROJECT_ROOT / "frontend"),
                 timeout=300, shell=True,
             )
@@ -472,7 +472,7 @@ def repair(body: RepairRequest):
                 report["frontend_rebuilt"] = True
                 report["steps"].append("[OK] Frontend rebuild")
             else:
-                report["steps"].append(f"[ERR] npm build: {result.stderr[:500]}")
+                report["steps"].append(f"[ERR] bun build: {result.stderr[:500]}")
         except Exception as e:
             report["steps"].append(f"[ERR] Frontend: {e}")
 

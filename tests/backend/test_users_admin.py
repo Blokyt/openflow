@@ -99,6 +99,36 @@ def test_admin_cannot_demote_self(client):
     assert client.put(f"/api/users/{me['id']}", json={"is_active": False}).status_code == 400
 
 
+def test_admin_cannot_demote_or_deactivate_other_admin(client_and_db, login_as):
+    """Un compte administrateur ne peut être ni rétrogradé ni désactivé, même par un autre admin."""
+    client, _ = client_and_db
+    login_as("autre.admin@test.local", is_admin=True)
+    users = client.get("/api/users/").json()
+    target = next(u for u in users if u["email"] == "autre.admin@test.local")
+
+    assert client.put(f"/api/users/{target['id']}", json={"is_admin": False}).status_code == 403
+    assert client.put(f"/api/users/{target['id']}", json={"is_active": False}).status_code == 403
+
+    refreshed = next(u for u in client.get("/api/users/").json() if u["id"] == target["id"])
+    assert refreshed["is_admin"] == 1 and refreshed["is_active"] == 1
+
+
+def test_admin_can_still_rename_other_admin_and_promote_user(client_and_db, login_as):
+    """La protection ne bloque que la rétrogradation/désactivation, pas les autres champs."""
+    client, _ = client_and_db
+    login_as("autre.admin2@test.local", is_admin=True)
+    login_as("futur.admin@test.local")
+    users = client.get("/api/users/").json()
+    other_admin = next(u for u in users if u["email"] == "autre.admin2@test.local")
+    simple = next(u for u in users if u["email"] == "futur.admin@test.local")
+
+    r = client.put(f"/api/users/{other_admin['id']}", json={"display_name": "Renommé"})
+    assert r.status_code == 200 and r.json()["display_name"] == "Renommé"
+
+    r = client.put(f"/api/users/{simple['id']}", json={"is_admin": True})
+    assert r.status_code == 200 and r.json()["is_admin"] == 1
+
+
 def test_force_logout(client_and_db, login_as):
     client, _ = client_and_db
     other = login_as("kick@test.local")

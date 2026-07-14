@@ -396,6 +396,14 @@ def update_user(user_id: int, payload: UserUpdatePayload, request: Request):
         if user_id == me_id and (payload.is_admin is False or payload.is_active is False):
             raise HTTPException(status_code=400,
                                 detail="Impossible de retirer ses propres droits administrateur")
+        # Protection des comptes administrateurs : aucun admin ne peut être
+        # rétrogradé ni désactivé via l'API, même par un autre admin. Retirer
+        # le statut admin exige une intervention directe en base (choix
+        # délibéré : évite qu'un admin compromis ou maladroit ne verrouille
+        # les autres hors de l'application).
+        if row["is_admin"] and (payload.is_admin is False or payload.is_active is False):
+            raise HTTPException(status_code=403,
+                                detail="Impossible de rétrograder ou désactiver un compte administrateur")
         fields, values = [], []
         if payload.display_name is not None:
             fields.append("display_name = ?"); values.append(payload.display_name.strip())
