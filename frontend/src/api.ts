@@ -113,6 +113,8 @@ export const api = {
     request<any>(`/transactions/${id}${force ? "?force=true" : ""}`, { method: "PUT", body: JSON.stringify(tx) }),
   deleteTransaction: (id: number, force = false) =>
     request<any>(`/transactions/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
+  updateReimbursement: (id: number, body: any) =>
+    request<any>(`/reimbursements/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   getCategories: () => request<any[]>("/categories/"),
   // Les stats de l'arbre suivent le focus global (entité + sous-entités, exercice).
   getCategoryTree: (entityId?: number, dateFrom?: string, dateTo?: string) => {

@@ -8,9 +8,31 @@ import TransactionForm from "./TransactionForm";
 import AttachmentsSection from "./AttachmentsSection";
 import { formatEuros, formatDate, eurosToCents, txTone } from "../../utils/format";
 import { transactionsToCsv, downloadCsv } from "../../utils/csv";
-import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw, Download, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, ArrowRight, Eye, Hourglass, Check, RotateCcw, Download, AlertTriangle, Paperclip } from "lucide-react";
+import PageLoader from "../../core/PageLoader";
 
 const PAGE_SIZE = 100;
+
+/** Petit interrupteur on/off pour le suivi (remboursé, justifié). */
+function MiniSwitch({
+  checked, onToggle, disabled, title,
+}: { checked: boolean; onToggle: () => void; disabled?: boolean; title: string }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      title={title}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`relative inline-flex h-4 w-7 flex-shrink-0 items-center rounded-full transition-colors ${disabled ? "cursor-default opacity-60" : "cursor-pointer"}`}
+      style={{ backgroundColor: checked ? "#00C853" : "#333" }}
+    >
+      <span
+        className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${checked ? "translate-x-3.5" : "translate-x-0.5"}`}
+      />
+    </button>
+  );
+}
 
 export default function TransactionList() {
   const { isAdmin } = useAuth();
@@ -30,6 +52,7 @@ export default function TransactionList() {
   const contextDatesRef = useRef<{ from: string; to: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [reimbFilter, setReimbFilter] = useState<string>("");
+  const [justifiedFilter, setJustifiedFilter] = useState<string>("");
   const [amountMin, setAmountMin] = useState<string>("");
   const [amountMax, setAmountMax] = useState<string>("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -94,7 +117,7 @@ export default function TransactionList() {
 
   const hasAttachments = activeModuleIds.has("attachments");
   const hasActiveFilters = Boolean(
-    search || dateFrom || dateTo || categoryFilter || reimbFilter || amountMin || amountMax
+    search || dateFrom || dateTo || categoryFilter || reimbFilter || justifiedFilter || amountMin || amountMax
   );
 
   // Paramètres de requête communs (filtres + tri), hors pagination.
@@ -105,6 +128,7 @@ export default function TransactionList() {
     if (dateTo) params.date_to = dateTo;
     if (categoryFilter) params.category_id = categoryFilter;
     if (reimbFilter) params.reimb_status = reimbFilter;
+    if (justifiedFilter) params.justified = justifiedFilter;
     // Saisie en euros, l'API attend des centimes entiers.
     if (amountMin) params.amount_min = String(eurosToCents(amountMin));
     if (amountMax) params.amount_max = String(eurosToCents(amountMax));
@@ -115,7 +139,7 @@ export default function TransactionList() {
     params.sort_by = sortBy;
     params.sort_dir = sortDir;
     return params;
-  }, [debouncedSearch, dateFrom, dateTo, categoryFilter, reimbFilter, amountMin, amountMax, selectedEntityId, sortBy, sortDir]);
+  }, [debouncedSearch, dateFrom, dateTo, categoryFilter, reimbFilter, justifiedFilter, amountMin, amountMax, selectedEntityId, sortBy, sortDir]);
 
   const loadFirstPage = useCallback(() => {
     setLoading(true);
@@ -229,7 +253,35 @@ export default function TransactionList() {
 
   function clearFilters() {
     setSearch(""); setDateFrom(""); setDateTo("");
-    setCategoryFilter(""); setReimbFilter(""); setAmountMin(""); setAmountMax("");
+    setCategoryFilter(""); setReimbFilter(""); setJustifiedFilter(""); setAmountMin(""); setAmountMax("");
+  }
+
+  /** Met à jour une transaction dans la liste ET dans le tiroir détail (même objet logique). */
+  function patchTx(id: number, patch: Partial<Transaction>) {
+    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setDetailTx((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
+  }
+
+  /** Switch « Justifié » : suivi manuel, exempté du verrou d'exercice clôturé côté backend. */
+  async function toggleJustified(tx: Transaction) {
+    try {
+      const updated = await api.updateTransaction(tx.id, { justified: !tx.justified });
+      patchTx(tx.id, { justified: updated.justified, justified_at: updated.justified_at });
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  /** Switch « Remboursé » : bascule le statut de la fiche d'avance liée (source de vérité). */
+  async function toggleReimbursed(tx: Transaction) {
+    if (!tx.reimb_id) return;
+    const newStatus = tx.reimb_status === "reimbursed" ? "pending" : "reimbursed";
+    try {
+      await api.updateReimbursement(tx.reimb_id, { status: newStatus });
+      patchTx(tx.id, { reimb_status: newStatus });
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
   return (
@@ -241,7 +293,7 @@ export default function TransactionList() {
           </h1>
           {selectedEntity && (
             <p className="text-sm text-[#8a8a8a] mt-1">
-              Filtrées pour <span className="text-[#F2C48D] font-medium">{selectedEntity.name}</span> et sous-entités
+              Filtrées pour <span className="text-accent-sand font-medium">{selectedEntity.name}</span> et sous-entités
             </p>
           )}
         </div>
@@ -249,7 +301,7 @@ export default function TransactionList() {
           <button
             onClick={handleExportCsv}
             disabled={exporting || total === 0}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-40 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-40 transition-colors"
             title="Exporter les transactions filtrées au format CSV"
           >
             <Download size={15} /> {exporting ? "Export..." : "Exporter CSV"}
@@ -257,7 +309,7 @@ export default function TransactionList() {
           {isAdmin && (
             <button
               onClick={() => { setShowForm(true); setEditingTx(null); }}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-[#F2C48D] rounded-full hover:bg-[#e8b87a] transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand transition-colors"
             >
               <Plus size={15} /> Nouvelle transaction
             </button>
@@ -266,9 +318,9 @@ export default function TransactionList() {
       </div>
 
       {error && (
-        <div className="mb-4 bg-[#1a0a0a] border border-[#FF5252]/30 text-[#FF5252] rounded-2xl p-4 text-sm flex items-center justify-between">
+        <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)} className="text-[#FF5252]/70 hover:text-[#FF5252]">
+          <button onClick={() => setError(null)} className="text-alert/70 hover:text-alert">
             <X size={16} />
           </button>
         </div>
@@ -276,7 +328,7 @@ export default function TransactionList() {
 
       {/* Form panel */}
       {(showForm || editingTx) && (
-        <div className="mb-6 bg-[#111] border border-[#222] rounded-2xl p-6">
+        <div className="mb-6 bg-bg-card border border-border rounded-2xl p-6">
           <h2 className="text-base font-semibold text-white mb-5">
             {editingTx ? "Modifier la transaction" : "Nouvelle transaction"}
           </h2>
@@ -290,7 +342,7 @@ export default function TransactionList() {
 
       {/* Filters */}
       <div className="mb-5 flex flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-1 min-w-48 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 focus-within:border-[#F2C48D] transition-colors">
+        <div className="flex items-center gap-2 flex-1 min-w-48 bg-bg-card border border-border rounded-xl px-3 py-2.5 focus-within:border-accent-sand transition-colors">
           <Search size={15} className="text-[#8a8a8a]" />
           <input
             type="text"
@@ -306,7 +358,7 @@ export default function TransactionList() {
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors [color-scheme:dark]"
+            className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors [color-scheme:dark]"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -315,13 +367,13 @@ export default function TransactionList() {
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors [color-scheme:dark]"
+            className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors [color-scheme:dark]"
           />
         </div>
         {datesModified && (
           <button
             onClick={resetDatesToContext}
-            className="flex items-center gap-1.5 px-3 py-2.5 text-xs text-[#F2C48D] border border-[#F2C48D]/30 rounded-xl hover:bg-[#F2C48D]/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2.5 text-xs text-accent-sand border border-accent-sand/30 rounded-xl hover:bg-accent-sand/10 transition-colors"
             title="Réinitialiser aux dates de l'exercice"
           >
             <RotateCcw size={12} />
@@ -331,7 +383,7 @@ export default function TransactionList() {
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+          className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
           title="Filtrer par catégorie"
         >
           <option value="">Toutes catégories</option>
@@ -342,12 +394,22 @@ export default function TransactionList() {
         <select
           value={reimbFilter}
           onChange={(e) => setReimbFilter(e.target.value)}
-          className="bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors"
+          className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
         >
           <option value="">Toutes les avances</option>
           <option value="pending">En attente</option>
           <option value="reimbursed">Remboursées</option>
           <option value="none">Sans avance</option>
+        </select>
+        <select
+          value={justifiedFilter}
+          onChange={(e) => setJustifiedFilter(e.target.value)}
+          className="bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
+          title="Filtrer sur le suivi des justificatifs"
+        >
+          <option value="">Justifiées ou non</option>
+          <option value="1">Justifiées</option>
+          <option value="0">Non justifiées</option>
         </select>
         <input
           type="number"
@@ -356,7 +418,7 @@ export default function TransactionList() {
           value={amountMin}
           onChange={(e) => setAmountMin(e.target.value)}
           placeholder="Min €"
-          className="min-w-0 w-24 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#666]"
+          className="min-w-0 w-24 bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors placeholder-[#666]"
         />
         <input
           type="number"
@@ -365,7 +427,7 @@ export default function TransactionList() {
           value={amountMax}
           onChange={(e) => setAmountMax(e.target.value)}
           placeholder="Max €"
-          className="min-w-0 w-24 bg-[#111] border border-[#222] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F2C48D] transition-colors placeholder-[#666]"
+          className="min-w-0 w-24 bg-bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors placeholder-[#666]"
         />
         {hasActiveFilters && (
           <button
@@ -387,16 +449,16 @@ export default function TransactionList() {
       )}
 
       {/* Table */}
-      <div className="bg-[#111] border border-[#222] rounded-2xl overflow-x-auto">
+      <div className="bg-bg-card border border-border rounded-2xl overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2C48D]" />
+            <PageLoader fullScreen={false} />
           </div>
         ) : transactions.length === 0 ? (
           <div className="text-center py-12 text-[#8a8a8a] text-sm">
             Aucune transaction trouvée.
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="ml-2 text-[#F2C48D] hover:underline">
+              <button onClick={clearFilters} className="ml-2 text-accent-sand hover:underline">
                 Effacer les filtres
               </button>
             )}
@@ -421,6 +483,7 @@ export default function TransactionList() {
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Flux</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Catégorie</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Avance de frais</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Justificatif</th>
                 <th
                   onClick={() => toggleSort("amount")}
                   className="px-4 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider cursor-pointer select-none hover:text-white"
@@ -437,7 +500,7 @@ export default function TransactionList() {
                   className={`hover:bg-[#1a1a1a] transition-colors ${idx > 0 ? "border-t border-[#1a1a1a]" : ""}`}
                 >
                   <td className="px-3 py-3.5 text-[#555] text-xs font-mono">#{tx.id}</td>
-                  <td className="px-4 py-3.5 text-[#B0B0B0] whitespace-nowrap">{formatDate(tx.date)}</td>
+                  <td className="px-4 py-3.5 text-text-secondary whitespace-nowrap">{formatDate(tx.date)}</td>
                   <td className="px-4 py-3.5 font-medium text-white max-w-xs">
                     <span title={tx.description || undefined}>{tx.label}</span>
                     {tx.description && (
@@ -486,20 +549,59 @@ export default function TransactionList() {
                   </td>
                   <td className="px-4 py-3.5">
                     {tx.reimb_person_name ? (
-                      <span
-                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
-                          tx.reimb_status === "reimbursed"
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                            : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                        }`}
-                        title={`Avance de ${tx.reimb_person_name}${tx.reimb_status === "reimbursed" ? " (remboursé)" : " (en attente)"}`}
-                      >
-                        {tx.reimb_status === "reimbursed" ? <Check size={12} /> : <Hourglass size={12} />}
-                        {tx.reimb_person_name}
+                      <span className="inline-flex items-center gap-2">
+                        {isAdmin && tx.reimb_id && (
+                          <MiniSwitch
+                            checked={tx.reimb_status === "reimbursed"}
+                            onToggle={() => toggleReimbursed(tx)}
+                            title={tx.reimb_status === "reimbursed"
+                              ? "Remboursé — cliquer pour repasser en attente"
+                              : "En attente — cliquer pour marquer remboursé"}
+                          />
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
+                            tx.reimb_status === "reimbursed"
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                              : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                          }`}
+                          title={`Avance de ${tx.reimb_person_name}${tx.reimb_status === "reimbursed" ? " (remboursé)" : " (en attente)"}`}
+                        >
+                          {tx.reimb_status === "reimbursed" ? <Check size={12} /> : <Hourglass size={12} />}
+                          {tx.reimb_person_name}
+                        </span>
                       </span>
                     ) : (
                       <span className="text-xs text-[#444]">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <span className="inline-flex items-center gap-2">
+                      <MiniSwitch
+                        checked={Boolean(tx.justified)}
+                        onToggle={() => toggleJustified(tx)}
+                        disabled={!isAdmin}
+                        title={tx.justified
+                          ? "Justifiée — cliquer pour repasser en non justifiée"
+                          : "Non justifiée — cliquer pour marquer justifiée"}
+                      />
+                      {hasAttachments && (
+                        <button
+                          onClick={() => setDetailTx(tx)}
+                          className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-lg transition-colors ${
+                            tx.attachment_count
+                              ? "text-accent-sand hover:bg-[#222]"
+                              : "text-[#555] hover:text-accent-sand hover:bg-[#222]"
+                          }`}
+                          title={tx.attachment_count
+                            ? `${tx.attachment_count} pièce${tx.attachment_count > 1 ? "s" : ""} jointe${tx.attachment_count > 1 ? "s" : ""} — voir / ajouter`
+                            : "Aucune pièce jointe — en ajouter"}
+                        >
+                          <Paperclip size={13} strokeWidth={1.5} />
+                          {tx.attachment_count || 0}
+                        </button>
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-3.5 text-right font-semibold whitespace-nowrap">
                     {(() => {
@@ -514,7 +616,7 @@ export default function TransactionList() {
                         <button
                           onClick={() => handleDelete(tx.id)}
                           disabled={deletingId === tx.id}
-                          className="text-xs font-medium text-[#FF5252] hover:text-red-400"
+                          className="text-xs font-medium text-alert hover:text-red-400"
                         >
                           Oui
                         </button>
@@ -530,7 +632,7 @@ export default function TransactionList() {
                         {hasAttachments && (
                           <button
                             onClick={() => setDetailTx(tx)}
-                            className="p-1.5 text-[#8a8a8a] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
+                            className="p-1.5 text-[#8a8a8a] hover:text-accent-sand rounded-lg hover:bg-[#222] transition-colors"
                             title="Voir les détails"
                           >
                             <Eye size={14} strokeWidth={1.5} />
@@ -547,7 +649,7 @@ export default function TransactionList() {
                             </button>
                             <button
                               onClick={() => setConfirmDelete(tx.id)}
-                              className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                              className="p-1.5 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors"
                               title="Supprimer"
                             >
                               <Trash2 size={14} strokeWidth={1.5} />
@@ -570,7 +672,7 @@ export default function TransactionList() {
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="px-5 py-2.5 text-sm font-medium text-[#B0B0B0] border border-[#333] rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-50 transition-colors"
+            className="px-5 py-2.5 text-sm font-medium text-text-secondary border border-border-hover rounded-full hover:border-[#444] hover:bg-[#1a1a1a] disabled:opacity-50 transition-colors"
           >
             {loadingMore ? "Chargement..." : `Charger plus (${total - transactions.length} restantes)`}
           </button>
@@ -578,11 +680,11 @@ export default function TransactionList() {
       )}
 
       {undoTx && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#111] border border-[#333] rounded-full px-5 py-3 shadow-xl">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-bg-card border border-border-hover rounded-full px-5 py-3 shadow-xl">
           <span className="text-sm text-white">Transaction supprimée</span>
           <button
             onClick={handleUndoDelete}
-            className="text-sm font-semibold text-[#F2C48D] hover:underline"
+            className="text-sm font-semibold text-accent-sand hover:underline"
           >
             Annuler
           </button>
@@ -598,9 +700,9 @@ export default function TransactionList() {
 
       {pendingForceAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-[#111] border border-[#333] rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="bg-bg-card border border-border-hover rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center gap-3">
-              <AlertTriangle size={20} className="text-[#F2C48D] flex-shrink-0" />
+              <AlertTriangle size={20} className="text-accent-sand flex-shrink-0" />
               <h3 className="text-base font-semibold text-white">Exercice clôturé</h3>
             </div>
             <p className="text-sm text-[#999]">
@@ -610,7 +712,7 @@ export default function TransactionList() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setPendingForceAction(null)}
-                className="px-4 py-2 text-sm text-[#8a8a8a] border border-[#333] rounded-xl hover:text-white transition-colors"
+                className="px-4 py-2 text-sm text-[#8a8a8a] border border-border-hover rounded-xl hover:text-white transition-colors"
               >
                 Annuler
               </button>
@@ -625,7 +727,7 @@ export default function TransactionList() {
                     setError(e.message);
                   }
                 }}
-                className="px-4 py-2 text-sm font-medium text-black bg-[#F2C48D] rounded-xl hover:bg-[#e8b87a] transition-colors"
+                className="px-4 py-2 text-sm font-medium text-black bg-accent-sand rounded-xl hover:bg-accent-sand transition-colors"
               >
                 Forcer la modification
               </button>
@@ -637,7 +739,7 @@ export default function TransactionList() {
       {detailTx && (
         <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={() => setDetailTx(null)}>
           <div
-            className="w-full max-w-md bg-[#0a0a0a] border-l border-[#222] h-full overflow-y-auto p-6"
+            className="w-full max-w-md bg-[#0a0a0a] border-l border-border h-full overflow-y-auto p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-6">
@@ -675,13 +777,49 @@ export default function TransactionList() {
             </div>
 
             {(detailTx as any).description && (
-              <div className="mb-4 bg-[#111] border border-[#222] rounded-xl p-3 text-sm text-[#B0B0B0]">
+              <div className="mb-4 bg-bg-card border border-border rounded-xl p-3 text-sm text-text-secondary">
                 {(detailTx as any).description}
               </div>
             )}
 
             <div className="space-y-4">
-              {hasAttachments && <AttachmentsSection txId={detailTx.id} />}
+              <div className="bg-bg-card border border-border rounded-xl p-3">
+                <p className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-3">Suivi</p>
+                <div className="space-y-2.5">
+                  {(detailTx as any).reimb_id && (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-text-secondary">
+                        Remboursé{(detailTx as any).reimb_person_name ? ` (${(detailTx as any).reimb_person_name})` : ""}
+                      </span>
+                      <MiniSwitch
+                        checked={(detailTx as any).reimb_status === "reimbursed"}
+                        onToggle={() => toggleReimbursed(detailTx)}
+                        disabled={!isAdmin}
+                        title={(detailTx as any).reimb_status === "reimbursed"
+                          ? "Remboursé — cliquer pour repasser en attente"
+                          : "En attente — cliquer pour marquer remboursé"}
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-text-secondary">Justifiée</span>
+                    <MiniSwitch
+                      checked={Boolean((detailTx as any).justified)}
+                      onToggle={() => toggleJustified(detailTx)}
+                      disabled={!isAdmin}
+                      title={(detailTx as any).justified
+                        ? "Justifiée — cliquer pour repasser en non justifiée"
+                        : "Non justifiée — cliquer pour marquer justifiée"}
+                    />
+                  </div>
+                </div>
+              </div>
+              {hasAttachments && (
+                <AttachmentsSection
+                  txId={detailTx.id}
+                  onCountChange={(n) => patchTx(detailTx.id, { attachment_count: n })}
+                />
+              )}
               {!hasAttachments && (
                 <div className="text-sm text-[#8a8a8a]">
                   Active le module « Pièces jointes » dans Paramètres

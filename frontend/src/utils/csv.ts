@@ -9,7 +9,8 @@ function escapeCell(value: unknown): string {
 export function transactionsToCsv(rows: any[]): string {
   const header = [
     "#", "Date", "Libellé", "Source", "Destination",
-    "Catégorie", "Payeur", "Montant (€)", "Description",
+    "Catégorie", "Payeur", "Remboursé", "Justifiée", "Pièces jointes",
+    "Montant (€)", "Description",
   ];
   const lines = rows.map((t) =>
     [
@@ -20,6 +21,9 @@ export function transactionsToCsv(rows: any[]): string {
       t.to_entity_name ?? "",
       t.category_name ?? "",
       t.reimb_person_name ?? "",
+      t.reimb_status ? (t.reimb_status === "reimbursed" ? "oui" : "non") : "",
+      t.justified ? "oui" : "non",
+      t.attachment_count ?? 0,
       ((t.amount ?? 0) / 100).toFixed(2).replace(".", ","),
       t.description ?? "",
     ]

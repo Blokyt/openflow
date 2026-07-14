@@ -61,4 +61,10 @@ migrations = {
         # rapide à 30k tx) + panneau transactions liées d'un contact (~90x).
         "CREATE INDEX IF NOT EXISTS idx_tx_contact_date ON transactions(contact_id, date)",
     ],
+    "1.6.0": [
+        # Suivi trésorier : la transaction a-t-elle été justifiée (pièce fournie
+        # et vérifiée) ? Indépendant de la présence effective de pièces jointes.
+        "ALTER TABLE transactions ADD COLUMN justified INTEGER DEFAULT 0",
+        "ALTER TABLE transactions ADD COLUMN justified_at TEXT",
+    ],
 }

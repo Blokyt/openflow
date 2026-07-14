@@ -28,6 +28,13 @@ export interface Transaction {
   reimb_contact_id?: number;
   reimb_person_name?: string;
   reimb_status?: string;
+  /** Id de la fiche de remboursement liée (module reimbursements), si avance. */
+  reimb_id?: number;
+  /** Suivi trésorier : 1 si la transaction a été marquée justifiée. */
+  justified?: number;
+  justified_at?: string | null;
+  /** Nombre de pièces jointes liées (module attachments). */
+  attachment_count?: number;
 }
 
 export interface Category {

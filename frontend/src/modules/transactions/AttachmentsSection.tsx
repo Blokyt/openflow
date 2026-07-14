@@ -42,16 +42,16 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
       onClick={onClose}
     >
       <div
-        className="bg-[#111] border border-[#222] rounded-2xl flex flex-col w-[90vw] h-[90vh] max-w-4xl overflow-hidden"
+        className="bg-bg-card border border-border rounded-2xl flex flex-col w-[90vw] h-[90vh] max-w-4xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* En-tête */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#222] flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
           <span className="text-sm font-semibold text-white truncate max-w-[70%]">{item.original_name}</span>
           <div className="flex items-center gap-2 flex-shrink-0">
             <a
               href={downloadUrl}
-              className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border border-[#333] text-[#B0B0B0] hover:border-[#F2C48D] hover:text-[#F2C48D] transition-colors"
+              className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border border-border-hover text-text-secondary hover:border-accent-sand hover:text-accent-sand transition-colors"
               title="Télécharger"
             >
               <Download size={12} /> Télécharger
@@ -85,7 +85,7 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
               <p className="mb-4">Aperçu non disponible pour ce type de fichier.</p>
               <a
                 href={downloadUrl}
-                className="text-[#F2C48D] hover:underline flex items-center gap-1 justify-center"
+                className="text-accent-sand hover:underline flex items-center gap-1 justify-center"
               >
                 <Download size={14} /> Télécharger le fichier
               </a>
@@ -97,7 +97,9 @@ function PreviewModal({ item, onClose }: { item: Attachment; onClose: () => void
   );
 }
 
-export default function AttachmentsSection({ txId }: { txId: number }) {
+export default function AttachmentsSection({
+  txId, onCountChange,
+}: { txId: number; onCountChange?: (count: number) => void }) {
   const { isAdmin } = useAuth();
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +114,10 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
     try {
       const res = await rawFetch(`/attachments/transaction/${txId}`);
       if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-      setItems(await res.json());
+      const data = await res.json();
+      setItems(data);
+      // Remonte le compteur au parent (badge de la liste) après upload/suppression.
+      onCountChange?.(data.length);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -168,14 +173,14 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
     <div className="border-t border-[#1a1a1a] pt-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Paperclip size={14} className="text-[#F2C48D]" />
+          <Paperclip size={14} className="text-accent-sand" />
           Pièces jointes {items.length > 0 && <span className="text-[#8a8a8a] text-xs">({items.length})</span>}
         </h3>
         {isAdmin && (
           <button
             onClick={() => fileInput.current?.click()}
             disabled={uploading}
-            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border border-[#333] text-[#B0B0B0] hover:border-[#F2C48D] hover:text-[#F2C48D] disabled:opacity-50 transition-colors"
+            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full border border-border-hover text-text-secondary hover:border-accent-sand hover:text-accent-sand disabled:opacity-50 transition-colors"
           >
             <Upload size={12} /> {uploading ? "Upload…" : "Ajouter"}
           </button>
@@ -183,7 +188,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
         <input ref={fileInput} type="file" onChange={handleUpload} className="hidden" />
       </div>
       {error && (
-        <div className="mb-3 text-xs text-[#FF5252] bg-[#1a0a0a] border border-[#FF5252]/30 rounded-lg p-2">
+        <div className="mb-3 text-xs text-alert bg-[#1a0a0a] border border-alert/30 rounded-lg p-2">
           {error}
         </div>
       )}
@@ -194,7 +199,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
       ) : (
         <div className="space-y-2">
           {items.map((a) => (
-            <div key={a.id} className="bg-[#111] border border-[#222] rounded-xl p-3 flex items-center justify-between gap-2">
+            <div key={a.id} className="bg-bg-card border border-border rounded-xl p-3 flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate">{a.original_name}</div>
                 <div className="text-xs text-[#8a8a8a]">{formatSize(a.size)}</div>
@@ -203,7 +208,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
                 {isPreviewable(a.mime_type) && (
                   <button
                     onClick={() => setPreviewItem(a)}
-                    className="p-1.5 text-[#8a8a8a] hover:text-[#F2C48D] rounded-lg hover:bg-[#222] transition-colors"
+                    className="p-1.5 text-[#8a8a8a] hover:text-accent-sand rounded-lg hover:bg-[#222] transition-colors"
                     title="Aperçu"
                   >
                     <Eye size={14} strokeWidth={1.5} />
@@ -219,7 +224,7 @@ export default function AttachmentsSection({ txId }: { txId: number }) {
                 {isAdmin && (
                   <button
                     onClick={() => setAttachmentToDelete(a.id)}
-                    className="p-1.5 text-[#8a8a8a] hover:text-[#FF5252] rounded-lg hover:bg-[#222] transition-colors"
+                    className="p-1.5 text-[#8a8a8a] hover:text-alert rounded-lg hover:bg-[#222] transition-colors"
                     title="Supprimer"
                   >
                     <Trash2 size={14} strokeWidth={1.5} />

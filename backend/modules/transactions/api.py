@@ -10,14 +10,23 @@ from pydantic import BaseModel
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin, require_entity_access
 from backend.core.balance import compute_legacy_balance
 from backend.core.database import get_conn, row_to_dict
-# Couplage inter-modules assumé : import physique direct du service reimbursements.
-# Le module reimbursements peut être INACTIF (ses fonctions sont no-op si la table
-# reimbursements n'existe pas), mais son code reste toujours présent dans le dépôt.
-from backend.modules.reimbursements.service import (
-    create_advance,
-    delete_advance,
-    sync_pending_advance_amount,
-)
+
+def _get_reimbursement_functions():
+    """Import conditionnel du module reimbursements.
+
+    Retourne (create_advance, delete_advance, sync_pending_advance_amount)
+    si le module est disponible, sinon (None, None, None).
+    """
+    try:
+        from backend.modules.reimbursements.service import (
+            create_advance,
+            delete_advance,
+            sync_pending_advance_amount,
+        )
+        return create_advance, delete_advance, sync_pending_advance_amount
+    except ImportError:
+        return None, None, None
+
 
 router = APIRouter()
 
@@ -70,6 +79,13 @@ class TransactionUpdate(BaseModel):
     from_entity_id: Optional[int] = None
     to_entity_id: Optional[int] = None
     payer_contact_id: Optional[int] = None
+    # Suivi trésorier (pas une donnée comptable) : « la transaction est justifiée ».
+    justified: Optional[bool] = None
+
+
+# Champs de pur suivi : leur bascule seule ne passe pas par le verrou de clôture
+# (cocher « justifié » sur une écriture d'un exercice clos n'altère aucun bilan).
+_FOLLOWUP_FIELDS = {"justified"}
 
 
 # Colonnes de tri autorisées (whitelist : jamais d'ORDER BY construit depuis l'entrée brute).
@@ -86,6 +102,7 @@ def list_transactions(
     entity_id: Optional[int] = None,
     include_children: bool = False,
     reimb_status: Optional[str] = None,
+    justified: Optional[int] = None,
     amount_min: Optional[int] = None,
     amount_max: Optional[int] = None,
     limit: Optional[int] = Query(None, ge=0),
@@ -101,12 +118,32 @@ def list_transactions(
         # de construire la requête (évite un WHERE ... IN () invalide).
         if entity_id is None and allowed is not None and not allowed:
             return {"total": 0, "items": []}
+        # La table attachments appartient à un module optionnel : jointure
+        # conditionnelle pour ne pas casser la liste si elle n'existe pas.
+        has_attachments_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'attachments'"
+        ).fetchone() is not None
+        attachment_col = (
+            ", COALESCE(att.attachment_count, 0) AS attachment_count"
+            if has_attachments_table else ", 0 AS attachment_count"
+        )
+        attachment_join = (
+            """
+            LEFT JOIN (
+                SELECT transaction_id, COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE transaction_id IS NOT NULL
+                GROUP BY transaction_id
+            ) att ON att.transaction_id = t.id"""
+            if has_attachments_table else ""
+        )
         select_cols = """SELECT t.*,
                    c.name AS category_name, c.color AS category_color,
                    ef.name AS from_entity_name, ef.color AS from_entity_color, ef.type AS from_entity_type,
                    et.name AS to_entity_name, et.color AS to_entity_color, et.type AS to_entity_type,
                    co.name AS contact_name,
-                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count, rb.reimb_contact_id"""
+                   rb.reimb_person_name, rb.reimb_status, rb.reimb_count, rb.reimb_contact_id, rb.reimb_id""" \
+            + attachment_col
         from_where = """
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
@@ -118,11 +155,12 @@ def list_transactions(
                        GROUP_CONCAT(COALESCE(rco.name, r.person_name), ', ') AS reimb_person_name,
                        MIN(r.status) AS reimb_status,
                        COUNT(*) AS reimb_count,
-                       MIN(r.contact_id) AS reimb_contact_id
+                       MIN(r.contact_id) AS reimb_contact_id,
+                       MIN(r.id) AS reimb_id
                 FROM reimbursements r
                 LEFT JOIN contacts rco ON r.contact_id = rco.id
                 GROUP BY transaction_id
-            ) rb ON rb.transaction_id = t.id
+            ) rb ON rb.transaction_id = t.id""" + attachment_join + """
             WHERE 1=1"""
         params = []
         if date_from:
@@ -177,6 +215,11 @@ def list_transactions(
             from_where += " AND rb.reimb_status IS NULL"
         elif reimb_status is not None:
             raise HTTPException(status_code=400, detail=f"invalid reimb_status: {reimb_status}")
+        if justified is not None:
+            if justified not in (0, 1):
+                raise HTTPException(status_code=400, detail=f"invalid justified: {justified}")
+            from_where += " AND COALESCE(t.justified, 0) = ?"
+            params.append(justified)
         if amount_min is not None and amount_max is not None and amount_min > amount_max:
             raise HTTPException(status_code=400, detail="amount_min must be <= amount_max")
         if amount_min is not None:
@@ -252,7 +295,9 @@ def create_transaction(tx: TransactionCreate, force: bool = False):
         tx_id = cur.lastrowid
         new_row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
 
-        create_advance(conn, tx_id, tx.payer_contact_id, now)
+        _create_advance, _, _ = _get_reimbursement_functions()
+        if _create_advance is not None:
+            _create_advance(conn, tx_id, tx.payer_contact_id, now)
 
         conn.commit()
         return row_to_dict(new_row)
@@ -300,10 +345,13 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
 
         # Verrou de clôture : la tx existante ou la nouvelle date ne doivent pas
         # tomber dans un exercice clôturé, sauf si l'appelant force (force=true).
+        # Exception : une bascule qui ne touche QUE des champs de suivi (justified)
+        # n'altère aucun bilan et passe sans force.
         updates_preview = tx.model_dump(exclude_unset=True)
+        only_followup = bool(updates_preview) and set(updates_preview) <= _FOLLOWUP_FIELDS
         existing_date = existing["date"]
         new_date = updates_preview.get("date", existing_date)
-        if not force and (
+        if not force and not only_followup and (
             _date_in_closed_period(conn, existing_date) or _date_in_closed_period(conn, new_date)
         ):
             raise HTTPException(
@@ -312,6 +360,10 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
             )
 
         updates = tx.model_dump(exclude_unset=True)
+        # Suivi « justifié » : booléen stocké en 0/1, horodaté quand il passe à vrai.
+        if "justified" in updates:
+            updates["justified"] = 1 if updates["justified"] else 0
+            updates["justified_at"] = now if updates["justified"] else None
         # Separate payer_contact_id from tx-column updates
         payer_contact_id_provided = "payer_contact_id" in updates
         payer_contact_id_value = updates.pop("payer_contact_id", None)
@@ -348,23 +400,29 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
         # réellement. Une simple édition de la transaction (date, montant, libellé)
         # renvoie le même payeur : dans ce cas on PRÉSERVE le remboursement et son
         # statut (sinon un remboursement déjà traité repasserait "en attente").
-        if payer_contact_id_provided:
-            existing_reimb = conn.execute(
-                "SELECT contact_id FROM reimbursements WHERE transaction_id = ?",
-                (tx_id,),
-            ).fetchone()
+        _create_adv, _delete_adv, _sync_adv = _get_reimbursement_functions()
+        if payer_contact_id_provided and _delete_adv is not None:
+            try:
+                existing_reimb = conn.execute(
+                    "SELECT contact_id FROM reimbursements WHERE transaction_id = ?",
+                    (tx_id,),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                existing_reimb = None  # table reimbursements absente
             existing_payer = existing_reimb["contact_id"] if existing_reimb else None
             payer_changed = payer_contact_id_value != existing_payer
 
             if payer_changed:
                 # Le payeur change : l'ancien suivi devient obsolète, on le remplace.
-                delete_advance(conn, tx_id)
-                create_advance(conn, tx_id, payer_contact_id_value, now)
+                _delete_adv(conn, tx_id)
+                if _create_adv is not None:
+                    _create_adv(conn, tx_id, payer_contact_id_value, now)
             elif existing_reimb is not None and "amount" in updates:
                 # Payeur inchangé : statut préservé. On resynchronise seulement le
                 # montant du suivi si l'avance est encore "en attente" et que le
                 # montant de la transaction vient de changer.
-                sync_pending_advance_amount(conn, tx_id, now)
+                if _sync_adv is not None:
+                    _sync_adv(conn, tx_id, now)
 
         row = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         conn.commit()
@@ -388,7 +446,9 @@ def delete_transaction(tx_id: int, force: bool = False):
             )
         # Nettoyage du suivi d'avance lié à cette écriture, pour éviter les
         # orphelins (FK OFF, pas de cascade).
-        delete_advance(conn, tx_id)
+        _, _delete_adv, _ = _get_reimbursement_functions()
+        if _delete_adv is not None:
+            _delete_adv(conn, tx_id)
         # Justificatifs liés : fichiers sur disque + lignes (la cascade FK déclarée
         # n'est jamais exécutée car PRAGMA foreign_keys est OFF).
         try:
