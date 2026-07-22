@@ -4,7 +4,6 @@ import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
-import BalanceRefsSection from "./BalanceRefsSection";
 import PageLoader from "./PageLoader";
 import { useAuth } from "./AuthContext";
 
@@ -527,8 +526,6 @@ export default function Settings() {
                   </div>
                 </section>
               )}
-
-              <BalanceRefsSection />
 
               <section className="space-y-6">
                 <h2 className="text-base font-semibold text-white">Modules</h2>
