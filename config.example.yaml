@@ -33,3 +33,6 @@ modules:
 server:
   host: 0.0.0.0
   port: 8000
+  # Mettre à true pour servir en HTTPS local (certificat auto-signé) : requis
+  # pour le rapprochement bancaire Enable Banking sans copier/coller.
+  https: false

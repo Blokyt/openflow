@@ -51,6 +51,16 @@ def main():
     run_migrations()
     check_frontend_build()
 
+    # HTTPS local optionnel (certificat auto-signé) : nécessaire pour le retour
+    # d'authentification bancaire Enable Banking sans copier/coller.
+    ssl_kwargs = {}
+    scheme = "http"
+    if getattr(config.server, "https", False):
+        from backend.core.tls import ensure_dev_cert
+        cert_path, key_path = ensure_dev_cert(PROJECT_ROOT / "data" / "tls")
+        ssl_kwargs = {"ssl_certfile": str(cert_path), "ssl_keyfile": str(key_path)}
+        scheme = "https"
+
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -62,23 +72,26 @@ def main():
 
     print(f"\n{'=' * 50}")
     print(f"  OpenFlow")
-    print(f"  Local  : http://localhost:{port}")
+    print(f"  Local  : {scheme}://localhost:{port}")
+    if scheme == "https":
+        print(f"  (HTTPS local : certificat auto-signé, accepte l'avertissement du navigateur une fois)")
     if host == "0.0.0.0":
-        print(f"  Réseau : http://{local_ip}:{port}")
-        print(f"  (écoute LAN : HTTP non chiffré, réservez ce mode au réseau de l'école)")
-    else:
+        print(f"  Réseau : {scheme}://{local_ip}:{port}")
+        if scheme == "http":
+            print(f"  (écoute LAN : HTTP non chiffré, réservez ce mode au réseau de l'école)")
+    elif scheme == "http":
         print(f"  (écoute locale uniquement ; passez server.host à 0.0.0.0 dans config.yaml pour le LAN)")
     print(f"{'=' * 50}\n")
 
     import threading
     def open_browser():
         time.sleep(1.5)
-        webbrowser.open(f"http://localhost:{port}")
+        webbrowser.open(f"{scheme}://localhost:{port}")
     threading.Thread(target=open_browser, daemon=True).start()
 
     import uvicorn
     # Un seul worker : SQLite (WAL) n'accepte qu'un processus écrivain.
-    uvicorn.run("backend.main:create_app", host=host, port=port, factory=True, reload=False)
+    uvicorn.run("backend.main:create_app", host=host, port=port, factory=True, reload=False, **ssl_kwargs)
 
 if __name__ == "__main__":
     main()

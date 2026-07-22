@@ -614,11 +614,16 @@ function BankConnectModal({
     setError(null);
     try {
       const res = await api.connectBank(account.id, name, "FR");
-      // Ouvre l'authentification forte de la banque dans un nouvel onglet et
-      // garde OpenFlow ouvert pour coller le code au retour (la page de
-      // redirection https ne se charge pas sur un serveur http local).
-      setAuthUrl(res.url);
-      window.open(res.url, "_blank", "noopener");
+      if (window.location.protocol === "https:") {
+        // OpenFlow est servi en https : la redirection de retour se chargera,
+        // et le code sera capté automatiquement au retour (aucun copier/coller).
+        window.location.href = res.url;
+      } else {
+        // Serveur http : la page de retour https ne se charge pas → on ouvre la
+        // banque dans un onglet et on récupère le code manuellement.
+        setAuthUrl(res.url);
+        window.open(res.url, "_blank", "noopener");
+      }
     } catch (e: any) {
       setError(e.message);
       onError(e.message);

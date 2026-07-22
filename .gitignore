@@ -19,6 +19,9 @@ data/openflow.db.manualbak-*
 data/attachments/*
 !data/attachments/.gitkeep
 
+# Certificat TLS local (clé privée du serveur https, jamais versionnée)
+data/tls/
+
 # Bases SQLite stray (creees par un outil lance depuis un mauvais CWD)
 *.db
 

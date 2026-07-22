@@ -28,6 +28,10 @@ class ServerConfig:
     # 127.0.0.1 par défaut (dev) ; passer à 0.0.0.0 pour exposer sur le LAN.
     host: str = "127.0.0.1"
     port: int = 8000
+    # HTTPS local (certificat auto-signé généré au démarrage). Requis pour le
+    # retour d'authentification bancaire Enable Banking (redirection https) sans
+    # copier/coller. Avertissement navigateur à accepter une fois.
+    https: bool = False
 
 
 @dataclass
