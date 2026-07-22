@@ -375,6 +375,25 @@ export const api = {
     }),
   getBankSuggestions: (bankTxId: number) =>
     request<any>(`/bank_reconciliation/transactions/${bankTxId}/suggestions`),
+  // Rapprochement bancaire — connecteur Enable Banking (Lot 2)
+  getBankConfig: () =>
+    request<{ configured: boolean; application_id: string; has_key: boolean; redirect_url: string }>("/bank_reconciliation/config"),
+  putBankConfig: (cfg: { application_id: string; private_key: string; redirect_url: string }) =>
+    request<{ configured: boolean }>("/bank_reconciliation/config", { method: "PUT", body: JSON.stringify(cfg) }),
+  listBanks: (country = "FR") =>
+    request<{ name: string; country: string; logo: string | null }[]>(`/bank_reconciliation/banks?country=${country}`),
+  connectBank: (accountId: number, aspsp_name: string, aspsp_country = "FR") =>
+    request<{ url: string; state: string }>(`/bank_reconciliation/accounts/${accountId}/connect`, {
+      method: "POST",
+      body: JSON.stringify({ aspsp_name, aspsp_country }),
+    }),
+  finalizeBank: (accountId: number, code: string) =>
+    request<any>(`/bank_reconciliation/accounts/${accountId}/finalize`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  syncBank: (accountId: number) =>
+    request<{ imported: number; skipped: number; total: number }>(`/bank_reconciliation/accounts/${accountId}/sync`, { method: "POST" }),
   // DirENS — export Excel officiel (lignes = catégories, aucun mapping)
   downloadDirens: async (params: {
     bilan_fiscal_year_id: number;

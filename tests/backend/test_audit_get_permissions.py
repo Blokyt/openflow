@@ -89,6 +89,8 @@ EXPECTED_GET = {
     "/api/helloasso/campaigns/{campaign_id}/links": "admin",
     "/api/helloasso/campaigns/{campaign_id}/suggestions": "admin",
     "/api/bank_reconciliation/accounts": "admin",
+    "/api/bank_reconciliation/config": "admin",
+    "/api/bank_reconciliation/banks": "admin",
     "/api/bank_reconciliation/transactions": "admin",
     "/api/bank_reconciliation/transactions/{bank_transaction_id}/links": "admin",
     "/api/bank_reconciliation/transactions/{bank_transaction_id}/suggestions": "admin",

@@ -47,4 +47,15 @@ migrations = {
         "CREATE INDEX idx_btl_bank ON bank_transaction_links(bank_transaction_id)",
         "CREATE INDEX idx_btl_tx ON bank_transaction_links(transaction_id)",
     ],
+    "1.1.0": [
+        # Lot 2 : configuration du connecteur Enable Banking (AISP PSD2 gratuit).
+        # private_key = clé RSA PEM signant les JWT ; application_id = kid.
+        """CREATE TABLE bank_reconciliation_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            application_id TEXT NOT NULL DEFAULT '',
+            private_key TEXT NOT NULL DEFAULT '',
+            redirect_url TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT ''
+        )""",
+    ],
 }

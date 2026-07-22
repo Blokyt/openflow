@@ -10,8 +10,9 @@ Convention de montants : transactions.amount est en centimes TOUJOURS positif
 (le sens vient de from/to). bank_transactions.amount est SIGNÉ (+ crédit /
 - débit). On rapproche donc SUM(transactions.amount) avec ABS(bank.amount).
 """
+import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -19,6 +20,9 @@ from pydantic import BaseModel
 from backend.core.auth import require_admin
 from backend.core.database import get_conn, row_to_dict
 from backend.modules.bank_reconciliation.parsers import ParseError, parse_statement
+from backend.modules.bank_reconciliation.enablebanking import (
+    EnableBankingClient, EnableBankingError, normalize_transactions,
+)
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -436,5 +440,205 @@ def suggestions(bank_transaction_id: int, limit: int = Query(default=20, ge=1, l
             "pending_cents": reste,
             "suggestions": results,
         }
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Connecteur Enable Banking (Lot 2) — agrégation automatique PSD2
+# ---------------------------------------------------------------------------
+
+CONSENT_DAYS = 90
+
+
+def _load_eb_config(conn):
+    return conn.execute("SELECT * FROM bank_reconciliation_config WHERE id = 1").fetchone()
+
+
+def _build_eb_client(conn):
+    row = _load_eb_config(conn)
+    if row is None:
+        raise HTTPException(status_code=400, detail="Connecteur Enable Banking non configuré")
+    d = row_to_dict(row)
+    if not (d["application_id"] and d["private_key"]):
+        raise HTTPException(status_code=400, detail="Configuration Enable Banking incomplète")
+    return EnableBankingClient(d["application_id"], d["private_key"]), d
+
+
+class EBConfigPayload(BaseModel):
+    application_id: str
+    private_key: str = ""
+    redirect_url: str = ""
+
+
+@router.get("/config")
+def get_config():
+    conn = get_conn()
+    try:
+        row = _load_eb_config(conn)
+        if row is None:
+            return {"configured": False, "application_id": "", "has_key": False, "redirect_url": ""}
+        d = row_to_dict(row)
+        return {
+            "configured": bool(d["application_id"] and d["private_key"]),
+            "application_id": d["application_id"],
+            "has_key": bool(d["private_key"]),
+            "redirect_url": d["redirect_url"],
+        }
+    finally:
+        conn.close()
+
+
+@router.put("/config")
+def put_config(payload: EBConfigPayload):
+    conn = get_conn()
+    try:
+        existing = _load_eb_config(conn)
+        # Clé vide + config existante -> on conserve la clé déjà enregistrée
+        # (permet de modifier l'URL de redirection sans re-saisir la clé).
+        private_key = payload.private_key.strip()
+        if not private_key and existing is not None:
+            private_key = row_to_dict(existing)["private_key"]
+        conn.execute(
+            """INSERT INTO bank_reconciliation_config (id, application_id, private_key, redirect_url, updated_at)
+               VALUES (1, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   application_id = excluded.application_id,
+                   private_key = excluded.private_key,
+                   redirect_url = excluded.redirect_url,
+                   updated_at = excluded.updated_at""",
+            (payload.application_id.strip(), private_key, payload.redirect_url.strip(), _now()),
+        )
+        conn.commit()
+        return {"configured": bool(payload.application_id.strip() and private_key)}
+    finally:
+        conn.close()
+
+
+@router.get("/banks")
+def list_banks(country: str = Query(default="FR")):
+    """Liste les banques (ASPSP) disponibles pour un pays, pour choisir la sienne."""
+    conn = get_conn()
+    try:
+        client, _ = _build_eb_client(conn)
+        try:
+            aspsps = client.get_aspsps(country)
+        except EnableBankingError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        return [{"name": a.get("name"), "country": a.get("country"), "logo": a.get("logo")} for a in aspsps]
+    finally:
+        conn.close()
+
+
+class ConnectPayload(BaseModel):
+    aspsp_name: str
+    aspsp_country: str = "FR"
+
+
+@router.post("/accounts/{account_id}/connect")
+def connect_account(account_id: int, payload: ConnectPayload):
+    """Démarre l'autorisation : renvoie l'URL de redirection SCA vers la banque."""
+    conn = get_conn()
+    try:
+        _account_or_404(conn, account_id)
+        client, cfg = _build_eb_client(conn)
+        if not cfg["redirect_url"]:
+            raise HTTPException(status_code=400, detail="URL de redirection non configurée")
+        # state = account_id + jeton : permet d'attacher le code au bon compte au retour.
+        state = f"{account_id}.{secrets.token_urlsafe(16)}"
+        valid_until = (datetime.now(timezone.utc) + timedelta(days=CONSENT_DAYS)).replace(
+            microsecond=0).isoformat().replace("+00:00", "Z")
+        try:
+            res = client.start_auth(payload.aspsp_name, payload.aspsp_country,
+                                    cfg["redirect_url"], state, valid_until)
+        except EnableBankingError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        if not res.get("url"):
+            raise HTTPException(status_code=502, detail="Enable Banking n'a pas renvoyé d'URL d'autorisation")
+        return {"url": res["url"], "state": state, "authorization_id": res.get("authorization_id", "")}
+    finally:
+        conn.close()
+
+
+class FinalizePayload(BaseModel):
+    code: str
+
+
+@router.post("/accounts/{account_id}/finalize")
+def finalize_account(account_id: int, payload: FinalizePayload):
+    """Échange le code d'autorisation contre une session et rattache le compte
+    bancaire distant (par IBAN si connu, sinon le premier compte renvoyé)."""
+    conn = get_conn()
+    try:
+        acc = _account_or_404(conn, account_id)
+        client, _ = _build_eb_client(conn)
+        try:
+            session = client.create_session(payload.code)
+        except EnableBankingError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        accounts = session.get("accounts") or []
+        if not accounts:
+            raise HTTPException(status_code=502, detail="Aucun compte renvoyé par la banque")
+        chosen = None
+        if acc["iban"]:
+            norm = acc["iban"].replace(" ", "").upper()
+            for a in accounts:
+                iban = ((a.get("account_id") or {}).get("iban") or "").replace(" ", "").upper()
+                if iban and iban == norm:
+                    chosen = a
+                    break
+        chosen = chosen or accounts[0]
+        iban = (chosen.get("account_id") or {}).get("iban") or acc["iban"]
+        expires = (datetime.now(timezone.utc) + timedelta(days=CONSENT_DAYS)).replace(microsecond=0).isoformat()
+        conn.execute(
+            """UPDATE bank_accounts
+               SET source = 'enablebanking', eb_session_id = ?, eb_account_id = ?, iban = ?, consent_expires_at = ?
+               WHERE id = ?""",
+            (session.get("session_id", ""), chosen.get("uid", ""), iban, expires, account_id),
+        )
+        conn.commit()
+        out = _account_or_404(conn, account_id)
+        out["accounts_available"] = len(accounts)
+        return out
+    finally:
+        conn.close()
+
+
+@router.post("/accounts/{account_id}/sync")
+def sync_account(account_id: int):
+    """Tire les transactions du compte connecté (fenêtre ~90 jours) et les
+    upsert dans bank_transactions (idempotent via external_id)."""
+    conn = get_conn()
+    try:
+        acc = _account_or_404(conn, account_id)
+        if acc["source"] != "enablebanking" or not acc["eb_account_id"]:
+            raise HTTPException(status_code=400, detail="Ce compte n'est pas connecté à Enable Banking")
+        client, _ = _build_eb_client(conn)
+        date_from = (datetime.now(timezone.utc) - timedelta(days=CONSENT_DAYS)).strftime("%Y-%m-%d")
+        try:
+            raw = client.get_transactions(acc["eb_account_id"], date_from=date_from)
+        except EnableBankingError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        rows = normalize_transactions(raw)
+        now = _now()
+        imported = 0
+        considered = 0
+        for r in rows:
+            if not r["booking_date"]:
+                continue
+            considered += 1
+            cur = conn.execute(
+                """INSERT INTO bank_transactions
+                   (bank_account_id, external_id, booking_date, amount, currency,
+                    label, counterparty, reconciled_manual, imported_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+                   ON CONFLICT(bank_account_id, external_id) DO NOTHING""",
+                (account_id, r["external_id"], r["booking_date"], r["amount"],
+                 r["currency"], r["label"], r["counterparty"], now),
+            )
+            imported += cur.rowcount
+        conn.execute("UPDATE bank_accounts SET last_synced_at = ? WHERE id = ?", (now, account_id))
+        conn.commit()
+        return {"imported": imported, "skipped": considered - imported, "total": considered}
     finally:
         conn.close()

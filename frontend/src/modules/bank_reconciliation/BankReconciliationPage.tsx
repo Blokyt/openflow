@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Upload, Landmark, Link2, CheckCircle2, AlertCircle, X, Plus, Trash2, Search,
-  ChevronDown, GitCompare, BadgeCheck,
+  ChevronDown, GitCompare, BadgeCheck, RefreshCw, KeyRound, Cloud, Wifi,
 } from "lucide-react";
 import { api } from "../../api";
 import { formatEuros, formatDate, COLOR_INCOME, COLOR_EXPENSE } from "../../utils/format";
@@ -15,6 +15,8 @@ type Account = {
   entity_name: string | null;
   label: string;
   iban: string;
+  source: string;
+  consent_expires_at: string;
   last_synced_at: string;
   tx_count: number;
   to_reconcile_count: number;
@@ -54,14 +56,19 @@ export default function BankReconciliationPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [linking, setLinking] = useState<BankTx | null>(null);
+  const [ebConfigured, setEbConfigured] = useState(false);
+  const [showEbConfig, setShowEbConfig] = useState(false);
+  const [connectingAccount, setConnectingAccount] = useState<Account | null>(null);
+  const [syncingId, setSyncingId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadAccounts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const accs = await api.getBankAccounts();
+      const [accs, cfg] = await Promise.all([api.getBankAccounts(), api.getBankConfig().catch(() => null)]);
       setAccounts(accs);
+      setEbConfigured(!!cfg?.configured);
       setSelectedId((prev) => (prev && accs.some((a: Account) => a.id === prev) ? prev : accs[0]?.id ?? null));
     } catch (e: any) {
       setError(e.message);
@@ -88,6 +95,43 @@ export default function BankReconciliationPage() {
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => { if (selectedId) loadTxs(selectedId); }, [selectedId, loadTxs]);
+
+  // Retour de la redirection SCA Enable Banking : ?code=...&state=<accountId>.<jeton>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (!code || !state) return;
+    const accountId = Number(state.split(".")[0]);
+    // Nettoie l'URL tout de suite pour éviter un double appel au re-render.
+    window.history.replaceState({}, "", window.location.pathname);
+    if (!Number.isFinite(accountId)) return;
+    (async () => {
+      try {
+        await api.finalizeBank(accountId, code);
+        setNotice("Compte bancaire connecté. Lance une synchronisation pour importer les opérations.");
+        await loadAccounts();
+        setSelectedId(accountId);
+      } catch (e: any) {
+        setError(`Échec de la connexion bancaire : ${e.message}`);
+      }
+    })();
+  }, [loadAccounts]);
+
+  const onSync = async (account: Account) => {
+    setSyncingId(account.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await api.syncBank(account.id);
+      setNotice(`Synchronisation terminée : ${res.imported} nouvelle${res.imported > 1 ? "s" : ""} opération${res.imported > 1 ? "s" : ""}.`);
+      await Promise.all([loadTxs(account.id), loadAccounts()]);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSyncingId(null);
+    }
+  };
 
   const onImport = async (file: File) => {
     if (!selectedId) return;
@@ -130,6 +174,7 @@ export default function BankReconciliationPage() {
     );
   }
 
+  const selected = accounts.find((a) => a.id === selectedId) || null;
   const toTreat = txs.filter((t) => !t.reconciled)
     .sort((a, b) => (b.booking_date < a.booking_date ? -1 : b.booking_date > a.booking_date ? 1 : b.id - a.id));
   const done = txs.filter((t) => t.reconciled);
@@ -144,7 +189,7 @@ export default function BankReconciliationPage() {
             Importe ton relevé, puis associe à chaque ligne bancaire la ou les écritures qui la composent.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <input
             ref={fileRef}
             type="file"
@@ -152,6 +197,30 @@ export default function BankReconciliationPage() {
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); }}
           />
+          {selected && selected.source === "enablebanking" ? (
+            <button
+              onClick={() => onSync(selected)}
+              disabled={syncingId === selected.id}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-[#1a1a1a] border border-[#2a2a2a] rounded-full hover:border-accent-sand/50 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              <RefreshCw size={15} className={syncingId === selected.id ? "animate-spin" : ""} />
+              {syncingId === selected.id ? "Synchro…" : "Synchroniser"}
+            </button>
+          ) : selected && ebConfigured ? (
+            <button
+              onClick={() => setConnectingAccount(selected)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-[#1a1a1a] border border-[#2a2a2a] rounded-full hover:border-accent-sand/50 transition-colors whitespace-nowrap"
+            >
+              <Wifi size={15} /> Connecter à la banque
+            </button>
+          ) : null}
+          <button
+            onClick={() => setShowEbConfig(true)}
+            className="flex items-center gap-2 px-3 py-2.5 text-sm text-[#8a8a8a] hover:text-white border border-[#2a2a2a] rounded-full transition-colors whitespace-nowrap"
+            title="Configurer la connexion automatique Enable Banking"
+          >
+            <Cloud size={15} /> {ebConfigured ? "Enable Banking" : "Connexion auto"}
+          </button>
           <button
             onClick={() => fileRef.current?.click()}
             disabled={importing}
@@ -304,6 +373,179 @@ export default function BankReconciliationPage() {
       {linking && (
         <LinkPanel bankTx={linking} onClose={() => setLinking(null)} onChanged={afterLinkChange} />
       )}
+      {showEbConfig && (
+        <EbConfigModal onClose={() => setShowEbConfig(false)} onSaved={() => { setShowEbConfig(false); loadAccounts(); }} />
+      )}
+      {connectingAccount && (
+        <BankConnectModal account={connectingAccount} onClose={() => setConnectingAccount(null)} onError={setError} />
+      )}
+    </div>
+  );
+}
+
+// ─── Configuration Enable Banking ─────────────────────────────────────────────
+
+function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [appId, setAppId] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
+  const [redirectUrl, setRedirectUrl] = useState("");
+  const [hasKey, setHasKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getBankConfig().then((c) => {
+      setAppId(c.application_id || "");
+      setRedirectUrl(c.redirect_url || `${window.location.origin}/bank-reconciliation`);
+      setHasKey(c.has_key);
+    }).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.putBankConfig({ application_id: appId.trim(), private_key: privateKey.trim(), redirect_url: redirectUrl.trim() });
+      onSaved();
+    } catch (e: any) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-accent-sand/10 border border-accent-sand/20 flex items-center justify-center text-accent-sand">
+              <KeyRound size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">Connexion automatique (Enable Banking)</h2>
+              <p className="text-xs text-[#8a8a8a]">Agrégateur PSD2 gratuit, lecture seule, sans scraping.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#8a8a8a] hover:text-white shrink-0"><X size={18} /></button>
+        </div>
+        <div className="px-6 py-5">
+          <div className="mb-4 text-xs text-[#8a8a8a] bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3 leading-relaxed">
+            Crée une application gratuite sur le Control Panel Enable Banking (mode « Restricted Production » pour tes propres comptes),
+            génère une clé RSA, téléverse le certificat public et récupère l'Application ID. Renseigne l'URL de redirection ci-dessous
+            dans le Control Panel à l'identique.
+          </div>
+          {error && <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{error}</div>}
+          {loading ? (
+            <div className="flex items-center justify-center py-8"><PageLoader fullScreen={false} /></div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className={labelClass}>Application ID</label>
+                <input className={inputClass} value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="ex : cf589be3-3755-…" />
+              </div>
+              <div>
+                <label className={labelClass}>Clé privée RSA (PEM){hasKey && " — déjà enregistrée, laisse vide pour la conserver"}</label>
+                <textarea
+                  className={`${inputClass} font-mono text-xs`}
+                  rows={5}
+                  value={privateKey}
+                  onChange={(e) => setPrivateKey(e.target.value)}
+                  placeholder={hasKey ? "•••• (clé enregistrée)" : "-----BEGIN PRIVATE KEY-----"}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>URL de redirection</label>
+                <input className={inputClass} value={redirectUrl} onChange={(e) => setRedirectUrl(e.target.value)} />
+                <p className="text-xs text-[#555] mt-1">À déclarer à l'identique dans le Control Panel Enable Banking.</p>
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={save}
+                  disabled={saving || !appId.trim() || (!privateKey.trim() && !hasKey)}
+                  className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 transition-colors"
+                >
+                  {saving ? "Enregistrement…" : "Enregistrer"}
+                </button>
+                <span className="text-xs text-[#555]">La clé reste sur ta machine, jamais réaffichée.</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sélection de la banque + redirection SCA ─────────────────────────────────
+
+function BankConnectModal({ account, onClose, onError }: { account: Account; onClose: () => void; onError: (m: string) => void }) {
+  const [banks, setBanks] = useState<{ name: string; country: string; logo: string | null }[]>([]);
+  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.listBanks("FR").then(setBanks).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  }, []);
+
+  const connect = async (name: string) => {
+    setConnecting(name);
+    setError(null);
+    try {
+      const res = await api.connectBank(account.id, name, "FR");
+      // Redirige le navigateur vers l'authentification forte de la banque.
+      window.location.href = res.url;
+    } catch (e: any) {
+      setError(e.message);
+      onError(e.message);
+      setConnecting(null);
+    }
+  };
+
+  const shown = banks.filter((b) => b.name?.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-white">Connecter « {account.label || account.entity_name} »</h2>
+            <p className="text-xs text-[#8a8a8a] mt-0.5">Choisis ta banque : tu seras redirigé vers son authentification sécurisée.</p>
+          </div>
+          <button onClick={onClose} className="text-[#8a8a8a] hover:text-white shrink-0"><X size={18} /></button>
+        </div>
+        <div className="px-6 py-4">
+          {error && <div className="mb-3 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{error}</div>}
+          <div className="relative mb-3">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555]" />
+            <input className={`${inputClass} pl-9`} value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher (ex : Caisse d'Épargne)" />
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-10"><PageLoader fullScreen={false} /></div>
+          ) : shown.length === 0 ? (
+            <p className="text-sm text-[#555] py-4 text-center">Aucune banque trouvée.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {shown.map((b) => (
+                <button
+                  key={b.name}
+                  onClick={() => connect(b.name)}
+                  disabled={connecting !== null}
+                  className="w-full flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 hover:border-accent-sand/40 disabled:opacity-50 transition-colors text-left"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Landmark size={14} className="shrink-0 text-[#8a8a8a]" />
+                    <span className="text-sm text-white truncate">{b.name}</span>
+                  </span>
+                  {connecting === b.name ? <RefreshCw size={14} className="animate-spin text-accent-sand" /> : <Wifi size={14} className="text-[#555]" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
