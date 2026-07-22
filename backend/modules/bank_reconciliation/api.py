@@ -447,6 +447,10 @@ def suggestions(bank_transaction_id: int, limit: int = Query(default=20, ge=1, l
                       AND t.id NOT IN (
                           SELECT transaction_id FROM bank_transaction_links
                           WHERE bank_transaction_id = ?)
+                      -- Exclut les écritures déjà rapprochées (consommées par une
+                      -- autre ligne, ou forcées à la main) : plus re-rapprochables.
+                      AND COALESCE(t.reconciled, 0) = 0
+                      AND COALESCE(t.reconciled_manual, 0) = 0
                     ORDER BY (t.amount > ?) ASC, ABS(t.amount - ?) ASC, t.date DESC
                     LIMIT ?""",
                 internal_ids + internal_ids + [bank_transaction_id, reste, reste, limit],

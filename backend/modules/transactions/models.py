@@ -67,4 +67,12 @@ migrations = {
         "ALTER TABLE transactions ADD COLUMN justified INTEGER DEFAULT 0",
         "ALTER TABLE transactions ADD COLUMN justified_at TEXT",
     ],
+    "1.7.0": [
+        # Rapprochement forcé à la main. La colonne `reconciled` (1.4.0) est
+        # posée automatiquement par le module bank_reconciliation quand
+        # l'écriture est liée à une ligne bancaire ; reconciled_manual permet de
+        # cocher « rapprochée » sans lien bancaire (ex : espèces jamais en
+        # banque). Statut affiché = reconciled OU reconciled_manual.
+        "ALTER TABLE transactions ADD COLUMN reconciled_manual INTEGER DEFAULT 0",
+    ],
 }

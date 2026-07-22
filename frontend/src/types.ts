@@ -33,6 +33,10 @@ export interface Transaction {
   /** Suivi trésorier : 1 si la transaction a été marquée justifiée. */
   justified?: number;
   justified_at?: string | null;
+  /** 1 si rapprochée automatiquement (liée à une ligne bancaire couverte). */
+  reconciled?: number;
+  /** 1 si rapprochée forcée à la main (indépendant du lien bancaire). */
+  reconciled_manual?: number;
   /** Nombre de pièces jointes liées (module attachments). */
   attachment_count?: number;
 }

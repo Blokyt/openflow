@@ -81,11 +81,13 @@ class TransactionUpdate(BaseModel):
     payer_contact_id: Optional[int] = None
     # Suivi trésorier (pas une donnée comptable) : « la transaction est justifiée ».
     justified: Optional[bool] = None
+    # Rapprochement forcé à la main (ex : espèces jamais passées en banque).
+    reconciled_manual: Optional[bool] = None
 
 
 # Champs de pur suivi : leur bascule seule ne passe pas par le verrou de clôture
 # (cocher « justifié » sur une écriture d'un exercice clos n'altère aucun bilan).
-_FOLLOWUP_FIELDS = {"justified"}
+_FOLLOWUP_FIELDS = {"justified", "reconciled_manual"}
 
 
 # Colonnes de tri autorisées (whitelist : jamais d'ORDER BY construit depuis l'entrée brute).
@@ -364,6 +366,10 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
         if "justified" in updates:
             updates["justified"] = 1 if updates["justified"] else 0
             updates["justified_at"] = now if updates["justified"] else None
+        # Rapprochement forcé à la main (0/1). N'écrase pas le rapprochement
+        # automatique posé par le lien bancaire (colonne `reconciled` distincte).
+        if "reconciled_manual" in updates:
+            updates["reconciled_manual"] = 1 if updates["reconciled_manual"] else 0
         # Separate payer_contact_id from tx-column updates
         payer_contact_id_provided = "payer_contact_id" in updates
         payer_contact_id_value = updates.pop("payer_contact_id", None)

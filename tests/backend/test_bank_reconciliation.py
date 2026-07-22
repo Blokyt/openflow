@@ -312,3 +312,33 @@ def test_delete_account_cascades_and_unreconciles(client_and_db):
     assert _tx_reconciled(db_path, tx) == 0
     # Le compte et ses lignes ont disparu.
     assert client.get("/api/bank_reconciliation/accounts").json() == []
+
+
+# ─── Statut "rapprochée" des écritures (coche transactions) ───────────────────
+
+def test_reconciled_transaction_excluded_from_other_suggestions(client_and_db):
+    """Une écriture déjà rapprochée (liée à une ligne) n'est plus re-proposée."""
+    client, db_path = client_and_db
+    interne, externe = _entities(client)
+    acc = _make_account(client, interne)
+    b1 = _seed_bank_tx(db_path, acc, 90000, "e1")
+    b2 = _seed_bank_tx(db_path, acc, 90000, "e2")
+    tx = _recette(client, interne, externe, 90000)
+    client.post(f"/api/bank_reconciliation/transactions/{b1}/links", json={"transaction_id": tx})
+    s = client.get(f"/api/bank_reconciliation/transactions/{b2}/suggestions").json()
+    assert tx not in [x["transaction_id"] for x in s["suggestions"]]
+
+
+def test_manual_reconcile_flag_toggles_and_excludes(client_and_db):
+    client, db_path = client_and_db
+    interne, externe = _entities(client)
+    acc = _make_account(client, interne)
+    b1 = _seed_bank_tx(db_path, acc, 90000, "e1")
+    tx = _recette(client, interne, externe, 90000)
+    r = client.put(f"/api/transactions/{tx}", json={"reconciled_manual": True})
+    assert r.json()["reconciled_manual"] == 1
+    s = client.get(f"/api/bank_reconciliation/transactions/{b1}/suggestions").json()
+    assert tx not in [x["transaction_id"] for x in s["suggestions"]]
+    # On peut annuler le forçage.
+    r = client.put(f"/api/transactions/{tx}", json={"reconciled_manual": False})
+    assert r.json()["reconciled_manual"] == 0

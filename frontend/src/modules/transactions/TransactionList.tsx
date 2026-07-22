@@ -272,6 +272,17 @@ export default function TransactionList() {
     }
   }
 
+  /** Switch « Rapprochée » (forçage manuel). Le rapprochement automatique via un
+   *  lien bancaire (tx.reconciled) reste prioritaire et non débrayable ici. */
+  async function toggleReconciled(tx: Transaction) {
+    try {
+      const updated = await api.updateTransaction(tx.id, { reconciled_manual: !tx.reconciled_manual });
+      patchTx(tx.id, { reconciled_manual: updated.reconciled_manual });
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   /** Switch « Remboursé » : bascule le statut de la fiche d'avance liée (source de vérité). */
   async function toggleReimbursed(tx: Transaction) {
     if (!tx.reimb_id) return;
@@ -484,6 +495,7 @@ export default function TransactionList() {
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Catégorie</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Avance de frais</th>
                 <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Justificatif</th>
+                <th className="px-4 py-3.5 text-left text-xs font-medium text-[#8a8a8a] uppercase tracking-wider">Rapproché</th>
                 <th
                   onClick={() => toggleSort("amount")}
                   className="px-4 py-3.5 text-right text-xs font-medium text-[#8a8a8a] uppercase tracking-wider cursor-pointer select-none hover:text-white"
@@ -602,6 +614,18 @@ export default function TransactionList() {
                         </button>
                       )}
                     </span>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <MiniSwitch
+                      checked={Boolean(tx.reconciled) || Boolean(tx.reconciled_manual)}
+                      onToggle={() => toggleReconciled(tx)}
+                      disabled={!isAdmin || Boolean(tx.reconciled)}
+                      title={tx.reconciled
+                        ? "Rapprochée automatiquement (liée à une ligne bancaire)"
+                        : tx.reconciled_manual
+                          ? "Rapprochée manuellement — cliquer pour annuler"
+                          : "Non rapprochée — cliquer pour marquer rapprochée"}
+                    />
                   </td>
                   <td className="px-4 py-3.5 text-right font-semibold whitespace-nowrap">
                     {(() => {
