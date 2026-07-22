@@ -377,7 +377,16 @@ export default function BankReconciliationPage() {
         <EbConfigModal onClose={() => setShowEbConfig(false)} onSaved={() => { setShowEbConfig(false); loadAccounts(); }} />
       )}
       {connectingAccount && (
-        <BankConnectModal account={connectingAccount} onClose={() => setConnectingAccount(null)} onError={setError} />
+        <BankConnectModal
+          account={connectingAccount}
+          onClose={() => setConnectingAccount(null)}
+          onError={setError}
+          onLinked={() => {
+            setNotice("Compte bancaire lié. Lance une synchronisation pour importer les opérations.");
+            loadAccounts();
+            if (selectedId) loadTxs(selectedId);
+          }}
+        />
       )}
     </div>
   );
@@ -479,12 +488,33 @@ function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 
 // ─── Sélection de la banque + redirection SCA ─────────────────────────────────
 
-function BankConnectModal({ account, onClose, onError }: { account: Account; onClose: () => void; onError: (m: string) => void }) {
+// Extrait le paramètre `code` si l'utilisateur colle l'URL de redirection
+// complète (https://127.0.0.1:8000/bank-reconciliation?code=...&state=...),
+// sinon renvoie la saisie telle quelle (il a collé le code seul).
+function extractAuthCode(raw: string): string {
+  const s = raw.trim();
+  const m = s.match(/[?&]code=([^&\s]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return s;
+}
+
+function BankConnectModal({
+  account, onClose, onError, onLinked,
+}: {
+  account: Account;
+  onClose: () => void;
+  onError: (m: string) => void;
+  onLinked: () => void;
+}) {
   const [banks, setBanks] = useState<{ name: string; country: string; logo: string | null }[]>([]);
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Étape 2 : après avoir ouvert la SCA, on attend le code d'autorisation.
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [finalizing, setFinalizing] = useState(false);
 
   useEffect(() => {
     api.listBanks("FR").then(setBanks).catch((e) => setError(e.message)).finally(() => setLoading(false));
@@ -495,12 +525,32 @@ function BankConnectModal({ account, onClose, onError }: { account: Account; onC
     setError(null);
     try {
       const res = await api.connectBank(account.id, name, "FR");
-      // Redirige le navigateur vers l'authentification forte de la banque.
-      window.location.href = res.url;
+      // Ouvre l'authentification forte de la banque dans un nouvel onglet et
+      // garde OpenFlow ouvert pour coller le code au retour (la page de
+      // redirection https ne se charge pas sur un serveur http local).
+      setAuthUrl(res.url);
+      window.open(res.url, "_blank", "noopener");
     } catch (e: any) {
       setError(e.message);
       onError(e.message);
+    } finally {
       setConnecting(null);
+    }
+  };
+
+  const finalize = async () => {
+    const c = extractAuthCode(code);
+    if (!c) { setError("Colle le code d'autorisation (ou l'URL de retour)."); return; }
+    setFinalizing(true);
+    setError(null);
+    try {
+      await api.finalizeBank(account.id, c);
+      onLinked();
+      onClose();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setFinalizing(false);
     }
   };
 
@@ -512,37 +562,67 @@ function BankConnectModal({ account, onClose, onError }: { account: Account; onC
         <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-white">Connecter « {account.label || account.entity_name} »</h2>
-            <p className="text-xs text-[#8a8a8a] mt-0.5">Choisis ta banque : tu seras redirigé vers son authentification sécurisée.</p>
+            <p className="text-xs text-[#8a8a8a] mt-0.5">
+              {authUrl ? "Authentifie-toi sur le site de ta banque, puis reviens coller le code." : "Choisis ta banque : tu seras redirigé vers son authentification sécurisée."}
+            </p>
           </div>
           <button onClick={onClose} className="text-[#8a8a8a] hover:text-white shrink-0"><X size={18} /></button>
         </div>
         <div className="px-6 py-4">
           {error && <div className="mb-3 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{error}</div>}
-          <div className="relative mb-3">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555]" />
-            <input className={`${inputClass} pl-9`} value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher (ex : Caisse d'Épargne)" />
-          </div>
-          {loading ? (
-            <div className="flex items-center justify-center py-10"><PageLoader fullScreen={false} /></div>
-          ) : shown.length === 0 ? (
-            <p className="text-sm text-[#555] py-4 text-center">Aucune banque trouvée.</p>
-          ) : (
-            <div className="space-y-1.5 max-h-80 overflow-y-auto">
-              {shown.map((b) => (
+
+          {authUrl ? (
+            <div className="space-y-4">
+              <ol className="text-sm text-text-secondary space-y-2 list-decimal list-inside">
+                <li>Un onglet s'est ouvert vers ta banque (sinon <a href={authUrl} target="_blank" rel="noopener noreferrer" className="text-accent-sand underline">clique ici</a>).</li>
+                <li>Authentifie-toi (identifiant + validation forte).</li>
+                <li>Ta banque te renvoie vers une page qui n'affiche rien : copie l'URL de cette page (ou juste la valeur <code className="text-accent-sand">code=…</code>) depuis la barre d'adresse.</li>
+                <li>Colle-la ci-dessous.</li>
+              </ol>
+              <div>
+                <label className={labelClass}>Code d'autorisation (ou URL de retour)</label>
+                <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} placeholder="https://127.0.0.1:8000/bank-reconciliation?code=…" />
+              </div>
+              <div className="flex items-center gap-3">
                 <button
-                  key={b.name}
-                  onClick={() => connect(b.name)}
-                  disabled={connecting !== null}
-                  className="w-full flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 hover:border-accent-sand/40 disabled:opacity-50 transition-colors text-left"
+                  onClick={finalize}
+                  disabled={finalizing || !code.trim()}
+                  className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 transition-colors"
                 >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <Landmark size={14} className="shrink-0 text-[#8a8a8a]" />
-                    <span className="text-sm text-white truncate">{b.name}</span>
-                  </span>
-                  {connecting === b.name ? <RefreshCw size={14} className="animate-spin text-accent-sand" /> : <Wifi size={14} className="text-[#555]" />}
+                  {finalizing ? "Liaison…" : "Lier le compte"}
                 </button>
-              ))}
+                <button onClick={() => { setAuthUrl(null); setCode(""); }} className="text-sm text-[#8a8a8a] hover:text-white transition-colors">Changer de banque</button>
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="relative mb-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555]" />
+                <input className={`${inputClass} pl-9`} value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher (ex : Caisse d'Épargne)" />
+              </div>
+              {loading ? (
+                <div className="flex items-center justify-center py-10"><PageLoader fullScreen={false} /></div>
+              ) : shown.length === 0 ? (
+                <p className="text-sm text-[#555] py-4 text-center">Aucune banque trouvée.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                  {shown.map((b) => (
+                    <button
+                      key={b.name}
+                      onClick={() => connect(b.name)}
+                      disabled={connecting !== null}
+                      className="w-full flex items-center justify-between gap-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 hover:border-accent-sand/40 disabled:opacity-50 transition-colors text-left"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Landmark size={14} className="shrink-0 text-[#8a8a8a]" />
+                        <span className="text-sm text-white truncate">{b.name}</span>
+                      </span>
+                      {connecting === b.name ? <RefreshCw size={14} className="animate-spin text-accent-sand" /> : <Wifi size={14} className="text-[#555]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
