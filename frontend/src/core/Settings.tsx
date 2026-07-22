@@ -4,7 +4,6 @@ import { api } from "../api";
 import { AppConfig, ModuleManifest } from "../types";
 import { Pencil, Check, X, Info, MapPin, ArrowRight } from "lucide-react";
 import { MODULE_ROUTES, INTEGRATED_LOCATIONS } from "../routes";
-import { formatEuros, eurosToCents, centsToEuros } from "../utils/format";
 import BalanceRefsSection from "./BalanceRefsSection";
 import PageLoader from "./PageLoader";
 import { useAuth } from "./AuthContext";
@@ -302,33 +301,13 @@ export default function Settings() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [expandedHelp, setExpandedHelp] = useState<string | null>(null);
   const [showCoreModules, setShowCoreModules] = useState(false);
-  const [rootEntityId, setRootEntityId] = useState<number | null>(null);
-  const [balanceRef, setBalanceRef] = useState<{ date: string; amount: number }>({ date: "2025-01-01", amount: 0 });
 
   async function reload() {
-    const [cfg, discoveredMods, entities] = await Promise.all([
+    const [cfg, discoveredMods] = await Promise.all([
       api.getConfig(),
       api.getAllModules(),
-      api.getEntities("internal").catch(() => []),
     ]);
     setConfig(cfg);
-
-    // Find root entity (is_default=1 or parent_id=null)
-    const root = entities.find((e: any) => e.is_default === 1) || entities.find((e: any) => !e.parent_id);
-    // Solde legacy : config.balance.amount est en euros, on normalise en centimes.
-    const cfgRef = { date: cfg.balance.date || "2025-01-01", amount: eurosToCents(String(cfg.balance.amount ?? 0)) };
-    if (root) {
-      setRootEntityId(root.id);
-      try {
-        const ref = await api.getBalanceRef(root.id);
-        // reference_amount est deja en centimes (table entity_balance_refs)
-        setBalanceRef({ date: ref.reference_date || "2025-01-01", amount: ref.reference_amount ?? 0 });
-      } catch {
-        setBalanceRef(cfgRef);
-      }
-    } else {
-      setBalanceRef(cfgRef);
-    }
 
     const manifestMap = new Map(discoveredMods.map((m: ModuleManifest) => [m.id, m]));
     const coreIds = new Set(
@@ -371,26 +350,6 @@ export default function Settings() {
 
   async function updateEntity(field: string, value: string) {
     await api.updateEntity({ [field]: value });
-    await reload();
-  }
-
-  async function updateBalanceRef(field: string, value: string) {
-    if (rootEntityId) {
-      const payload: any = {
-        reference_date: balanceRef.date,
-        reference_amount: balanceRef.amount, // deja en centimes
-      };
-      // value est saisi en euros : on reconvertit en centimes pour l'API
-      if (field === "amount") payload.reference_amount = eurosToCents(value);
-      if (field === "date") payload.reference_date = value;
-      await api.updateBalanceRef(rootEntityId, payload);
-    } else {
-      // Fallback to legacy config : le config stocke des euros
-      const payload: any = {};
-      if (field === "amount") payload.amount = centsToEuros(eurosToCents(value));
-      else payload[field] = value;
-      await api.updateBalance(payload);
-    }
     await reload();
   }
 
@@ -561,22 +520,9 @@ export default function Settings() {
                         options={CURRENCIES}
                       />
                     </div>
-                    <div className="border-t border-[#1a1a1a] pt-4">
-                      <EditableField
-                        label="Date de référence"
-                        value={balanceRef.date}
-                        onSave={(v) => updateBalanceRef("date", v)}
-                        type="date"
-                      />
-                    </div>
-                    <div className="border-t border-[#1a1a1a] pt-4">
-                      <EditableField
-                        label="Solde de référence"
-                        value={String(centsToEuros(balanceRef.amount))}
-                        displayValue={formatEuros(balanceRef.amount)}
-                        onSave={(v) => updateBalanceRef("amount", v)}
-                        type="number"
-                      />
+                    <div className="border-t border-[#1a1a1a] pt-4 flex items-center gap-1.5 text-xs text-text-secondary">
+                      <MapPin size={11} className="text-[#8a8a8a]" />
+                      <span>Le solde global de la trésorerie (compte, livret, caisse) se définit désormais dans l'onglet <Link to="/treasury" className="text-accent-sand hover:underline">Trésorerie</Link>.</span>
                     </div>
                   </div>
                 </section>

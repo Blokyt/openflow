@@ -3,7 +3,7 @@
   "name": "Trésorerie",
   "description": "Répartit la trésorerie de l'association en poches (compte, livret, caisse) et enregistre les transferts entre poches",
   "help": "Le total de ta trésorerie se décompose en poches physiques : compte bancaire, livret, caisse d'espèces. Chaque poche a un solde de référence que tu fixes à un instant donné, puis qui évolue avec les transferts. Un transfert entre poches (virement livret vers compte, sortie d'espèces...) déplace l'argent sans changer le total. Le compte peut être relié à ta banque : OpenFlow affiche l'écart avec le solde réel et t'aligne dessus en un clic.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": [],

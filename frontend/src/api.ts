@@ -386,14 +386,13 @@ export const api = {
   getPockets: () => request<{ pockets: any[]; total_cents: number }>("/treasury/pockets"),
   createPocket: (name: string) =>
     request<any>("/treasury/pockets", { method: "POST", body: JSON.stringify({ name }) }),
-  updatePocket: (id: number, body: { name?: string; reference_cents?: number; reference_date?: string; bank_account_id?: number }) =>
+  updatePocket: (id: number, body: { name?: string; reference_cents?: number; reference_date?: string; bank_account_id?: number; annual_rate?: number }) =>
     request<any>(`/treasury/pockets/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deletePocket: (id: number) => request<any>(`/treasury/pockets/${id}`, { method: "DELETE" }),
-  alignPocketBank: (id: number) => request<any>(`/treasury/pockets/${id}/align-bank`, { method: "POST" }),
-  getPocketTransfers: () => request<any[]>("/treasury/transfers"),
-  createPocketTransfer: (body: { from_pocket_id: number; to_pocket_id: number; amount_cents: number; date: string; label: string }) =>
-    request<any>("/treasury/transfers", { method: "POST", body: JSON.stringify(body) }),
-  deletePocketTransfer: (id: number) => request<any>(`/treasury/transfers/${id}`, { method: "DELETE" }),
+  getPocketMovements: () => request<any[]>("/treasury/movements"),
+  createPocketMovement: (body: { from_pocket_id: number | null; to_pocket_id: number | null; amount_cents: number; date: string; label: string }) =>
+    request<any>("/treasury/movements", { method: "POST", body: JSON.stringify(body) }),
+  deletePocketMovement: (id: number) => request<any>(`/treasury/movements/${id}`, { method: "DELETE" }),
   // Transactions récurrentes
   getRecurrences: () => request<any[]>("/recurrences/"),
   createRecurrence: (body: any) => request<any[]>("/recurrences/", { method: "POST", body: JSON.stringify(body) }),

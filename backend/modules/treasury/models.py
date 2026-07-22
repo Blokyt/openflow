@@ -32,4 +32,24 @@ migrations = {
         "INSERT INTO pockets (name, position, reference_cents, reference_date, created_at) VALUES ('Livret', 1, 0, '', '')",
         "INSERT INTO pockets (name, position, reference_cents, reference_date, created_at) VALUES ('Caisse', 2, 0, '', '')",
     ],
+    "1.1.0": [
+        # Taux annuel (pour un livret : sert à calculer les intérêts versés).
+        "ALTER TABLE pockets ADD COLUMN annual_rate REAL",
+        # Mouvements unifiés remplaçant les transferts : from/to nullable pour
+        # gérer rentrée (to seul), sortie (from seul) et transfert (from + to).
+        """CREATE TABLE pocket_movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_pocket_id INTEGER,
+            to_pocket_id INTEGER,
+            amount_cents INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )""",
+        """INSERT INTO pocket_movements (id, from_pocket_id, to_pocket_id, amount_cents, date, label, created_at)
+           SELECT id, from_pocket_id, to_pocket_id, amount_cents, date, label, created_at FROM pocket_transfers""",
+        "DROP TABLE pocket_transfers",
+        "CREATE INDEX idx_pmv_from ON pocket_movements(from_pocket_id)",
+        "CREATE INDEX idx_pmv_to ON pocket_movements(to_pocket_id)",
+    ],
 }

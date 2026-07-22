@@ -1,10 +1,16 @@
-"""API Trésorerie : poches (compte / livret / caisse) et transferts inter-poches.
+"""API Trésorerie : poches (compte / livret / caisse) et mouvements.
 
-Modèle : le total de la trésorerie se répartit en poches. Le solde d'une poche
-= reference_cents (solde fixé à un instant t) + net des transferts (entrants -
-sortants). Un transfert déplace de l'argent d'une poche à l'autre sans changer
-le total. Le compte peut être relié à un compte bancaire (module
-bank_reconciliation) pour afficher l'écart avec le solde réel.
+Source de vérité unique de "combien d'argent l'asso a et où".
+
+Deux modes de poche, jamais les deux à la fois :
+- reliée à un compte bancaire (bank_account_id) : solde = solde de la banque,
+  en lecture seule (toujours synchronisé) ;
+- manuelle : solde = reference_cents (solde fixé à un instant t) + net des
+  mouvements. Seules les poches manuelles participent aux mouvements.
+
+Mouvements (from/to nullable) : rentrée (to seul), sortie (from seul),
+transfert (from + to). Une rentrée augmente le total, une sortie le diminue,
+un transfert le conserve.
 """
 import sqlite3
 from datetime import datetime, timezone
@@ -23,23 +29,10 @@ def _now() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Calcul des soldes
+# Soldes
 # ---------------------------------------------------------------------------
 
-def _transfers_net(conn) -> dict:
-    """{pocket_id: solde net des transferts} (entrants - sortants)."""
-    net: dict = {}
-    for r in conn.execute(
-        "SELECT from_pocket_id AS f, to_pocket_id AS t, amount_cents AS a FROM pocket_transfers"
-    ).fetchall():
-        net[r["f"]] = net.get(r["f"], 0) - r["a"]
-        net[r["t"]] = net.get(r["t"], 0) + r["a"]
-    return net
-
-
 def _bank_balance(conn, bank_account_id) -> int | None:
-    """Solde réel du compte bancaire lié, si le module bank_reconciliation est
-    présent et le compte a été synchronisé. None sinon (couplage souple)."""
     if not bank_account_id:
         return None
     try:
@@ -59,13 +52,35 @@ def _pocket_or_404(conn, pocket_id: int) -> dict:
 
 
 def _pockets_payload(conn) -> dict:
-    net = _transfers_net(conn)
+    movements = conn.execute(
+        "SELECT from_pocket_id AS f, to_pocket_id AS t, amount_cents AS a, date AS d FROM pocket_movements"
+    ).fetchall()
     rows = conn.execute("SELECT * FROM pockets ORDER BY position, id").fetchall()
     pockets = []
     for r in rows:
         p = row_to_dict(r)
-        p["balance_cents"] = p["reference_cents"] + net.get(p["id"], 0)
-        p["bank_balance_cents"] = _bank_balance(conn, p["bank_account_id"])
+        linked = p["bank_account_id"] is not None
+        p["bank_linked"] = linked
+        if linked:
+            bank = _bank_balance(conn, p["bank_account_id"])
+            p["bank_balance_cents"] = bank
+            p["synced"] = bank is not None
+            p["balance_cents"] = bank if bank is not None else 0
+        else:
+            # Solde manuel = référence (à sa date) + mouvements postérieurs à
+            # cette date, comme les soldes de référence d'OpenFlow.
+            ref_date = p["reference_date"] or ""
+            net = 0
+            for m in movements:
+                if m["d"] < ref_date:
+                    continue
+                if m["t"] == p["id"]:
+                    net += m["a"]
+                if m["f"] == p["id"]:
+                    net -= m["a"]
+            p["bank_balance_cents"] = None
+            p["synced"] = None
+            p["balance_cents"] = p["reference_cents"] + net
         pockets.append(p)
     return {"pockets": pockets, "total_cents": sum(p["balance_cents"] for p in pockets)}
 
@@ -92,6 +107,7 @@ class PocketUpdate(BaseModel):
     reference_cents: int | None = None
     reference_date: str | None = None
     bank_account_id: int | None = None
+    annual_rate: float | None = None
 
 
 @router.post("/pockets", status_code=201)
@@ -128,8 +144,9 @@ def update_pocket(pocket_id: int, payload: PocketUpdate):
         if payload.reference_date is not None:
             fields.append("reference_date = ?"); values.append(payload.reference_date)
         if payload.bank_account_id is not None:
-            # 0 = délier
             fields.append("bank_account_id = ?"); values.append(payload.bank_account_id or None)
+        if payload.annual_rate is not None:
+            fields.append("annual_rate = ?"); values.append(payload.annual_rate if payload.annual_rate > 0 else None)
         if fields:
             values.append(pocket_id)
             conn.execute(f"UPDATE pockets SET {', '.join(fields)} WHERE id = ?", values)
@@ -144,12 +161,12 @@ def delete_pocket(pocket_id: int):
     conn = get_conn()
     try:
         _pocket_or_404(conn, pocket_id)
-        has_transfer = conn.execute(
-            "SELECT 1 FROM pocket_transfers WHERE from_pocket_id = ? OR to_pocket_id = ? LIMIT 1",
+        used = conn.execute(
+            "SELECT 1 FROM pocket_movements WHERE from_pocket_id = ? OR to_pocket_id = ? LIMIT 1",
             (pocket_id, pocket_id),
         ).fetchone()
-        if has_transfer:
-            raise HTTPException(status_code=409, detail="Poche utilisée par des transferts : supprime-les d'abord")
+        if used:
+            raise HTTPException(status_code=409, detail="Poche utilisée par des mouvements : supprime-les d'abord")
         conn.execute("DELETE FROM pockets WHERE id = ?", (pocket_id,))
         conn.commit()
         return _pockets_payload(conn)
@@ -157,50 +174,39 @@ def delete_pocket(pocket_id: int):
         conn.close()
 
 
-@router.post("/pockets/{pocket_id}/align-bank")
-def align_bank(pocket_id: int):
-    """Ajuste la référence de la poche pour que son solde affiché égale le solde
-    réel remonté par la banque (absorbe l'écart)."""
-    conn = get_conn()
-    try:
-        p = _pocket_or_404(conn, pocket_id)
-        bank = _bank_balance(conn, p["bank_account_id"])
-        if bank is None:
-            raise HTTPException(status_code=400, detail="Cette poche n'est pas reliée à un compte bancaire synchronisé")
-        net = _transfers_net(conn).get(pocket_id, 0)
-        # balance = reference + net doit valoir bank -> reference = bank - net
-        conn.execute(
-            "UPDATE pockets SET reference_cents = ?, reference_date = ? WHERE id = ?",
-            (bank - net, datetime.now(timezone.utc).strftime("%Y-%m-%d"), pocket_id),
-        )
-        conn.commit()
-        return _pockets_payload(conn)
-    finally:
-        conn.close()
-
-
 # ---------------------------------------------------------------------------
-# Transferts inter-poches
+# Mouvements (rentrée / sortie / transfert)
 # ---------------------------------------------------------------------------
 
-class TransferPayload(BaseModel):
-    from_pocket_id: int
-    to_pocket_id: int
+class MovementPayload(BaseModel):
+    from_pocket_id: int | None = None
+    to_pocket_id: int | None = None
     amount_cents: int
     date: str
     label: str = ""
 
 
-@router.get("/transfers")
-def list_transfers(limit: int = 100):
+def _assert_manual(conn, pocket_id: int):
+    """Une poche reliée à la banque est pilotée par la banque : elle ne peut pas
+    être source/destination d'un mouvement manuel (évite le double comptage)."""
+    p = _pocket_or_404(conn, pocket_id)
+    if p["bank_account_id"] is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La poche « {p['name']} » est synchronisée avec la banque : son solde vient de la banque, pas des mouvements manuels.",
+        )
+
+
+@router.get("/movements")
+def list_movements(limit: int = 100):
     conn = get_conn()
     try:
         rows = conn.execute(
-            """SELECT tr.*, pf.name AS from_name, pt.name AS to_name
-               FROM pocket_transfers tr
-               LEFT JOIN pockets pf ON pf.id = tr.from_pocket_id
-               LEFT JOIN pockets pt ON pt.id = tr.to_pocket_id
-               ORDER BY tr.date DESC, tr.id DESC
+            """SELECT m.*, pf.name AS from_name, pt.name AS to_name
+               FROM pocket_movements m
+               LEFT JOIN pockets pf ON pf.id = m.from_pocket_id
+               LEFT JOIN pockets pt ON pt.id = m.to_pocket_id
+               ORDER BY m.date DESC, m.id DESC
                LIMIT ?""",
             (limit,),
         ).fetchall()
@@ -209,20 +215,24 @@ def list_transfers(limit: int = 100):
         conn.close()
 
 
-@router.post("/transfers", status_code=201)
-def create_transfer(payload: TransferPayload):
-    if payload.from_pocket_id == payload.to_pocket_id:
-        raise HTTPException(status_code=400, detail="Les poches source et destination doivent être différentes")
+@router.post("/movements", status_code=201)
+def create_movement(payload: MovementPayload):
     if payload.amount_cents <= 0:
         raise HTTPException(status_code=400, detail="Le montant doit être positif")
+    if payload.from_pocket_id is None and payload.to_pocket_id is None:
+        raise HTTPException(status_code=400, detail="Indique au moins une poche (source ou destination)")
+    if payload.from_pocket_id is not None and payload.from_pocket_id == payload.to_pocket_id:
+        raise HTTPException(status_code=400, detail="Les poches source et destination doivent différer")
     if not payload.date:
         raise HTTPException(status_code=400, detail="Date requise")
     conn = get_conn()
     try:
-        _pocket_or_404(conn, payload.from_pocket_id)
-        _pocket_or_404(conn, payload.to_pocket_id)
+        if payload.from_pocket_id is not None:
+            _assert_manual(conn, payload.from_pocket_id)
+        if payload.to_pocket_id is not None:
+            _assert_manual(conn, payload.to_pocket_id)
         conn.execute(
-            """INSERT INTO pocket_transfers (from_pocket_id, to_pocket_id, amount_cents, date, label, created_at)
+            """INSERT INTO pocket_movements (from_pocket_id, to_pocket_id, amount_cents, date, label, created_at)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (payload.from_pocket_id, payload.to_pocket_id, payload.amount_cents,
              payload.date, payload.label.strip(), _now()),
@@ -233,13 +243,13 @@ def create_transfer(payload: TransferPayload):
         conn.close()
 
 
-@router.delete("/transfers/{transfer_id}")
-def delete_transfer(transfer_id: int):
+@router.delete("/movements/{movement_id}")
+def delete_movement(movement_id: int):
     conn = get_conn()
     try:
-        cur = conn.execute("DELETE FROM pocket_transfers WHERE id = ?", (transfer_id,))
+        cur = conn.execute("DELETE FROM pocket_movements WHERE id = ?", (movement_id,))
         if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Transfert introuvable")
+            raise HTTPException(status_code=404, detail="Mouvement introuvable")
         conn.commit()
         return _pockets_payload(conn)
     finally:
