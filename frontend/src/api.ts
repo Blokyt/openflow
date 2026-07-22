@@ -394,6 +394,12 @@ export const api = {
   createPocketTransfer: (body: { from_pocket_id: number; to_pocket_id: number; amount_cents: number; date: string; label: string }) =>
     request<any>("/treasury/transfers", { method: "POST", body: JSON.stringify(body) }),
   deletePocketTransfer: (id: number) => request<any>(`/treasury/transfers/${id}`, { method: "DELETE" }),
+  // Transactions récurrentes
+  getRecurrences: () => request<any[]>("/recurrences/"),
+  createRecurrence: (body: any) => request<any[]>("/recurrences/", { method: "POST", body: JSON.stringify(body) }),
+  updateRecurrence: (id: number, body: any) => request<any[]>(`/recurrences/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteRecurrence: (id: number) => request<any[]>(`/recurrences/${id}`, { method: "DELETE" }),
+  runRecurrences: () => request<{ generated: number }>("/recurrences/run", { method: "POST" }),
   listBanks: (country = "FR") =>
     request<{ name: string; country: string; logo: string | null }[]>(`/bank_reconciliation/banks?country=${country}`),
   connectBank: (accountId: number, aspsp_name: string, aspsp_country = "FR") =>

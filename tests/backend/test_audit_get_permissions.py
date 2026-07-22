@@ -96,6 +96,7 @@ EXPECTED_GET = {
     "/api/bank_reconciliation/transactions/{bank_transaction_id}/suggestions": "admin",
     "/api/treasury/pockets": "admin",
     "/api/treasury/transfers": "admin",
+    "/api/recurrences/": "admin",
     "/api/system/status": "admin",
     "/api/system/settings": "admin",
     "/api/system/backups": "admin",

@@ -1,0 +1,21 @@
+{
+  "id": "recurrences",
+  "name": "Récurrences",
+  "description": "Transactions récurrentes générées automatiquement (frais bancaires mensuels, cotisations, abonnements...)",
+  "help": "Définis une transaction qui revient régulièrement (par mois, semaine ou an) : OpenFlow crée automatiquement la vraie transaction à chaque échéance. Exemple : des frais bancaires de 5 € le 1er de chaque mois. Les échéances passées sont générées quand tu ouvres la page ou via le bouton, sans jamais créer de doublon.",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "entities"],
+  "requires_admin": true,
+  "menu": {
+    "label": "Récurrences",
+    "icon": "repeat",
+    "position": 12
+  },
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {},
+  "example": "Frais bancaires : 5 € du compte vers la banque, tous les mois. À chaque nouveau mois, la transaction est créée automatiquement."
+}

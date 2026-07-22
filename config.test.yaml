@@ -26,6 +26,7 @@ modules:
   helloasso: true
   bank_reconciliation: true
   treasury: true
+  recurrences: true
   direns: true
   users: true
   submissions: true

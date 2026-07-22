@@ -23,6 +23,7 @@ modules:
   direns: false
   entities: true
   helloasso: true
+  recurrences: false
   reimbursements: false
   reports: false
   submissions: true
