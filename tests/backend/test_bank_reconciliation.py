@@ -342,3 +342,38 @@ def test_manual_reconcile_flag_toggles_and_excludes(client_and_db):
     # On peut annuler le forçage.
     r = client.put(f"/api/transactions/{tx}", json={"reconciled_manual": False})
     assert r.json()["reconciled_manual"] == 0
+
+
+# ─── Imputation partielle (montant par lien) ──────────────────────────────────
+
+def test_partial_allocation_across_entries(client_and_db):
+    """Ligne 55 € couverte par une écriture de 25 € + une partie d'une de 90 €.
+    La 2e n'impute que 30 € (le restant à couvrir), et garde 60 € pour ailleurs."""
+    client, db_path = client_and_db
+    interne, externe = _entities(client)
+    acc = _make_account(client, interne)
+    bid = _seed_bank_tx(db_path, acc, 5500, "e1")          # ligne 55 €
+    tx25 = _recette(client, interne, externe, 2500)        # écriture 25 €
+    tx90 = _recette(client, interne, externe, 9000)        # écriture 90 €
+
+    r1 = client.post(f"/api/bank_reconciliation/transactions/{bid}/links", json={"transaction_id": tx25})
+    assert r1.json()["linked_cents"] == 2500
+    assert r1.json()["pending_cents"] == 3000
+
+    r2 = client.post(f"/api/bank_reconciliation/transactions/{bid}/links", json={"transaction_id": tx90})
+    body = r2.json()
+    assert body["linked_cents"] == 5500          # 25 + 30, pas 115
+    assert body["pending_cents"] == 0
+    assert body["reconciled"] is True
+    # Le lien de la 90 € n'impute que 30 €.
+    link90 = next(l for l in body["links"] if l["transaction_id"] == tx90)
+    assert link90["amount"] == 3000
+    assert link90["tx_amount"] == 9000
+
+    # tx90 n'est pas entièrement imputée -> pas rapprochée, et il lui reste 60 €.
+    assert _tx_reconciled(db_path, tx90) == 0
+    b2 = _seed_bank_tx(db_path, acc, 6000, "e2")
+    s = client.get(f"/api/bank_reconciliation/transactions/{b2}/suggestions").json()
+    sug90 = next((x for x in s["suggestions"] if x["transaction_id"] == tx90), None)
+    assert sug90 is not None
+    assert sug90["remaining_cents"] == 6000

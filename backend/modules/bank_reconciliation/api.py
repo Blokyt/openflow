@@ -48,7 +48,8 @@ def _linked_map(conn, bank_ids) -> dict:
         return {}
     ph = ",".join("?" * len(ids))
     rows = conn.execute(
-        f"""SELECT l.bank_transaction_id AS bid, COALESCE(SUM(t.amount), 0) AS linked
+        f"""SELECT l.bank_transaction_id AS bid,
+                   COALESCE(SUM(COALESCE(l.amount_cents, t.amount)), 0) AS linked
             FROM bank_transaction_links l
             JOIN transactions t ON t.id = l.transaction_id
             WHERE l.bank_transaction_id IN ({ph})
@@ -106,15 +107,29 @@ def _enrich_all(conn, rows) -> list:
     return [_enrich(b, linked.get(b["id"], 0)) for b in items]
 
 
-def _refresh_transaction_reconciled(conn, transaction_id: int) -> None:
-    """Met à jour transactions.reconciled : 1 si l'écriture a au moins une
-    liaison bancaire, 0 sinon. Réutilise les colonnes vestiges reconciled /
-    reconciled_at de la table transactions (migration transactions 1.4.0)."""
-    has_link = conn.execute(
-        "SELECT 1 FROM bank_transaction_links WHERE transaction_id = ? LIMIT 1",
+def _tx_allocated(conn, transaction_id: int) -> int:
+    """Montant de l'écriture déjà imputé à des lignes bancaires (toutes lignes
+    confondues), en tenant compte du montant par lien."""
+    row = conn.execute(
+        """SELECT COALESCE(SUM(COALESCE(l.amount_cents, t.amount)), 0) AS alloc
+           FROM bank_transaction_links l
+           JOIN transactions t ON t.id = l.transaction_id
+           WHERE l.transaction_id = ?""",
         (transaction_id,),
-    ).fetchone() is not None
-    if has_link:
+    ).fetchone()
+    return row["alloc"] if row else 0
+
+
+def _refresh_transaction_reconciled(conn, transaction_id: int) -> None:
+    """Met à jour transactions.reconciled : 1 quand l'écriture est ENTIÈREMENT
+    imputée (somme des montants imputés >= son montant), 0 sinon. Réutilise les
+    colonnes reconciled / reconciled_at (migration transactions 1.4.0)."""
+    tx = conn.execute("SELECT amount FROM transactions WHERE id = ?", (transaction_id,)).fetchone()
+    if tx is None:
+        return
+    amount = tx["amount"] if hasattr(tx, "keys") else tx[0]
+    fully = _tx_allocated(conn, transaction_id) >= amount
+    if fully:
         conn.execute(
             "UPDATE transactions SET reconciled = 1, reconciled_at = ? WHERE id = ?",
             (_now(), transaction_id),
@@ -148,7 +163,7 @@ def _all_account_counters(conn) -> dict:
     seule requête (évite le N+1 dans la liste des comptes)."""
     rows = conn.execute(
         """SELECT bt.bank_account_id AS aid, bt.amount, bt.reconciled_manual,
-                  COALESCE(SUM(t.amount), 0) AS linked
+                  COALESCE(SUM(COALESCE(l.amount_cents, t.amount)), 0) AS linked
            FROM bank_transactions bt
            LEFT JOIN bank_transaction_links l ON l.bank_transaction_id = bt.id
            LEFT JOIN transactions t ON t.id = l.transaction_id
@@ -302,7 +317,8 @@ def _bank_or_404(conn, bank_transaction_id: int) -> dict:
 
 def _links_payload(conn, bank_transaction_id: int, bt: dict) -> dict:
     rows = conn.execute(
-        """SELECT l.id AS link_id, t.id AS transaction_id, t.date, t.label, t.amount,
+        """SELECT l.id AS link_id, t.id AS transaction_id, t.date, t.label,
+                  COALESCE(l.amount_cents, t.amount) AS amount, t.amount AS tx_amount,
                   t.from_entity_id, t.to_entity_id,
                   fe.name AS from_entity_name, te.name AS to_entity_name
            FROM bank_transaction_links l
@@ -329,6 +345,9 @@ def _links_payload(conn, bank_transaction_id: int, bt: dict) -> dict:
 
 class LinkPayload(BaseModel):
     transaction_id: int
+    # Montant imputé de l'écriture à cette ligne (centimes). Absent = auto :
+    # min(restant à couvrir sur la ligne, restant non imputé de l'écriture).
+    amount_cents: int | None = None
 
 
 @router.get("/transactions/{bank_transaction_id}/links")
@@ -343,22 +362,45 @@ def list_links(bank_transaction_id: int):
 
 @router.post("/transactions/{bank_transaction_id}/links", status_code=201)
 def add_link(bank_transaction_id: int, payload: LinkPayload):
-    """Associe une écriture à la ligne bancaire. Pas d'exclusivité : une même
-    écriture peut être répartie sur plusieurs lignes bancaires (division), et
-    une ligne bancaire peut regrouper plusieurs écritures (regroupement)."""
+    """Impute (une partie d')une écriture à la ligne bancaire. Many-to-many avec
+    montant par lien : une écriture peut être répartie sur plusieurs lignes, et
+    une ligne couverte par plusieurs écritures (partiellement)."""
     conn = get_conn()
     try:
         bt = _bank_or_404(conn, bank_transaction_id)
         tx = conn.execute(
-            "SELECT id FROM transactions WHERE id = ?", (payload.transaction_id,)
+            "SELECT id, amount FROM transactions WHERE id = ?", (payload.transaction_id,)
         ).fetchone()
         if tx is None:
             raise HTTPException(status_code=404, detail="Écriture introuvable")
+        dup = conn.execute(
+            "SELECT 1 FROM bank_transaction_links WHERE bank_transaction_id = ? AND transaction_id = ?",
+            (bank_transaction_id, payload.transaction_id),
+        ).fetchone()
+        if dup is not None:
+            raise HTTPException(status_code=409, detail="Cette écriture est déjà associée à cette ligne bancaire")
+
+        tx_amount = tx["amount"] if hasattr(tx, "keys") else tx[1]
+        tx_remaining = tx_amount - _tx_allocated(conn, payload.transaction_id)
+        if tx_remaining <= 0:
+            raise HTTPException(status_code=400, detail="Cette écriture est déjà entièrement imputée")
+        bank_pending = abs(bt["amount"]) - _linked_map(conn, [bank_transaction_id]).get(bank_transaction_id, 0)
+
+        if payload.amount_cents is not None:
+            amount = payload.amount_cents
+            if amount <= 0:
+                raise HTTPException(status_code=400, detail="Le montant imputé doit être positif")
+            if amount > tx_remaining:
+                raise HTTPException(status_code=400, detail="Montant supérieur au restant non imputé de l'écriture")
+        else:
+            base = bank_pending if bank_pending > 0 else tx_remaining
+            amount = max(1, min(tx_remaining, base))
+
         try:
             conn.execute(
                 """INSERT INTO bank_transaction_links
-                   (bank_transaction_id, transaction_id, created_at) VALUES (?, ?, ?)""",
-                (bank_transaction_id, payload.transaction_id, _now()),
+                   (bank_transaction_id, transaction_id, amount_cents, created_at) VALUES (?, ?, ?, ?)""",
+                (bank_transaction_id, payload.transaction_id, amount, _now()),
             )
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="Cette écriture est déjà associée à cette ligne bancaire")
@@ -439,19 +481,23 @@ def suggestions(bank_transaction_id: int, limit: int = Query(default=20, ge=1, l
             rows = conn.execute(
                 f"""SELECT t.id AS transaction_id, t.date, t.label, t.amount,
                            t.from_entity_id, t.to_entity_id,
-                           fe.name AS from_entity_name, te.name AS to_entity_name
+                           fe.name AS from_entity_name, te.name AS to_entity_name,
+                           t.amount - COALESCE(SUM(CASE WHEN l.id IS NOT NULL
+                               THEN COALESCE(l.amount_cents, t.amount) ELSE 0 END), 0) AS remaining_cents
                     FROM transactions t
+                    LEFT JOIN bank_transaction_links l ON l.transaction_id = t.id
                     LEFT JOIN entities fe ON fe.id = t.from_entity_id
                     LEFT JOIN entities te ON te.id = t.to_entity_id
                     WHERE {direction}
                       AND t.id NOT IN (
                           SELECT transaction_id FROM bank_transaction_links
                           WHERE bank_transaction_id = ?)
-                      -- Exclut les écritures déjà rapprochées (consommées par une
-                      -- autre ligne, ou forcées à la main) : plus re-rapprochables.
-                      AND COALESCE(t.reconciled, 0) = 0
+                      -- Une écriture forcée rapprochée à la main n'est plus proposée.
                       AND COALESCE(t.reconciled_manual, 0) = 0
-                    ORDER BY (t.amount > ?) ASC, ABS(t.amount - ?) ASC, t.date DESC
+                    GROUP BY t.id
+                    -- Reste proposée tant qu'il lui reste du montant non imputé.
+                    HAVING remaining_cents > 0
+                    ORDER BY (remaining_cents > ?) ASC, ABS(remaining_cents - ?) ASC, t.date DESC
                     LIMIT ?""",
                 internal_ids + internal_ids + [bank_transaction_id, reste, reste, limit],
             ).fetchall()

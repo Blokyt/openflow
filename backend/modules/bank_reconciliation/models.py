@@ -70,4 +70,11 @@ migrations = {
         "ALTER TABLE bank_accounts ADD COLUMN balance_cents INTEGER",
         "ALTER TABLE bank_accounts ADD COLUMN balance_date TEXT NOT NULL DEFAULT ''",
     ],
+    "1.4.0": [
+        # Montant imputé par lien : permet le many-to-many réel (une écriture
+        # répartie sur plusieurs lignes bancaires, une ligne couverte par
+        # plusieurs écritures partiellement). NULL = montant plein de l'écriture
+        # (rétro-compat des liens existants).
+        "ALTER TABLE bank_transaction_links ADD COLUMN amount_cents INTEGER",
+    ],
 }

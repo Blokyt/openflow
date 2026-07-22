@@ -42,6 +42,10 @@ type TxRow = {
   date: string;
   label: string;
   amount: number;
+  /** Montant restant non imputé (suggestions) : ce qui peut encore être associé. */
+  remaining_cents?: number;
+  /** Montant total de l'écriture (quand différent du montant imputé au lien). */
+  tx_amount?: number;
   from_entity_name: string | null;
   to_entity_name: string | null;
 };
@@ -1024,7 +1028,12 @@ function LinkPanel({ bankTx, onClose, onChanged }: { bankTx: BankTx; onClose: ()
                         <div className="text-xs text-[#8a8a8a] truncate">{txMeta(tx)}</div>
                       </div>
                       <div className="flex items-center gap-3 whitespace-nowrap">
-                        <span className="text-sm font-semibold text-text-secondary">{formatEuros(tx.amount)}</span>
+                        <span className="text-sm font-semibold text-text-secondary">
+                          {formatEuros(tx.amount)}
+                          {tx.tx_amount != null && tx.tx_amount !== tx.amount && (
+                            <span className="text-[10px] text-[#8a8a8a] ml-1">/ {formatEuros(tx.tx_amount)}</span>
+                          )}
+                        </span>
                         <button onClick={() => dissociate(tx)} disabled={busy === tx.transaction_id} className="text-[#8a8a8a] hover:text-alert disabled:opacity-40" title="Dissocier">
                           <Trash2 size={15} />
                         </button>
@@ -1052,7 +1061,12 @@ function LinkPanel({ bankTx, onClose, onChanged }: { bankTx: BankTx; onClose: ()
                         <div className="text-xs text-[#8a8a8a] truncate">{txMeta(tx)}</div>
                       </div>
                       <div className="flex items-center gap-3 whitespace-nowrap">
-                        <span className="text-sm font-semibold text-text-secondary">{formatEuros(tx.amount)}</span>
+                        <span className="text-sm font-semibold text-text-secondary">
+                          {formatEuros(tx.remaining_cents ?? tx.amount)}
+                          {tx.remaining_cents != null && tx.remaining_cents !== tx.amount && (
+                            <span className="text-[10px] text-[#8a8a8a] ml-1">restant / {formatEuros(tx.amount)}</span>
+                          )}
+                        </span>
                         <button onClick={() => associate(tx)} disabled={busy === tx.transaction_id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-black bg-accent-sand hover:bg-accent-sand disabled:opacity-40">
                           <Plus size={12} /> Associer
                         </button>
