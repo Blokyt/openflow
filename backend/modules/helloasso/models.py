@@ -51,4 +51,11 @@ migrations = {
         )""",
         "CREATE INDEX idx_hact_tx ON helloasso_campaign_transactions(transaction_id)",
     ],
+    "1.3.0": [
+        # Montant imputé par lien (comme le rapprochement bancaire) : permet le
+        # many-to-many réel — une transaction répartie sur plusieurs campagnes
+        # (régularisation), une campagne couverte par plusieurs transactions.
+        # NULL = montant plein de la transaction (rétro-compat des liens existants).
+        "ALTER TABLE helloasso_campaign_transactions ADD COLUMN amount_cents INTEGER",
+    ],
 }

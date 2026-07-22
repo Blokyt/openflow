@@ -112,18 +112,42 @@ def test_unlink_restores_pending(client_and_db):
     assert r.json()["links"] == []
 
 
-def test_link_exclusivity_conflict(client_and_db):
-    """Une transaction déjà liée à une autre campagne -> 409."""
+def test_transaction_splits_across_campaigns(client_and_db):
+    """Régularisation : une transaction est répartie (many-to-many) sur plusieurs
+    campagnes, chaque lien n'imputant qu'une partie du montant."""
     client, db_path = client_and_db
     fy = _make_fiscal_year(db_path)
-    cid1 = _seed_campaign(db_path, fy, collected=400000, slug="cotis")
-    cid2 = _seed_campaign(db_path, fy, collected=200000, slug="dons")
+    cid1 = _seed_campaign(db_path, fy, collected=30000, slug="cotis")   # 300 €
+    cid2 = _seed_campaign(db_path, fy, collected=418000, slug="dons")   # 4180 €
     interne, externe = _entities(client)
-    tx = _recette(client, interne, externe, 100000)
+    tx = _recette(client, interne, externe, 448000)                     # régul 4480 €
 
-    client.post(f"/api/helloasso/campaigns/{cid1}/links", json={"transaction_id": tx})
-    r = client.post(f"/api/helloasso/campaigns/{cid2}/links", json={"transaction_id": tx})
-    assert r.status_code == 409
+    # Impute auto sur cid1 : min(restant campagne 300 €, restant tx 4480 €) = 300 €.
+    r1 = client.post(f"/api/helloasso/campaigns/{cid1}/links", json={"transaction_id": tx})
+    assert r1.status_code == 201
+    assert r1.json()["linked_cents"] == 30000
+    assert r1.json()["pending_cents"] == 0
+
+    # La MÊME transaction s'impute sur cid2 : il lui reste 4180 €.
+    r2 = client.post(f"/api/helloasso/campaigns/{cid2}/links", json={"transaction_id": tx})
+    assert r2.status_code == 201
+    assert r2.json()["linked_cents"] == 418000
+    assert r2.json()["pending_cents"] == 0
+
+
+def test_link_amount_override_and_fully_allocated_guard(client_and_db):
+    client, db_path = client_and_db
+    fy = _make_fiscal_year(db_path)
+    cid = _seed_campaign(db_path, fy, collected=100000, slug="cotis")
+    interne, externe = _entities(client)
+    tx = _recette(client, interne, externe, 60000)
+    # Impute explicitement 25 000 sur la campagne.
+    r = client.post(f"/api/helloasso/campaigns/{cid}/links", json={"transaction_id": tx, "amount_cents": 25000})
+    assert r.json()["linked_cents"] == 25000
+    # Trop imputer (au-delà du restant de la transaction) -> 400.
+    cid2 = _seed_campaign(db_path, fy, collected=100000, slug="dons")
+    r = client.post(f"/api/helloasso/campaigns/{cid2}/links", json={"transaction_id": tx, "amount_cents": 40000})
+    assert r.status_code == 400  # il ne reste que 35 000
 
 
 def test_link_same_campaign_twice_conflict(client_and_db):

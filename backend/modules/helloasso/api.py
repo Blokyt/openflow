@@ -31,7 +31,8 @@ def _linked_cents_map(conn, campaign_ids) -> dict:
         return {}
     ph = ",".join("?" * len(ids))
     rows = conn.execute(
-        f"""SELECT l.campaign_id AS cid, COALESCE(SUM(t.amount), 0) AS linked
+        f"""SELECT l.campaign_id AS cid,
+                   COALESCE(SUM(COALESCE(l.amount_cents, t.amount)), 0) AS linked
             FROM helloasso_campaign_transactions l
             JOIN transactions t ON t.id = l.transaction_id
             WHERE l.campaign_id IN ({ph})
@@ -204,7 +205,8 @@ def _get_campaign_by_id(conn, campaign_id: int) -> dict:
 def _links_payload(conn, campaign_id: int, camp: dict) -> dict:
     """Construit la réponse {campagne, transactions liées, lié, restant}."""
     rows = conn.execute(
-        """SELECT l.id AS link_id, t.id AS transaction_id, t.date, t.label, t.amount,
+        """SELECT l.id AS link_id, t.id AS transaction_id, t.date, t.label,
+                  COALESCE(l.amount_cents, t.amount) AS amount, t.amount AS tx_amount,
                   t.from_entity_id, t.to_entity_id,
                   fe.name AS from_entity_name, te.name AS to_entity_name
            FROM helloasso_campaign_transactions l
@@ -228,6 +230,21 @@ def _links_payload(conn, campaign_id: int, camp: dict) -> dict:
 
 class LinkPayload(BaseModel):
     transaction_id: int
+    # Montant imputé à cette campagne (centimes). Absent = imputation auto
+    # (min du restant de la campagne et du restant non imputé de la transaction).
+    amount_cents: int | None = None
+
+
+def _tx_allocated(conn, transaction_id: int) -> int:
+    """Montant déjà imputé de cette transaction, toutes campagnes confondues."""
+    row = conn.execute(
+        """SELECT COALESCE(SUM(COALESCE(l.amount_cents, t.amount)), 0) AS alloc
+           FROM helloasso_campaign_transactions l
+           JOIN transactions t ON t.id = l.transaction_id
+           WHERE l.transaction_id = ?""",
+        (transaction_id,),
+    ).fetchone()
+    return row["alloc"] if row else 0
 
 
 @router.get("/campaigns/{campaign_id}/links")
@@ -243,32 +260,50 @@ def list_campaign_links(campaign_id: int):
 
 @router.post("/campaigns/{campaign_id}/links", status_code=201)
 def add_campaign_link(campaign_id: int, payload: LinkPayload):
-    """Associe une transaction à la campagne. Une transaction ne peut être liée
-    qu'à une seule campagne (exclusivité, pour éviter le double comptage)."""
+    """Impute (une partie d')une transaction à la campagne. Many-to-many : une
+    transaction peut être répartie sur plusieurs campagnes et une campagne
+    couverte par plusieurs transactions (comme le rapprochement bancaire)."""
     conn = get_conn()
     try:
         camp = _get_campaign_by_id(conn, campaign_id)
         tx = conn.execute(
-            "SELECT id FROM transactions WHERE id = ?", (payload.transaction_id,)
+            "SELECT id, amount FROM transactions WHERE id = ?", (payload.transaction_id,)
         ).fetchone()
         if tx is None:
             raise HTTPException(status_code=404, detail="Transaction introuvable")
-        existing = conn.execute(
-            "SELECT campaign_id FROM helloasso_campaign_transactions WHERE transaction_id = ?",
-            (payload.transaction_id,),
+        dup = conn.execute(
+            "SELECT 1 FROM helloasso_campaign_transactions WHERE campaign_id = ? AND transaction_id = ?",
+            (campaign_id, payload.transaction_id),
         ).fetchone()
-        if existing is not None:
-            if existing["campaign_id"] == campaign_id:
-                raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à cette campagne")
-            raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à une autre campagne")
+        if dup is not None:
+            raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à cette campagne")
+
+        tx_amount = tx["amount"] if hasattr(tx, "keys") else tx[1]
+        tx_remaining = tx_amount - _tx_allocated(conn, payload.transaction_id)
+        if tx_remaining <= 0:
+            raise HTTPException(status_code=400, detail="Cette transaction est déjà entièrement imputée")
+        campaign_pending = camp["collected_cents"] - _linked_cents_map(conn, [campaign_id]).get(campaign_id, 0)
+
+        if payload.amount_cents is not None:
+            amount = payload.amount_cents
+            if amount <= 0:
+                raise HTTPException(status_code=400, detail="Le montant imputé doit être positif")
+            if amount > tx_remaining:
+                raise HTTPException(status_code=400, detail="Montant supérieur au restant non imputé de la transaction")
+        else:
+            # Imputation auto : ce qui reste à couvrir sur la campagne, borné par
+            # le restant de la transaction. Si la campagne est déjà couverte, on
+            # impute quand même le restant de la transaction (l'écart s'affiche).
+            base = campaign_pending if campaign_pending > 0 else tx_remaining
+            amount = max(1, min(tx_remaining, base))
+
         try:
             conn.execute(
-                "INSERT INTO helloasso_campaign_transactions (campaign_id, transaction_id, created_at) VALUES (?, ?, ?)",
-                (campaign_id, payload.transaction_id, _now()),
+                "INSERT INTO helloasso_campaign_transactions (campaign_id, transaction_id, amount_cents, created_at) VALUES (?, ?, ?, ?)",
+                (campaign_id, payload.transaction_id, amount, _now()),
             )
         except sqlite3.IntegrityError:
-            # Course entre deux requêtes simultanées : la contrainte UNIQUE a gagné.
-            raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à une campagne")
+            raise HTTPException(status_code=409, detail="Cette transaction est déjà associée à cette campagne")
         conn.commit()
         return _links_payload(conn, campaign_id, camp)
     finally:
@@ -311,20 +346,29 @@ def campaign_suggestions(campaign_id: int, limit: int = Query(default=20, ge=1, 
         suggestions = []
         if internal_ids:
             ph = ",".join("?" * len(internal_ids))
+            # remaining_cents = montant de la transaction non encore imputé (à une
+            # campagne quelconque). On propose ce restant, borné à ce qui manque
+            # sur la campagne. Une transaction déjà partiellement imputée reste
+            # proposée tant qu'il lui reste du montant (cas régularisation).
             rows = conn.execute(
                 f"""SELECT t.id AS transaction_id, t.date, t.label, t.amount,
                            t.from_entity_id, t.to_entity_id,
-                           fe.name AS from_entity_name, te.name AS to_entity_name
+                           fe.name AS from_entity_name, te.name AS to_entity_name,
+                           t.amount - COALESCE(SUM(CASE WHEN l.id IS NOT NULL
+                               THEN COALESCE(l.amount_cents, t.amount) ELSE 0 END), 0) AS remaining_cents
                     FROM transactions t
+                    LEFT JOIN helloasso_campaign_transactions l ON l.transaction_id = t.id
                     LEFT JOIN entities fe ON fe.id = t.from_entity_id
                     LEFT JOIN entities te ON te.id = t.to_entity_id
                     WHERE t.date BETWEEN ? AND ?
                       AND t.to_entity_id IN ({ph})
                       AND (t.from_entity_id IS NULL OR t.from_entity_id NOT IN ({ph}))
-                      AND t.id NOT IN (SELECT transaction_id FROM helloasso_campaign_transactions)
-                    ORDER BY (t.amount > ?) ASC, ABS(t.amount - ?) ASC, t.date DESC
+                      AND t.id NOT IN (SELECT transaction_id FROM helloasso_campaign_transactions WHERE campaign_id = ?)
+                    GROUP BY t.id
+                    HAVING remaining_cents > 0
+                    ORDER BY (remaining_cents > ?) ASC, ABS(remaining_cents - ?) ASC, t.date DESC
                     LIMIT ?""",
-                [start, end] + internal_ids + internal_ids + [reste, reste, limit],
+                [start, end] + internal_ids + internal_ids + [campaign_id, reste, reste, limit],
             ).fetchall()
             suggestions = [row_to_dict(r) for r in rows]
 

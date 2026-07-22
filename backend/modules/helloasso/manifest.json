@@ -3,7 +3,7 @@
   "name": "HelloAsso",
   "description": "Suivi des campagnes et billetteries HelloAsso, associées aux transactions de la compta",
   "help": "Connecte ta clé API HelloAsso pour suivre, par campagne et par exercice, le montant collecté en ligne. Associe à chaque campagne les transactions réelles de ta compta : tant que le collecté n'est pas entièrement couvert, le reste à prendre en compte s'affiche ; une fois à zéro, la campagne disparaît de la liste à traiter.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "categories", "entities"],
