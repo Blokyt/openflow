@@ -505,6 +505,35 @@ export default function Settings() {
             <PageLoader fullScreen={false} />
           ) : (
             <>
+              {(() => {
+                const tools = [
+                  { id: "system", label: "Système", desc: "État de l'installation, intégrité, snapshots" },
+                  { id: "backup", label: "Sauvegarde & restauration", desc: "Exporter et réimporter les données" },
+                  { id: "users", label: "Utilisateurs", desc: "Comptes, invitations, rôles" },
+                ].filter((t) => modules.find((m) => m.id === t.id)?.active && MODULE_ROUTES[t.id]);
+                if (tools.length === 0) return null;
+                return (
+                  <section className="mb-8">
+                    <h2 className="text-base font-semibold text-white mb-3">Administration</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {tools.map((t) => (
+                        <Link
+                          key={t.id}
+                          to={MODULE_ROUTES[t.id].path}
+                          className="bg-bg-card border border-border rounded-2xl p-5 hover:border-accent-sand/50 transition-colors group"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-white">{t.label}</span>
+                            <ArrowRight size={14} className="text-[#8a8a8a] group-hover:text-accent-sand transition-colors" />
+                          </div>
+                          <p className="text-xs text-text-secondary leading-relaxed">{t.desc}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
+
               {config && (
                 <section className="mb-8">
                   <h2 className="text-base font-semibold text-white mb-3">Entité</h2>

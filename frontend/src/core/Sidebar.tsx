@@ -66,6 +66,16 @@ const MODULE_PATH_MAP: Record<string, string> = {
 // Core modules: always shown, in fixed order
 const CORE_IDS = ["dashboard", "transactions", "categories", "entities"];
 
+// Modules d'administration : accessibles depuis Paramètres, pas dans la barre.
+const SETTINGS_ONLY = new Set(["system", "backup", "users"]);
+
+// Regroupement visuel des modules optionnels dans la barre. Les ids non listés
+// ici restent à plat (au-dessus des groupes).
+const SIDEBAR_GROUPS: { label: string; ids: string[] }[] = [
+  { label: "Banque & collectes", ids: ["helloasso", "bank_reconciliation"] },
+  { label: "Comptes & rapports", ids: ["budget", "reports", "direns"] },
+];
+
 // ─── Entity selector dropdown ─────────────────────────────────────────────────
 
 function EntitySelectorOption({
@@ -365,6 +375,7 @@ export default function Sidebar({ activeModules }: SidebarProps) {
   const optionalModules = activeModules
     .filter((m) => !CORE_IDS.includes(m.id))
     .filter((m) => m.menu && MODULE_IDS_WITH_ROUTE.has(m.id))
+    .filter((m) => !SETTINGS_ONLY.has(m.id))
     .sort((a, b) => (a.menu?.position ?? 99) - (b.menu?.position ?? 99));
 
   const optionalItems = optionalModules.map((m: any) => ({
@@ -384,6 +395,13 @@ export default function Sidebar({ activeModules }: SidebarProps) {
       undefined,
   }));
 
+  // Sépare les items à plat (hors groupe) des groupes visuels définis ci-dessus.
+  const groupedIds = new Set(SIDEBAR_GROUPS.flatMap((g) => g.ids));
+  const ungroupedItems = optionalItems.filter((it) => !groupedIds.has(it.id));
+  const groups = SIDEBAR_GROUPS
+    .map((g) => ({ label: g.label, items: optionalItems.filter((it) => g.ids.includes(it.id)) }))
+    .filter((g) => g.items.length > 0);
+
   return (
     <aside className="w-60 bg-bg-subtle border-r border-border flex flex-col h-full flex-shrink-0">
       <div className="px-5 py-6 border-b border-border">
@@ -402,14 +420,22 @@ export default function Sidebar({ activeModules }: SidebarProps) {
           <NavItem key={item.to} {...item} />
         ))}
 
-        {/* Separator if there are optional modules */}
-        {optionalItems.length > 0 && (
+        {/* Modules optionnels à plat (hors groupe) */}
+        {ungroupedItems.length > 0 && (
           <div className="!my-3 border-t border-[#1a1a1a]" />
         )}
-
-        {/* Optional modules — each one = one sidebar entry */}
-        {optionalItems.map((item) => (
+        {ungroupedItems.map((item) => (
           <NavItem key={item.to} {...item} />
+        ))}
+
+        {/* Groupes visuels */}
+        {groups.map((g) => (
+          <div key={g.label} className="pt-3">
+            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#666]">{g.label}</div>
+            {g.items.map((item) => (
+              <NavItem key={item.to} {...item} />
+            ))}
+          </div>
         ))}
       </nav>
 
