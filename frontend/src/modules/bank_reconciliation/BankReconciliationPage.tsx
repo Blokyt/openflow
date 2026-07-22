@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Upload, Landmark, Link2, CheckCircle2, AlertCircle, X, Plus, Trash2, Search,
   ChevronDown, GitCompare, BadgeCheck, RefreshCw, KeyRound, Cloud, Wifi,
+  Copy, ExternalLink,
 } from "lucide-react";
 import { api } from "../../api";
 import { formatEuros, formatDate, COLOR_INCOME, COLOR_EXPENSE } from "../../utils/format";
@@ -394,28 +395,79 @@ export default function BankReconciliationPage() {
 
 // ─── Configuration Enable Banking ─────────────────────────────────────────────
 
+function CopyField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard indisponible : l'utilisateur copie manuellement */ }
+  };
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className={labelClass}>{label}</label>
+        <button onClick={copy} className="inline-flex items-center gap-1 text-xs text-accent-sand hover:text-white transition-colors">
+          {copied ? <><CheckCircle2 size={12} /> Copié</> : <><Copy size={12} /> Copier</>}
+        </button>
+      </div>
+      <textarea readOnly value={value} rows={mono ? 4 : 1} className={`${inputClass} ${mono ? "font-mono text-[11px] leading-tight" : "text-xs"}`} onFocus={(e) => e.target.select()} />
+    </div>
+  );
+}
+
+// Assistant de configuration Enable Banking, intégré à OpenFlow : génère la
+// clé en interne, guide l'enregistrement de l'application, récupère l'ID.
 function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [appId, setAppId] = useState("");
-  const [privateKey, setPrivateKey] = useState("");
-  const [redirectUrl, setRedirectUrl] = useState("");
-  const [hasKey, setHasKey] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [configured, setConfigured] = useState(false);
+  const [appId, setAppId] = useState("");
+  const [certificate, setCertificate] = useState("");
+  const [redirectUrl, setRedirectUrl] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reconfigure, setReconfigure] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.getBankConfig().then((c) => {
+  const load = useCallback(async () => {
+    try {
+      const c = await api.getBankConfig();
+      setConfigured(c.configured);
       setAppId(c.application_id || "");
-      setRedirectUrl(c.redirect_url || `${window.location.origin}/bank-reconciliation`);
-      setHasKey(c.has_key);
-    }).catch((e) => setError(e.message)).finally(() => setLoading(false));
+      setCertificate(c.certificate || "");
+      setRedirectUrl(c.redirect_url || c.suggested_redirect_url || "");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const generate = async () => {
+    if (certificate && !confirm("Générer une nouvelle clé remplacera l'actuelle : tu devras réenregistrer l'application dans Enable Banking. Continuer ?")) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await api.generateBankKey();
+      setCertificate(res.certificate);
+      setRedirectUrl(res.redirect_url);
+      setAppId("");
+      setConfigured(false);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
-      await api.putBankConfig({ application_id: appId.trim(), private_key: privateKey.trim(), redirect_url: redirectUrl.trim() });
+      await api.putBankConfig({ application_id: appId.trim(), private_key: "", redirect_url: redirectUrl.trim() });
       onSaved();
     } catch (e: any) {
       setError(e.message);
@@ -423,10 +475,12 @@ function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     }
   };
 
+  const showConnected = configured && !reconfigure;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4">
+      <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4 z-10">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-accent-sand/10 border border-accent-sand/20 flex items-center justify-center text-accent-sand">
               <KeyRound size={18} />
@@ -438,46 +492,81 @@ function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           </div>
           <button onClick={onClose} className="text-[#8a8a8a] hover:text-white shrink-0"><X size={18} /></button>
         </div>
+
         <div className="px-6 py-5">
-          <div className="mb-4 text-xs text-[#8a8a8a] bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3 leading-relaxed">
-            Crée une application gratuite sur le Control Panel Enable Banking (mode « Restricted Production » pour tes propres comptes),
-            génère une clé RSA, téléverse le certificat public et récupère l'Application ID. Renseigne l'URL de redirection ci-dessous
-            dans le Control Panel à l'identique.
-          </div>
           {error && <div className="mb-4 bg-[#1a0a0a] border border-alert/30 text-alert rounded-xl p-3 text-sm">{error}</div>}
+
           {loading ? (
             <div className="flex items-center justify-center py-8"><PageLoader fullScreen={false} /></div>
-          ) : (
+          ) : showConnected ? (
             <div className="space-y-4">
+              <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                <CheckCircle2 size={16} /> Connecteur configuré (application {appId.slice(0, 8)}…).
+              </div>
+              <p className="text-xs text-[#8a8a8a]">Tu peux maintenant lier un compte via « Connecter à la banque », puis synchroniser.</p>
+              <button onClick={() => setReconfigure(true)} className="text-sm text-[#8a8a8a] hover:text-white transition-colors">Reconfigurer</button>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Étape 1 : générer la clé dans OpenFlow */}
               <div>
-                <label className={labelClass}>Application ID</label>
-                <input className={inputClass} value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="ex : cf589be3-3755-…" />
+                <div className="text-xs font-semibold text-white uppercase tracking-wider mb-2">1. Génère ta clé (dans OpenFlow)</div>
+                {certificate ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-400 text-xs"><CheckCircle2 size={13} /> Clé générée et enregistrée localement.</div>
+                    <CopyField label="Certificat public (à coller dans Enable Banking)" value={certificate} mono />
+                    <CopyField label="URL de redirection (à déclarer dans Enable Banking)" value={redirectUrl} />
+                    <button onClick={generate} disabled={generating} className="text-xs text-[#8a8a8a] hover:text-white transition-colors">
+                      {generating ? "Génération…" : "Régénérer une clé"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={generate}
+                    disabled={generating}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-50 transition-colors"
+                  >
+                    <KeyRound size={14} /> {generating ? "Génération…" : "Générer ma clé"}
+                  </button>
+                )}
               </div>
-              <div>
-                <label className={labelClass}>Clé privée RSA (PEM){hasKey && " — déjà enregistrée, laisse vide pour la conserver"}</label>
-                <textarea
-                  className={`${inputClass} font-mono text-xs`}
-                  rows={5}
-                  value={privateKey}
-                  onChange={(e) => setPrivateKey(e.target.value)}
-                  placeholder={hasKey ? "•••• (clé enregistrée)" : "-----BEGIN PRIVATE KEY-----"}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>URL de redirection</label>
-                <input className={inputClass} value={redirectUrl} onChange={(e) => setRedirectUrl(e.target.value)} />
-                <p className="text-xs text-[#555] mt-1">À déclarer à l'identique dans le Control Panel Enable Banking.</p>
-              </div>
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  onClick={save}
-                  disabled={saving || !appId.trim() || (!privateKey.trim() && !hasKey)}
-                  className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 transition-colors"
-                >
-                  {saving ? "Enregistrement…" : "Enregistrer"}
-                </button>
-                <span className="text-xs text-[#555]">La clé reste sur ta machine, jamais réaffichée.</span>
-              </div>
+
+              {/* Étape 2 : enregistrer l'application chez Enable Banking */}
+              {certificate && (
+                <div>
+                  <div className="text-xs font-semibold text-white uppercase tracking-wider mb-2">2. Enregistre l'application (chez Enable Banking)</div>
+                  <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside leading-relaxed">
+                    <li><a href="https://enablebanking.com/cp" target="_blank" rel="noopener noreferrer" className="text-accent-sand underline inline-flex items-center gap-1">Ouvre Enable Banking <ExternalLink size={11} /></a> et crée un compte gratuit (lien reçu par email).</li>
+                    <li>Onglet « API applications » → environnement <b>Production</b>.</li>
+                    <li>Option <b>« Generate outside the browser and import public certificate »</b>.</li>
+                    <li>Colle le <b>certificat</b> et l'<b>URL de redirection</b> ci-dessus. Remplis nom, description et emails.</li>
+                    <li>Valide, puis copie l'<b>Application ID</b> affiché.</li>
+                  </ol>
+                </div>
+              )}
+
+              {/* Étape 3 : coller l'Application ID */}
+              {certificate && (
+                <div>
+                  <div className="text-xs font-semibold text-white uppercase tracking-wider mb-2">3. Colle ton Application ID</div>
+                  <input className={inputClass} value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="ex : cf589be3-3755-465b-…" />
+                  <div className="flex items-center gap-3 pt-3">
+                    <button
+                      onClick={save}
+                      disabled={saving || !appId.trim()}
+                      className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 transition-colors"
+                    >
+                      {saving ? "Enregistrement…" : "Terminer la configuration"}
+                    </button>
+                    {reconfigure && <button onClick={() => setReconfigure(false)} className="text-sm text-[#8a8a8a] hover:text-white transition-colors">Annuler</button>}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[11px] text-[#555] leading-relaxed border-t border-[#1a1a1a] pt-3">
+                Ta clé privée reste dans OpenFlow, jamais transmise à Enable Banking (seul le certificat public l'est).
+                Le tier gratuit (« Restricted Production ») permet de lier <b>tes propres comptes</b> sans contrat.
+              </p>
             </div>
           )}
         </div>

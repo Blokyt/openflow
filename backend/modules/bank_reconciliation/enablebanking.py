@@ -111,6 +111,43 @@ class EnableBankingClient:
         return results
 
 
+def generate_keypair_and_cert() -> tuple[str, str]:
+    """Génère une paire RSA 2048 + un certificat auto-signé (PEM).
+
+    C'est exactement ce qu'Enable Banking attend : la clé privée signe les JWT,
+    le certificat public (qui contient la clé publique) est enregistré côté
+    Enable Banking pour vérifier les signatures. Évite à l'utilisateur d'avoir
+    à manipuler openssl. Renvoie (private_key_pem, certificate_pem).
+    """
+    from datetime import datetime, timezone, timedelta
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = key.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "openflow")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=3650))
+        .sign(key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
+    return private_pem, cert_pem
+
+
 def normalize_transactions(raw: list) -> list:
     """Convertit les transactions Enable Banking vers le format interne
     (mêmes clés que les parseurs CSV/OFX). credit_debit_indicator donne le

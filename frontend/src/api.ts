@@ -377,9 +377,11 @@ export const api = {
     request<any>(`/bank_reconciliation/transactions/${bankTxId}/suggestions`),
   // Rapprochement bancaire — connecteur Enable Banking (Lot 2)
   getBankConfig: () =>
-    request<{ configured: boolean; application_id: string; has_key: boolean; redirect_url: string }>("/bank_reconciliation/config"),
+    request<{ configured: boolean; application_id: string; has_key: boolean; certificate: string; redirect_url: string; suggested_redirect_url: string }>("/bank_reconciliation/config"),
   putBankConfig: (cfg: { application_id: string; private_key: string; redirect_url: string }) =>
     request<{ configured: boolean }>("/bank_reconciliation/config", { method: "PUT", body: JSON.stringify(cfg) }),
+  generateBankKey: () =>
+    request<{ certificate: string; redirect_url: string }>("/bank_reconciliation/config/generate-key", { method: "POST" }),
   listBanks: (country = "FR") =>
     request<{ name: string; country: string; logo: string | null }[]>(`/bank_reconciliation/banks?country=${country}`),
   connectBank: (accountId: number, aspsp_name: string, aspsp_country = "FR") =>

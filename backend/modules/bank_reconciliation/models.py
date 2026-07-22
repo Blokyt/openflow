@@ -58,4 +58,10 @@ migrations = {
             updated_at TEXT NOT NULL DEFAULT ''
         )""",
     ],
+    "1.2.0": [
+        # Assistant de configuration intégré : OpenFlow génère lui-même la paire
+        # clé/certificat. On conserve le certificat public pour pouvoir le
+        # réafficher (à recopier dans Enable Banking lors de l'enregistrement).
+        "ALTER TABLE bank_reconciliation_config ADD COLUMN public_cert TEXT NOT NULL DEFAULT ''",
+    ],
 }

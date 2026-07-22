@@ -14,14 +14,14 @@ import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from backend.core.auth import require_admin
 from backend.core.database import get_conn, row_to_dict
 from backend.modules.bank_reconciliation.parsers import ParseError, parse_statement
 from backend.modules.bank_reconciliation.enablebanking import (
-    EnableBankingClient, EnableBankingError, normalize_transactions,
+    EnableBankingClient, EnableBankingError, generate_keypair_and_cert, normalize_transactions,
 )
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -471,20 +471,66 @@ class EBConfigPayload(BaseModel):
     redirect_url: str = ""
 
 
+def _suggested_redirect(request: Request) -> str:
+    """URL de redirection à déclarer dans Enable Banking. La Production impose
+    le schéma https ; OpenFlow tourne en http local, mais la saisie manuelle du
+    code d'autorisation gère ce cas (la page de retour n'a pas besoin de se
+    charger)."""
+    base = request.base_url  # ex : http://127.0.0.1:8000/
+    host = base.hostname or "127.0.0.1"
+    port = f":{base.port}" if base.port else ""
+    return f"https://{host}{port}/bank-reconciliation"
+
+
 @router.get("/config")
-def get_config():
+def get_config(request: Request):
     conn = get_conn()
     try:
         row = _load_eb_config(conn)
         if row is None:
-            return {"configured": False, "application_id": "", "has_key": False, "redirect_url": ""}
+            return {"configured": False, "application_id": "", "has_key": False,
+                    "certificate": "", "redirect_url": "", "suggested_redirect_url": _suggested_redirect(request)}
         d = row_to_dict(row)
         return {
             "configured": bool(d["application_id"] and d["private_key"]),
             "application_id": d["application_id"],
             "has_key": bool(d["private_key"]),
+            "certificate": d.get("public_cert", "") or "",
             "redirect_url": d["redirect_url"],
+            "suggested_redirect_url": _suggested_redirect(request),
         }
+    finally:
+        conn.close()
+
+
+@router.post("/config/generate-key")
+def generate_key(request: Request):
+    """Génère la paire clé/certificat directement dans OpenFlow et la stocke.
+    Renvoie le certificat public à recopier dans Enable Banking et l'URL de
+    redirection à y déclarer. Réinitialise l'Application ID (une nouvelle clé
+    implique un nouvel enregistrement d'application côté Enable Banking)."""
+    private_pem, cert_pem = generate_keypair_and_cert()
+    conn = get_conn()
+    try:
+        existing = _load_eb_config(conn)
+        redirect = _suggested_redirect(request)
+        if existing is not None:
+            existing_redirect = row_to_dict(existing).get("redirect_url", "")
+            if existing_redirect:
+                redirect = existing_redirect
+        conn.execute(
+            """INSERT INTO bank_reconciliation_config (id, application_id, private_key, public_cert, redirect_url, updated_at)
+               VALUES (1, '', ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   application_id = '',
+                   private_key = excluded.private_key,
+                   public_cert = excluded.public_cert,
+                   redirect_url = excluded.redirect_url,
+                   updated_at = excluded.updated_at""",
+            (private_pem, cert_pem, redirect, _now()),
+        )
+        conn.commit()
+        return {"certificate": cert_pem, "redirect_url": redirect}
     finally:
         conn.close()
 

@@ -3,7 +3,7 @@
   "name": "Rapprochement bancaire",
   "description": "Import du relevé bancaire (CSV/OFX) et rapprochement de chaque ligne avec une ou plusieurs écritures de la compta",
   "help": "Crée un compte bancaire rattaché à une entité interne, puis importe ton relevé (fichier CSV ou OFX exporté depuis l'espace en ligne de ta banque). Pour chaque ligne bancaire, associe la ou les écritures de la compta qui la composent : plusieurs écritures pour un seul mouvement (regroupement) ou une même écriture répartie sur plusieurs mouvements (division). Une ligne passe en « rapprochée » quand la somme des écritures associées égale son montant ; tu peux aussi la marquer rapprochée manuellement.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "origin": "builtin",
   "category": "standard",
   "dependencies": ["transactions", "entities"],

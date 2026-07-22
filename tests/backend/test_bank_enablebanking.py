@@ -143,6 +143,41 @@ def test_config_empty_key_preserves_existing(client):
     assert r["redirect_url"] == "http://x/cb"
 
 
+def test_generate_key_produces_cert_and_stores_private_key(client):
+    r = client.post("/api/bank_reconciliation/config/generate-key")
+    assert r.status_code == 200
+    body = r.json()
+    assert "BEGIN CERTIFICATE" in body["certificate"]
+    assert body["redirect_url"].startswith("https://")
+
+    cfg = client.get("/api/bank_reconciliation/config").json()
+    assert cfg["has_key"] is True                 # clé privée stockée
+    assert cfg["configured"] is False             # pas encore d'Application ID
+    assert "BEGIN CERTIFICATE" in cfg["certificate"]
+    assert "private_key" not in cfg               # jamais exposée
+
+
+def test_generate_then_set_app_id_completes_config(client):
+    client.post("/api/bank_reconciliation/config/generate-key")
+    # On finit avec l'Application ID (clé vide -> on conserve celle générée).
+    client.put("/api/bank_reconciliation/config", json={
+        "application_id": "app-xyz", "private_key": "", "redirect_url": "https://127.0.0.1:8000/bank-reconciliation",
+    })
+    cfg = client.get("/api/bank_reconciliation/config").json()
+    assert cfg["configured"] is True
+    assert cfg["application_id"] == "app-xyz"
+
+
+def test_generate_key_resets_application_id(client):
+    _configure(client)                            # app-1 configurée
+    client.post("/api/bank_reconciliation/config/generate-key")
+    cfg = client.get("/api/bank_reconciliation/config").json()
+    # Nouvelle clé -> nouvel enregistrement requis : l'Application ID est purgé.
+    assert cfg["application_id"] == ""
+    assert cfg["configured"] is False
+    assert cfg["has_key"] is True
+
+
 # ─── Banques / connect ────────────────────────────────────────────────────────
 
 def test_banks_requires_config(client):
