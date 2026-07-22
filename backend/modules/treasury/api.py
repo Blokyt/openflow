@@ -144,7 +144,15 @@ def update_pocket(pocket_id: int, payload: PocketUpdate):
         if payload.reference_date is not None:
             fields.append("reference_date = ?"); values.append(payload.reference_date)
         if payload.bank_account_id is not None:
-            fields.append("bank_account_id = ?"); values.append(payload.bank_account_id or None)
+            acc = payload.bank_account_id or None
+            # Un compte bancaire ne peut alimenter qu'UNE poche : on délie toute
+            # autre poche déjà reliée à ce compte (évite deux poches identiques).
+            if acc is not None:
+                conn.execute(
+                    "UPDATE pockets SET bank_account_id = NULL WHERE bank_account_id = ? AND id != ?",
+                    (acc, pocket_id),
+                )
+            fields.append("bank_account_id = ?"); values.append(acc)
         if payload.annual_rate is not None:
             fields.append("annual_rate = ?"); values.append(payload.annual_rate if payload.annual_rate > 0 else None)
         if fields:

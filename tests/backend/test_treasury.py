@@ -141,3 +141,20 @@ def test_cannot_delete_pocket_used_by_movement(client):
         "amount_cents": 1000, "date": "2026-07-10", "label": "",
     })
     assert client.delete(f"/api/treasury/pockets/{compte['id']}").status_code == 409
+
+
+def test_bank_account_links_to_one_pocket_only(client_and_db):
+    """Relier une 2e poche au même compte bancaire délie la 1re (pas de doublon)."""
+    client, db_path = client_and_db
+    interne = client.post("/api/entities/", json={"name": "Asso", "type": "internal"}).json()["id"]
+    acc = client.post("/api/bank_reconciliation/accounts", json={"entity_id": interne, "label": "CE"}).json()["id"]
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE bank_accounts SET balance_cents = 100000 WHERE id = ?", (acc,)); conn.commit(); conn.close()
+
+    compte, livret = _by_name(client, "Compte"), _by_name(client, "Livret")
+    client.put(f"/api/treasury/pockets/{compte['id']}", json={"bank_account_id": acc})
+    assert _by_name(client, "Compte")["bank_linked"] is True
+    # Relier le Livret au même compte -> le Compte est delie.
+    client.put(f"/api/treasury/pockets/{livret['id']}", json={"bank_account_id": acc})
+    assert _by_name(client, "Livret")["bank_linked"] is True
+    assert _by_name(client, "Compte")["bank_linked"] is False

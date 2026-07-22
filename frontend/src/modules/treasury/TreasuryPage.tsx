@@ -168,13 +168,27 @@ function PocketCard({
     return (
       <div className="bg-bg-card border border-accent-sand/40 rounded-2xl p-5 space-y-3">
         <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la poche" />
-        <div>
-          <label className={labelClass}>Relier à un compte bancaire</label>
-          <select className={inputClass} value={linkId} onChange={(e) => setLinkId(Number(e.target.value))}>
-            <option value={0}>Non (solde manuel)</option>
-            {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.label || b.entity_name || `Compte ${b.id}`}</option>)}
-          </select>
-        </div>
+        {bankAccounts.length === 0 ? (
+          <p className="text-xs text-[#8a8a8a]">Poche manuelle. Pour synchroniser une poche avec un compte bancaire, connecte-le d'abord dans « Rapprochement bancaire ».</p>
+        ) : (
+          <label className="flex items-center gap-2.5 text-sm text-text-secondary cursor-pointer py-1">
+            <input
+              type="checkbox"
+              checked={linkId !== 0}
+              onChange={(e) => setLinkId(e.target.checked ? (bankAccounts.some((b) => b.id === linkId) ? linkId : bankAccounts[0].id) : 0)}
+              className="accent-accent-sand h-4 w-4"
+            />
+            <span>Synchroniser avec la banque <span className="text-[#8a8a8a]">(solde automatique, en lecture seule)</span></span>
+          </label>
+        )}
+        {linkId !== 0 && bankAccounts.length > 1 && (
+          <div>
+            <label className={labelClass}>Compte bancaire</label>
+            <select className={inputClass} value={linkId} onChange={(e) => setLinkId(Number(e.target.value))}>
+              {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.label || b.entity_name || `Compte ${b.id}`}</option>)}
+            </select>
+          </div>
+        )}
         {linkId === 0 && (
           <>
             <div>
