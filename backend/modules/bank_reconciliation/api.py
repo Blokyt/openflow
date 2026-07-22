@@ -57,13 +57,46 @@ def _linked_map(conn, bank_ids) -> dict:
     return {r["bid"]: r["linked"] for r in rows}
 
 
+def _reconciled_status(amount: int, linked: int, reconciled_manual) -> tuple[int, int, bool]:
+    """Règle métier unique du module : une ligne bancaire (montant signé) est
+    « rapprochée » quand la somme des écritures liées (positives) égale son
+    montant en valeur absolue, ou quand elle est marquée manuellement.
+    Renvoie (target, pending_cents, reconciled). Source de vérité unique
+    consommée par la liste, les compteurs et le panneau de détail."""
+    target = abs(amount)
+    return target, target - linked, bool(reconciled_manual) or (linked == target)
+
+
 def _enrich(bt: dict, linked: int) -> dict:
     """Ajoute linked_cents / pending_cents / reconciled à une ligne bancaire."""
-    target = abs(bt["amount"])
+    _, pending, reconciled = _reconciled_status(bt["amount"], linked, bt.get("reconciled_manual"))
     bt["linked_cents"] = linked
-    bt["pending_cents"] = target - linked
-    bt["reconciled"] = bool(bt.get("reconciled_manual")) or (linked == target)
+    bt["pending_cents"] = pending
+    bt["reconciled"] = reconciled
     return bt
+
+
+def _upsert_bank_rows(conn, account_id: int, rows: list, now: str) -> int:
+    """Insère les lignes bancaires normalisées (ignore celles sans date), en
+    évitant les doublons via UNIQUE(bank_account_id, external_id). Met à jour
+    last_synced_at. Renvoie le nombre de lignes réellement importées. Partagé
+    par l'import fichier et la synchronisation Enable Banking."""
+    imported = 0
+    for r in rows:
+        if not r["booking_date"]:
+            continue
+        cur = conn.execute(
+            """INSERT INTO bank_transactions
+               (bank_account_id, external_id, booking_date, amount, currency,
+                label, counterparty, reconciled_manual, imported_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+               ON CONFLICT(bank_account_id, external_id) DO NOTHING""",
+            (account_id, r["external_id"], r["booking_date"], r["amount"],
+             r["currency"], r["label"], r["counterparty"], now),
+        )
+        imported += cur.rowcount
+    conn.execute("UPDATE bank_accounts SET last_synced_at = ? WHERE id = ?", (now, account_id))
+    return imported
 
 
 def _enrich_all(conn, rows) -> list:
@@ -109,25 +142,25 @@ def _account_or_404(conn, account_id: int) -> dict:
     return row_to_dict(row)
 
 
-def _account_counters(conn, account_id: int) -> dict:
-    """Nombre total de lignes et nombre restant à rapprocher pour un compte."""
+def _all_account_counters(conn) -> dict:
+    """{account_id: {tx_count, to_reconcile_count}} pour tous les comptes en une
+    seule requête (évite le N+1 dans la liste des comptes)."""
     rows = conn.execute(
-        """SELECT bt.id, bt.amount, bt.reconciled_manual,
+        """SELECT bt.bank_account_id AS aid, bt.amount, bt.reconciled_manual,
                   COALESCE(SUM(t.amount), 0) AS linked
            FROM bank_transactions bt
            LEFT JOIN bank_transaction_links l ON l.bank_transaction_id = bt.id
            LEFT JOIN transactions t ON t.id = l.transaction_id
-           WHERE bt.bank_account_id = ?
-           GROUP BY bt.id""",
-        (account_id,),
+           GROUP BY bt.id"""
     ).fetchall()
-    total = len(rows)
-    to_reconcile = 0
+    counters: dict = {}
     for r in rows:
-        reconciled = bool(r["reconciled_manual"]) or (r["linked"] == abs(r["amount"]))
+        c = counters.setdefault(r["aid"], {"tx_count": 0, "to_reconcile_count": 0})
+        c["tx_count"] += 1
+        _, _, reconciled = _reconciled_status(r["amount"], r["linked"], r["reconciled_manual"])
         if not reconciled:
-            to_reconcile += 1
-    return {"tx_count": total, "to_reconcile_count": to_reconcile}
+            c["to_reconcile_count"] += 1
+    return counters
 
 
 @router.get("/accounts")
@@ -140,10 +173,11 @@ def list_accounts():
                LEFT JOIN entities e ON e.id = a.entity_id
                ORDER BY a.label, a.id"""
         ).fetchall()
+        counters = _all_account_counters(conn)
         accounts = []
         for r in rows:
             acc = row_to_dict(r)
-            acc.update(_account_counters(conn, acc["id"]))
+            acc.update(counters.get(acc["id"], {"tx_count": 0, "to_reconcile_count": 0}))
             accounts.append(acc)
         return accounts
     finally:
@@ -219,22 +253,7 @@ async def import_statement(account_id: int, file: UploadFile = File(...)):
         except ParseError as e:
             raise HTTPException(status_code=400, detail=str(e))
         now = _now()
-        imported = 0
-        for r in rows:
-            # ON CONFLICT DO NOTHING : ré-importer le même relevé ne duplique rien.
-            cur = conn.execute(
-                """INSERT INTO bank_transactions
-                   (bank_account_id, external_id, booking_date, amount, currency,
-                    label, counterparty, reconciled_manual, imported_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
-                   ON CONFLICT(bank_account_id, external_id) DO NOTHING""",
-                (account_id, r["external_id"], r["booking_date"], r["amount"],
-                 r["currency"], r["label"], r["counterparty"], now),
-            )
-            imported += cur.rowcount
-        conn.execute(
-            "UPDATE bank_accounts SET last_synced_at = ? WHERE id = ?", (now, account_id)
-        )
+        imported = _upsert_bank_rows(conn, account_id, rows, now)
         conn.commit()
         return {"imported": imported, "skipped": len(rows) - imported, "total": len(rows)}
     finally:
@@ -295,13 +314,13 @@ def _links_payload(conn, bank_transaction_id: int, bt: dict) -> dict:
     ).fetchall()
     links = [row_to_dict(r) for r in rows]
     linked = sum(l["amount"] for l in links)
-    target = abs(bt["amount"])
+    _, pending, reconciled = _reconciled_status(bt["amount"], linked, bt.get("reconciled_manual"))
     return {
         "bank_transaction_id": bank_transaction_id,
         "amount": bt["amount"],
         "linked_cents": linked,
-        "pending_cents": target - linked,
-        "reconciled": bool(bt.get("reconciled_manual")) or (linked == target),
+        "pending_cents": pending,
+        "reconciled": reconciled,
         "reconciled_manual": bool(bt.get("reconciled_manual")),
         "links": links,
     }
@@ -667,24 +686,8 @@ def sync_account(account_id: int):
             raise HTTPException(status_code=502, detail=str(e))
         rows = normalize_transactions(raw)
         now = _now()
-        imported = 0
-        considered = 0
-        for r in rows:
-            if not r["booking_date"]:
-                continue
-            considered += 1
-            cur = conn.execute(
-                """INSERT INTO bank_transactions
-                   (bank_account_id, external_id, booking_date, amount, currency,
-                    label, counterparty, reconciled_manual, imported_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
-                   ON CONFLICT(bank_account_id, external_id) DO NOTHING""",
-                (account_id, r["external_id"], r["booking_date"], r["amount"],
-                 r["currency"], r["label"], r["counterparty"], now),
-            )
-            imported += cur.rowcount
-        conn.execute("UPDATE bank_accounts SET last_synced_at = ? WHERE id = ?", (now, account_id))
+        imported = _upsert_bank_rows(conn, account_id, rows, now)
         conn.commit()
-        return {"imported": imported, "skipped": considered - imported, "total": considered}
+        return {"imported": imported, "skipped": len(rows) - imported, "total": len(rows)}
     finally:
         conn.close()

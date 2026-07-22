@@ -82,17 +82,19 @@ export default function BankReconciliationPage() {
     setLoadingTxs(true);
     setError(null);
     try {
-      const [pending, reconciled] = await Promise.all([
-        api.getBankTransactions(accountId, "pending"),
-        api.getBankTransactions(accountId, "reconciled"),
-      ]);
-      setTxs([...pending, ...reconciled]);
+      // Un seul appel : le tri à traiter / rapproché est fait côté client
+      // à partir du champ `reconciled` (cf. toTreat/done ci-dessous).
+      setTxs(await api.getBankTransactions(accountId, "all"));
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoadingTxs(false);
     }
   }, []);
+
+  const refresh = useCallback(async () => {
+    if (selectedId) await Promise.all([loadTxs(selectedId), loadAccounts()]);
+  }, [selectedId, loadTxs, loadAccounts]);
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => { if (selectedId) loadTxs(selectedId); }, [selectedId, loadTxs]);
@@ -126,7 +128,7 @@ export default function BankReconciliationPage() {
     try {
       const res = await api.syncBank(account.id);
       setNotice(`Synchronisation terminée : ${res.imported} nouvelle${res.imported > 1 ? "s" : ""} opération${res.imported > 1 ? "s" : ""}.`);
-      await Promise.all([loadTxs(account.id), loadAccounts()]);
+      await refresh();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -143,17 +145,13 @@ export default function BankReconciliationPage() {
       const res = await api.importBankStatement(selectedId, file);
       setNotice(`${res.imported} nouvelle${res.imported > 1 ? "s" : ""} ligne${res.imported > 1 ? "s" : ""} importée${res.imported > 1 ? "s" : ""}` +
         (res.skipped > 0 ? ` (${res.skipped} déjà présente${res.skipped > 1 ? "s" : ""}, ignorée${res.skipped > 1 ? "s" : ""})` : "") + ".");
-      await Promise.all([loadTxs(selectedId), loadAccounts()]);
+      await refresh();
     } catch (e: any) {
       setError(e.message);
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
     }
-  };
-
-  const afterLinkChange = async () => {
-    if (selectedId) await Promise.all([loadTxs(selectedId), loadAccounts()]);
   };
 
   if (loading) {
@@ -372,7 +370,7 @@ export default function BankReconciliationPage() {
       )}
 
       {linking && (
-        <LinkPanel bankTx={linking} onClose={() => setLinking(null)} onChanged={afterLinkChange} />
+        <LinkPanel bankTx={linking} onClose={() => setLinking(null)} onChanged={refresh} />
       )}
       {showEbConfig && (
         <EbConfigModal onClose={() => setShowEbConfig(false)} onSaved={() => { setShowEbConfig(false); loadAccounts(); }} />
@@ -874,7 +872,6 @@ function LinkPanel({ bankTx, onClose, onChanged }: { bankTx: BankTx; onClose: ()
   const [links, setLinks] = useState<TxRow[]>([]);
   const [suggestions, setSuggestions] = useState<TxRow[]>([]);
   const [linked, setLinked] = useState(bankTx.linked_cents);
-  const [reconciled, setReconciled] = useState(bankTx.reconciled);
   const [manual, setManual] = useState(bankTx.reconciled_manual);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
@@ -882,6 +879,8 @@ function LinkPanel({ bankTx, onClose, onChanged }: { bankTx: BankTx; onClose: ()
 
   const target = Math.abs(bankTx.amount);
   const pending = target - linked;
+  // Même règle que le backend : dérivée localement, pas un state à resynchroniser.
+  const reconciled = manual || linked === target;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -893,7 +892,6 @@ function LinkPanel({ bankTx, onClose, onChanged }: { bankTx: BankTx; onClose: ()
       ]);
       setLinks(l.links);
       setLinked(l.linked_cents);
-      setReconciled(l.reconciled);
       setManual(l.reconciled_manual);
       setSuggestions(s.suggestions);
     } catch (e: any) {

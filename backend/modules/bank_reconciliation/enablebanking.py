@@ -25,20 +25,29 @@ class EnableBankingError(Exception):
 
 
 class EnableBankingClient:
+    _TOKEN_TTL = 3600  # <= 24 h autorisé par l'API
+
     def __init__(self, application_id: str, private_key: str, http=None):
         self.application_id = application_id
         self.private_key = private_key
         self._http = http or httpx.Client(timeout=30.0)
+        self._token = None
+        self._token_exp = 0
 
     # -- Authentification ----------------------------------------------------
 
     def _jwt(self) -> str:
+        # Le JWT reste valable une heure : on le réutilise (utile notamment dans
+        # la boucle de pagination de get_transactions) plutôt que de resigner.
         now = int(time.time())
+        if self._token and now < self._token_exp - 60:
+            return self._token
+        exp = now + self._TOKEN_TTL
         payload = {
             "iss": "enablebanking.com",
             "aud": "api.enablebanking.com",
             "iat": now,
-            "exp": now + 3600,  # <= 24 h autorisé par l'API
+            "exp": exp,
         }
         try:
             token = jwt.encode(
@@ -48,7 +57,9 @@ class EnableBankingClient:
         except Exception as e:
             raise EnableBankingError(f"Clé privée Enable Banking invalide : {e}")
         # PyJWT >= 2 renvoie une str ; on garantit le type.
-        return token if isinstance(token, str) else token.decode("utf-8")
+        self._token = token if isinstance(token, str) else token.decode("utf-8")
+        self._token_exp = exp
+        return self._token
 
     def _request(self, method: str, path: str, **kwargs) -> dict:
         try:
@@ -168,9 +179,12 @@ def normalize_transactions(raw: list) -> list:
         counterparty = (debtor if cents >= 0 else creditor) or creditor or debtor or ""
         if not label:
             label = counterparty or "Opération"
+        booking_date = t.get("booking_date") or t.get("value_date") or ""
+        if not booking_date:
+            continue  # même contrat que les parseurs CSV/OFX : pas de ligne sans date
         rows.append({
             "external_id": f"eb:{ref}" if ref else "",
-            "booking_date": t.get("booking_date") or t.get("value_date") or "",
+            "booking_date": booking_date,
             "amount": cents,
             "currency": amt.get("currency", "EUR"),
             "label": label,
