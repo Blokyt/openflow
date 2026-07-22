@@ -9,8 +9,17 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from backend.modules.bank_reconciliation.enablebanking import (
-    EnableBankingClient, normalize_transactions,
+    EnableBankingClient, booked_balance_cents, normalize_transactions,
 )
+
+
+def test_booked_balance_cents_prefers_clbd():
+    balances = [
+        {"balance_type": "VALU", "balance_amount": {"amount": "10.00"}},
+        {"balance_type": "CLBD", "balance_amount": {"amount": "5874.26"}},
+    ]
+    assert booked_balance_cents(balances) == 587426
+    assert booked_balance_cents([]) is None
 
 
 def _rsa_pem():
@@ -83,6 +92,9 @@ class FakeEB:
         return {"session_id": "sess-1", "accounts": [
             {"uid": "uid-1", "account_id": {"iban": "FR7612345678"}, "name": "Compte Pro"},
         ]}
+
+    def get_balances(self, account_uid):
+        return [{"balance_type": "CLBD", "balance_amount": {"amount": "1234.56", "currency": "EUR"}}]
 
     def get_transactions(self, account_uid, date_from=None):
         return [
@@ -251,3 +263,7 @@ def test_sync_imports_and_is_idempotent(client, fake_eb):
     assert len(txs) == 2
     amounts = sorted(t["amount"] for t in txs)
     assert amounts == [-4590, 125000]
+
+    # La synchro stocke aussi le solde du compte (bonus).
+    accs = client.get("/api/bank_reconciliation/accounts").json()
+    assert accs[0]["balance_cents"] == 123456

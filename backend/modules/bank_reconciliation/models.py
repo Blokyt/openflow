@@ -64,4 +64,10 @@ migrations = {
         # réafficher (à recopier dans Enable Banking lors de l'enregistrement).
         "ALTER TABLE bank_reconciliation_config ADD COLUMN public_cert TEXT NOT NULL DEFAULT ''",
     ],
+    "1.3.0": [
+        # Solde du compte remonté par la banque (solde comptable CLBD), en
+        # centimes signés, rafraîchi à chaque synchronisation.
+        "ALTER TABLE bank_accounts ADD COLUMN balance_cents INTEGER",
+        "ALTER TABLE bank_accounts ADD COLUMN balance_date TEXT NOT NULL DEFAULT ''",
+    ],
 }

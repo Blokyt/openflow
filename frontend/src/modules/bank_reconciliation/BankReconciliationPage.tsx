@@ -19,6 +19,8 @@ type Account = {
   source: string;
   consent_expires_at: string;
   last_synced_at: string;
+  balance_cents: number | null;
+  balance_date: string;
   tx_count: number;
   to_reconcile_count: number;
 };
@@ -252,7 +254,14 @@ export default function BankReconciliationPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 mt-4">
+      <div className={`grid grid-cols-1 gap-4 mb-6 mt-4 ${selected?.balance_cents != null ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+        {selected?.balance_cents != null && (
+          <div className="bg-bg-card border border-border rounded-2xl p-5">
+            <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Solde du compte</div>
+            <div className="text-2xl font-bold text-white">{formatEuros(selected.balance_cents)}</div>
+            {selected.balance_date && <div className="text-[11px] text-[#555] mt-1">au {formatDate(selected.balance_date)}</div>}
+          </div>
+        )}
         <div className="bg-bg-card border border-border rounded-2xl p-5">
           <div className="text-xs font-medium text-[#8a8a8a] uppercase tracking-wider mb-2">Reste à rapprocher</div>
           <div className={`text-2xl font-bold ${totalPending > 0 ? "text-[#FF8A5B]" : "text-success"}`}>{formatEuros(totalPending)}</div>

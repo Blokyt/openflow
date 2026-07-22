@@ -107,6 +107,10 @@ class EnableBankingClient:
     def create_session(self, code: str) -> dict:
         return self._request("POST", "/sessions", json={"code": code})
 
+    def get_balances(self, account_uid: str) -> list:
+        data = self._request("GET", f"/accounts/{account_uid}/balances")
+        return data.get("balances", [])
+
     def get_transactions(self, account_uid: str, date_from: str | None = None) -> list:
         results: list = []
         params: dict = {}
@@ -157,6 +161,20 @@ def generate_keypair_and_cert() -> tuple[str, str]:
     )
     cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
     return private_pem, cert_pem
+
+
+def booked_balance_cents(balances: list) -> int | None:
+    """Extrait le solde comptable (type CLBD) en centimes signés depuis la liste
+    de balances Enable Banking. À défaut de CLBD, prend la première balance.
+    Renvoie None si aucun montant exploitable."""
+    chosen = next((b for b in balances if b.get("balance_type") == "CLBD"), None)
+    chosen = chosen or (balances[0] if balances else None)
+    if not chosen:
+        return None
+    amt = (chosen.get("balance_amount") or {}).get("amount")
+    if amt is None:
+        return None
+    return _amount_to_cents(str(amt))
 
 
 def normalize_transactions(raw: list) -> list:

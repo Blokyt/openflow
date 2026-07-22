@@ -21,7 +21,8 @@ from backend.core.auth import require_admin
 from backend.core.database import get_conn, row_to_dict
 from backend.modules.bank_reconciliation.parsers import ParseError, parse_statement
 from backend.modules.bank_reconciliation.enablebanking import (
-    EnableBankingClient, EnableBankingError, generate_keypair_and_cert, normalize_transactions,
+    EnableBankingClient, EnableBankingError, booked_balance_cents,
+    generate_keypair_and_cert, normalize_transactions,
 )
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -687,6 +688,16 @@ def sync_account(account_id: int):
         rows = normalize_transactions(raw)
         now = _now()
         imported = _upsert_bank_rows(conn, account_id, rows, now)
+        # Solde du compte (bonus) : ne fait pas échouer la synchro s'il manque.
+        try:
+            bal = booked_balance_cents(client.get_balances(acc["eb_account_id"]))
+            if bal is not None:
+                conn.execute(
+                    "UPDATE bank_accounts SET balance_cents = ?, balance_date = ? WHERE id = ?",
+                    (bal, now, account_id),
+                )
+        except EnableBankingError:
+            pass
         conn.commit()
         return {"imported": imported, "skipped": len(rows) - imported, "total": len(rows)}
     finally:
