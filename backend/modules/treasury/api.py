@@ -12,7 +12,6 @@ Mouvements (from/to nullable) : rentrée (to seul), sortie (from seul),
 transfert (from + to). Une rentrée augmente le total, une sortie le diminue,
 un transfert le conserve.
 """
-import sqlite3
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +19,7 @@ from pydantic import BaseModel
 
 from backend.core.auth import require_admin
 from backend.core.database import get_conn, row_to_dict
+from backend.modules.treasury.service import bank_balance_cents, pocket_balance_cents
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -31,18 +31,6 @@ def _now() -> str:
 # ---------------------------------------------------------------------------
 # Soldes
 # ---------------------------------------------------------------------------
-
-def _bank_balance(conn, bank_account_id) -> int | None:
-    if not bank_account_id:
-        return None
-    try:
-        row = conn.execute(
-            "SELECT balance_cents FROM bank_accounts WHERE id = ?", (bank_account_id,)
-        ).fetchone()
-    except sqlite3.OperationalError:
-        return None
-    return row["balance_cents"] if row else None
-
 
 def _pocket_or_404(conn, pocket_id: int) -> dict:
     row = conn.execute("SELECT * FROM pockets WHERE id = ?", (pocket_id,)).fetchone()
@@ -62,25 +50,14 @@ def _pockets_payload(conn) -> dict:
         linked = p["bank_account_id"] is not None
         p["bank_linked"] = linked
         if linked:
-            bank = _bank_balance(conn, p["bank_account_id"])
+            bank = bank_balance_cents(conn, p["bank_account_id"])
             p["bank_balance_cents"] = bank
             p["synced"] = bank is not None
-            p["balance_cents"] = bank if bank is not None else 0
         else:
-            # Solde manuel = référence (à sa date) + mouvements postérieurs à
-            # cette date, comme les soldes de référence d'OpenFlow.
-            ref_date = p["reference_date"] or ""
-            net = 0
-            for m in movements:
-                if m["d"] < ref_date:
-                    continue
-                if m["t"] == p["id"]:
-                    net += m["a"]
-                if m["f"] == p["id"]:
-                    net -= m["a"]
             p["bank_balance_cents"] = None
             p["synced"] = None
-            p["balance_cents"] = p["reference_cents"] + net
+        # Solde d'une poche : banque si reliée, sinon référence + mouvements.
+        p["balance_cents"] = pocket_balance_cents(conn, p, movements)
         pockets.append(p)
     return {"pockets": pockets, "total_cents": sum(p["balance_cents"] for p in pockets)}
 

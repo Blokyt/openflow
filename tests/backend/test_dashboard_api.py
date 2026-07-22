@@ -195,6 +195,47 @@ def test_summary_reference_matches_consolidated_with_include_children(client):
     assert dash["reference_amount"] == 100000
 
 
+# ─── Ancrage du solde sur la Trésorerie (source de vérité unique) ────────────
+
+def _set_pocket_ref(client, name, cents, date="2026-06-01"):
+    pockets = client.get("/api/treasury/pockets").json()["pockets"]
+    p = next(x for x in pockets if x["name"] == name)
+    r = client.put(f"/api/treasury/pockets/{p['id']}",
+                   json={"reference_cents": cents, "reference_date": date})
+    assert r.status_code == 200, r.text
+
+
+def test_summary_anchored_on_treasury_total(client):
+    """Trésorerie configurée : le solde global suit le total des poches (source
+    de vérité) et la référence d'entité disparaît de la réponse."""
+    _setup_tree(client)  # flux compta qui ne doivent PAS piloter le solde affiché
+    _set_pocket_ref(client, "Compte", 500000)
+    _set_pocket_ref(client, "Livret", 200000)
+
+    data = client.get("/api/dashboard/summary").json()
+    assert data["balance"] == 700000
+    assert data["balance_source"] == "treasury"
+    assert data["reference_date"] is None
+    assert data["reference_amount"] is None
+
+
+def test_summary_pristine_treasury_keeps_reference(client):
+    """Trésorerie vierge (poches par défaut vides) : on reste sur le calcul
+    compta par référence, jamais un solde à 0 imposé par des poches vides."""
+    data = client.get("/api/dashboard/summary").json()
+    assert data["balance_source"] == "reference"
+
+
+def test_timeseries_last_point_follows_treasury(client):
+    """Le dernier point de la série (solde courant) suit aussi la Trésorerie."""
+    _setup_tree(client)
+    _set_pocket_ref(client, "Compte", 500000)
+    _set_pocket_ref(client, "Livret", 200000)
+
+    series = client.get("/api/dashboard/timeseries").json()
+    assert series[-1]["balance"] == 700000
+
+
 # ─── category_id sur /top-categories ──────────────────────────────────────────
 
 def test_top_categories_exposes_category_id(client):

@@ -17,7 +17,40 @@ from backend.core.balance import (
 )
 from backend.core.database import get_conn, row_to_dict
 
+try:
+    # Source de vérité du solde courant. Import protégé : le dashboard doit
+    # rester fonctionnel si le module Trésorerie est désinstallé.
+    from backend.modules.treasury.service import treasury_total_cents
+except Exception:  # pragma: no cover - module Trésorerie absent
+    treasury_total_cents = None
+
 router = APIRouter()
+
+
+def _root_entity_id(conn) -> Optional[int]:
+    row = conn.execute(
+        "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def _treasury_anchor(conn, entity_id: Optional[int], include_children: bool):
+    """Total Trésorerie quand le périmètre couvre toute l'asso, sinon None.
+
+    Le solde courant de l'asso entière est ancré sur la Trésorerie (poches),
+    seule source de vérité, et non sur un solde de référence d'entité. Un
+    périmètre limité à un club (pas de poches propres) reste sur le calcul
+    compta par référence. Renvoie None si la Trésorerie n'est pas configurée.
+    """
+    if treasury_total_cents is None:
+        return None
+    root_id = _root_entity_id(conn)
+    whole_asso = entity_id is None or (
+        root_id is not None and entity_id == root_id and include_children
+    )
+    if not whole_asso:
+        return None
+    return treasury_total_cents(conn)
 
 # Message constant pour la garde « entité obligatoire pour un non-admin »,
 # partagée par tous les endpoints de vue financière (dashboard et reports).
@@ -272,6 +305,16 @@ def get_summary(
             )
             transaction_count = conn.execute(count_sql, tuple(cpp)).fetchone()[0]
 
+        # Ancrage sur la Trésorerie pour l'asso entière : le solde courant suit
+        # le total des poches et la référence d'entité disparaît de l'affichage.
+        anchor = _treasury_anchor(conn, entity_id, include_children)
+        balance_source = "reference"
+        if anchor is not None:
+            balance = anchor
+            reference_date = None
+            reference_amount = None
+            balance_source = "treasury"
+
         return {
             "balance": balance,
             "total_income": total_income,
@@ -279,6 +322,7 @@ def get_summary(
             "transaction_count": transaction_count,
             "reference_date": reference_date,
             "reference_amount": reference_amount,
+            "balance_source": balance_source,
         }
     finally:
         conn.close()
@@ -350,6 +394,13 @@ def get_timeseries(
                    FROM transactions t
                    GROUP BY month ORDER BY month"""
             ).fetchall()
+
+        # Même ancrage que /summary : pour l'asso entière, la série se cale sur le
+        # total Trésorerie courant (le dernier point = ce total), les variations
+        # mensuelles restant reconstituées depuis les flux compta.
+        anchor = _treasury_anchor(conn, entity_id, include_children)
+        if anchor is not None:
+            current_balance = anchor
 
         nets_by_month = {r["month"]: int(r["net"] or 0) for r in net_rows}
         # Generer la liste continue de tous les mois calendaires, du premier mois

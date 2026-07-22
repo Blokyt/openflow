@@ -85,9 +85,11 @@ export interface DashboardSummary {
   /** Total des dépenses en centimes entiers */
   total_expenses: number;
   transaction_count: number;
-  reference_date?: string;
+  reference_date?: string | null;
   /** Montant de référence en centimes entiers */
-  reference_amount?: number;
+  reference_amount?: number | null;
+  /** Origine du solde affiché : "treasury" (total des poches) ou "reference" (solde de référence d'entité). */
+  balance_source?: "treasury" | "reference";
 }
 
 export interface ModuleManifest {

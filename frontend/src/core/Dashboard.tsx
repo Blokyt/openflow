@@ -403,12 +403,20 @@ export default function Dashboard() {
               {" "}(solde consolidé)
             </p>
           )}
-          {summary.reference_date && summary.reference_amount !== undefined && (
+          {summary.balance_source === "treasury" ? (
             <p className="mt-3 text-sm text-[#8a8a8a]">
-              Référence au{" "}
-              <span className="text-text-secondary font-medium">{formatDate(summary.reference_date)}</span>{" "}:{" "}
-              <span className="text-text-secondary font-medium">{formatEuros(summary.reference_amount)}</span>
+              D'après la{" "}
+              <Link to="/treasury" className="text-accent-sand font-medium hover:underline">Trésorerie</Link>{" "}
+              (total des poches)
             </p>
+          ) : (
+            summary.reference_date && summary.reference_amount != null && (
+              <p className="mt-3 text-sm text-[#8a8a8a]">
+                Référence au{" "}
+                <span className="text-text-secondary font-medium">{formatDate(summary.reference_date)}</span>{" "}:{" "}
+                <span className="text-text-secondary font-medium">{formatEuros(summary.reference_amount)}</span>
+              </p>
+            )
           )}
         </div>
         
