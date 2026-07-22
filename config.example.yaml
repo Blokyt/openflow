@@ -16,6 +16,7 @@ external_backup:
 modules:
   attachments: true
   backup: true
+  bank_reconciliation: false
   budget: false
   categories: true
   dashboard: true

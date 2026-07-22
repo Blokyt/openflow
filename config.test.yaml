@@ -24,6 +24,7 @@ modules:
   system: true
   reports: true
   helloasso: true
+  bank_reconciliation: true
   direns: true
   users: true
   submissions: true

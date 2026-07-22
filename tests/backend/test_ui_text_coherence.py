@@ -14,7 +14,6 @@ REMOVED_MODULE_IDS = {
     "invoices",
     "grants",
     "members",
-    "bank_reconciliation",
     "fec_export",
     "annotations",
     "smart_import",

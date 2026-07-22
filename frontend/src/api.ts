@@ -338,6 +338,43 @@ export const api = {
     request<any>(`/helloasso/campaigns/${campaignId}/links/${transactionId}`, { method: "DELETE" }),
   getHelloAssoSuggestions: (campaignId: number) =>
     request<any>(`/helloasso/campaigns/${campaignId}/suggestions`),
+  // Rapprochement bancaire
+  getBankAccounts: () => request<any[]>("/bank_reconciliation/accounts"),
+  createBankAccount: (body: { entity_id: number; label: string; iban: string }) =>
+    request<any>("/bank_reconciliation/accounts", { method: "POST", body: JSON.stringify(body) }),
+  deleteBankAccount: (id: number) =>
+    request<any>(`/bank_reconciliation/accounts/${id}`, { method: "DELETE" }),
+  importBankStatement: async (accountId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await rawFetch(`/bank_reconciliation/accounts/${accountId}/import`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Erreur ${response.status} lors de l'import.`);
+    }
+    return response.json();
+  },
+  getBankTransactions: (accountId: number, status: "pending" | "reconciled" | "all" = "pending") =>
+    request<any[]>(`/bank_reconciliation/transactions?account_id=${accountId}&status=${status}`),
+  getBankLinks: (bankTxId: number) =>
+    request<any>(`/bank_reconciliation/transactions/${bankTxId}/links`),
+  addBankLink: (bankTxId: number, transactionId: number) =>
+    request<any>(`/bank_reconciliation/transactions/${bankTxId}/links`, {
+      method: "POST",
+      body: JSON.stringify({ transaction_id: transactionId }),
+    }),
+  removeBankLink: (bankTxId: number, transactionId: number) =>
+    request<any>(`/bank_reconciliation/transactions/${bankTxId}/links/${transactionId}`, { method: "DELETE" }),
+  markBankTransaction: (bankTxId: number, reconciled: boolean) =>
+    request<any>(`/bank_reconciliation/transactions/${bankTxId}/mark`, {
+      method: "POST",
+      body: JSON.stringify({ reconciled }),
+    }),
+  getBankSuggestions: (bankTxId: number) =>
+    request<any>(`/bank_reconciliation/transactions/${bankTxId}/suggestions`),
   // DirENS — export Excel officiel (lignes = catégories, aucun mapping)
   downloadDirens: async (params: {
     bilan_fiscal_year_id: number;

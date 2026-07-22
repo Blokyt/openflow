@@ -59,6 +59,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   backup: "/backup",
   system: "/system",
   helloasso: "/helloasso",
+  bank_reconciliation: "/bank-reconciliation",
   submissions: "/submissions",
 };
 

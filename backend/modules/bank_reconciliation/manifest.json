@@ -1,0 +1,21 @@
+{
+  "id": "bank_reconciliation",
+  "name": "Rapprochement bancaire",
+  "description": "Import du relevé bancaire (CSV/OFX) et rapprochement de chaque ligne avec une ou plusieurs écritures de la compta",
+  "help": "Crée un compte bancaire rattaché à une entité interne, puis importe ton relevé (fichier CSV ou OFX exporté depuis l'espace en ligne de ta banque). Pour chaque ligne bancaire, associe la ou les écritures de la compta qui la composent : plusieurs écritures pour un seul mouvement (regroupement) ou une même écriture répartie sur plusieurs mouvements (division). Une ligne passe en « rapprochée » quand la somme des écritures associées égale son montant ; tu peux aussi la marquer rapprochée manuellement.",
+  "version": "1.0.0",
+  "origin": "builtin",
+  "category": "standard",
+  "dependencies": ["transactions", "entities"],
+  "requires_admin": true,
+  "menu": {
+    "label": "Rapprochement bancaire",
+    "icon": "git-compare",
+    "position": 55
+  },
+  "api_routes": ["api.py"],
+  "db_models": ["models.py"],
+  "dashboard_widgets": [],
+  "settings_schema": {},
+  "example": "J'importe le relevé de mars : la ligne « VIR FOURNISSEUR 1 250 € » regroupe deux factures de 800 € et 450 € enregistrées en compta ; je les associe et la ligne passe en rapprochée."
+}

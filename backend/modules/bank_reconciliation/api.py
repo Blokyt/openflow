@@ -1,0 +1,440 @@
+"""API du rapprochement bancaire.
+
+Modèle : chaque ligne bancaire (bank_transactions) est associée à une ou
+plusieurs écritures de la compta (transactions) via une table de liaison
+MANY-TO-MANY (bank_transaction_links). Une ligne est « rapprochée » quand la
+somme des écritures liées égale son montant (en valeur absolue), ou quand elle
+est marquée manuellement.
+
+Convention de montants : transactions.amount est en centimes TOUJOURS positif
+(le sens vient de from/to). bank_transactions.amount est SIGNÉ (+ crédit /
+- débit). On rapproche donc SUM(transactions.amount) avec ABS(bank.amount).
+"""
+import sqlite3
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
+
+from backend.core.auth import require_admin
+from backend.core.database import get_conn, row_to_dict
+from backend.modules.bank_reconciliation.parsers import ParseError, parse_statement
+
+router = APIRouter(dependencies=[Depends(require_admin)])
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Calcul du lié / restant / rapproché
+# ---------------------------------------------------------------------------
+
+def _linked_map(conn, bank_ids) -> dict:
+    """Retourne {bank_transaction_id: linked_cents}.
+
+    linked_cents = somme des montants (positifs) des écritures liées. Le JOIN
+    ignore les liens orphelins (écriture supprimée) : aucun couplage dur avec
+    le module transactions.
+    """
+    ids = list(bank_ids)
+    if not ids:
+        return {}
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"""SELECT l.bank_transaction_id AS bid, COALESCE(SUM(t.amount), 0) AS linked
+            FROM bank_transaction_links l
+            JOIN transactions t ON t.id = l.transaction_id
+            WHERE l.bank_transaction_id IN ({ph})
+            GROUP BY l.bank_transaction_id""",
+        ids,
+    ).fetchall()
+    return {r["bid"]: r["linked"] for r in rows}
+
+
+def _enrich(bt: dict, linked: int) -> dict:
+    """Ajoute linked_cents / pending_cents / reconciled à une ligne bancaire."""
+    target = abs(bt["amount"])
+    bt["linked_cents"] = linked
+    bt["pending_cents"] = target - linked
+    bt["reconciled"] = bool(bt.get("reconciled_manual")) or (linked == target)
+    return bt
+
+
+def _enrich_all(conn, rows) -> list:
+    items = [row_to_dict(r) for r in rows]
+    linked = _linked_map(conn, [b["id"] for b in items])
+    return [_enrich(b, linked.get(b["id"], 0)) for b in items]
+
+
+def _refresh_transaction_reconciled(conn, transaction_id: int) -> None:
+    """Met à jour transactions.reconciled : 1 si l'écriture a au moins une
+    liaison bancaire, 0 sinon. Réutilise les colonnes vestiges reconciled /
+    reconciled_at de la table transactions (migration transactions 1.4.0)."""
+    has_link = conn.execute(
+        "SELECT 1 FROM bank_transaction_links WHERE transaction_id = ? LIMIT 1",
+        (transaction_id,),
+    ).fetchone() is not None
+    if has_link:
+        conn.execute(
+            "UPDATE transactions SET reconciled = 1, reconciled_at = ? WHERE id = ?",
+            (_now(), transaction_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE transactions SET reconciled = 0, reconciled_at = NULL WHERE id = ?",
+            (transaction_id,),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Comptes bancaires
+# ---------------------------------------------------------------------------
+
+class AccountPayload(BaseModel):
+    entity_id: int
+    label: str = ""
+    iban: str = ""
+
+
+def _account_or_404(conn, account_id: int) -> dict:
+    row = conn.execute("SELECT * FROM bank_accounts WHERE id = ?", (account_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Compte bancaire introuvable")
+    return row_to_dict(row)
+
+
+def _account_counters(conn, account_id: int) -> dict:
+    """Nombre total de lignes et nombre restant à rapprocher pour un compte."""
+    rows = conn.execute(
+        """SELECT bt.id, bt.amount, bt.reconciled_manual,
+                  COALESCE(SUM(t.amount), 0) AS linked
+           FROM bank_transactions bt
+           LEFT JOIN bank_transaction_links l ON l.bank_transaction_id = bt.id
+           LEFT JOIN transactions t ON t.id = l.transaction_id
+           WHERE bt.bank_account_id = ?
+           GROUP BY bt.id""",
+        (account_id,),
+    ).fetchall()
+    total = len(rows)
+    to_reconcile = 0
+    for r in rows:
+        reconciled = bool(r["reconciled_manual"]) or (r["linked"] == abs(r["amount"]))
+        if not reconciled:
+            to_reconcile += 1
+    return {"tx_count": total, "to_reconcile_count": to_reconcile}
+
+
+@router.get("/accounts")
+def list_accounts():
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """SELECT a.*, e.name AS entity_name
+               FROM bank_accounts a
+               LEFT JOIN entities e ON e.id = a.entity_id
+               ORDER BY a.label, a.id"""
+        ).fetchall()
+        accounts = []
+        for r in rows:
+            acc = row_to_dict(r)
+            acc.update(_account_counters(conn, acc["id"]))
+            accounts.append(acc)
+        return accounts
+    finally:
+        conn.close()
+
+
+@router.post("/accounts", status_code=201)
+def create_account(payload: AccountPayload):
+    conn = get_conn()
+    try:
+        ent = conn.execute(
+            "SELECT id, type FROM entities WHERE id = ?", (payload.entity_id,)
+        ).fetchone()
+        if ent is None:
+            raise HTTPException(status_code=404, detail="Entité introuvable")
+        if ent["type"] != "internal":
+            raise HTTPException(status_code=400, detail="Le compte doit être rattaché à une entité interne")
+        cur = conn.execute(
+            """INSERT INTO bank_accounts (entity_id, label, iban, source, created_at)
+               VALUES (?, ?, ?, 'file', ?)""",
+            (payload.entity_id, payload.label.strip(), payload.iban.strip(), _now()),
+        )
+        conn.commit()
+        acc = _account_or_404(conn, cur.lastrowid)
+        acc.update({"tx_count": 0, "to_reconcile_count": 0})
+        return acc
+    finally:
+        conn.close()
+
+
+@router.delete("/accounts/{account_id}")
+def delete_account(account_id: int):
+    """Supprime un compte, ses lignes bancaires et leurs liaisons. Les
+    écritures compta redeviennent non rapprochées si elles n'ont plus de lien."""
+    conn = get_conn()
+    try:
+        _account_or_404(conn, account_id)
+        bank_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM bank_transactions WHERE bank_account_id = ?", (account_id,)
+        ).fetchall()]
+        affected_tx = []
+        if bank_ids:
+            ph = ",".join("?" * len(bank_ids))
+            affected_tx = [r["transaction_id"] for r in conn.execute(
+                f"SELECT DISTINCT transaction_id FROM bank_transaction_links WHERE bank_transaction_id IN ({ph})",
+                bank_ids,
+            ).fetchall()]
+            conn.execute(f"DELETE FROM bank_transaction_links WHERE bank_transaction_id IN ({ph})", bank_ids)
+            conn.execute("DELETE FROM bank_transactions WHERE bank_account_id = ?", (account_id,))
+        conn.execute("DELETE FROM bank_accounts WHERE id = ?", (account_id,))
+        for tx_id in affected_tx:
+            _refresh_transaction_reconciled(conn, tx_id)
+        conn.commit()
+        return {"deleted": True}
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Import d'un relevé (CSV / OFX)
+# ---------------------------------------------------------------------------
+
+@router.post("/accounts/{account_id}/import")
+async def import_statement(account_id: int, file: UploadFile = File(...)):
+    conn = get_conn()
+    try:
+        _account_or_404(conn, account_id)
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Fichier vide")
+        try:
+            rows = parse_statement(file.filename or "", content)
+        except ParseError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        now = _now()
+        imported = 0
+        for r in rows:
+            # ON CONFLICT DO NOTHING : ré-importer le même relevé ne duplique rien.
+            cur = conn.execute(
+                """INSERT INTO bank_transactions
+                   (bank_account_id, external_id, booking_date, amount, currency,
+                    label, counterparty, reconciled_manual, imported_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+                   ON CONFLICT(bank_account_id, external_id) DO NOTHING""",
+                (account_id, r["external_id"], r["booking_date"], r["amount"],
+                 r["currency"], r["label"], r["counterparty"], now),
+            )
+            imported += cur.rowcount
+        conn.execute(
+            "UPDATE bank_accounts SET last_synced_at = ? WHERE id = ?", (now, account_id)
+        )
+        conn.commit()
+        return {"imported": imported, "skipped": len(rows) - imported, "total": len(rows)}
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Lecture des lignes bancaires
+# ---------------------------------------------------------------------------
+
+@router.get("/transactions")
+def list_transactions(
+    account_id: int,
+    status: str = Query(default="pending", pattern="^(pending|reconciled|all)$"),
+):
+    conn = get_conn()
+    try:
+        _account_or_404(conn, account_id)
+        rows = conn.execute(
+            "SELECT * FROM bank_transactions WHERE bank_account_id = ? ORDER BY booking_date DESC, id DESC",
+            (account_id,),
+        ).fetchall()
+        items = _enrich_all(conn, rows)
+        if status == "pending":
+            items = [b for b in items if not b["reconciled"]]
+        elif status == "reconciled":
+            items = [b for b in items if b["reconciled"]]
+        return items
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Association d'écritures à une ligne bancaire (many-to-many)
+# ---------------------------------------------------------------------------
+
+def _bank_or_404(conn, bank_transaction_id: int) -> dict:
+    row = conn.execute(
+        "SELECT * FROM bank_transactions WHERE id = ?", (bank_transaction_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Ligne bancaire introuvable")
+    return row_to_dict(row)
+
+
+def _links_payload(conn, bank_transaction_id: int, bt: dict) -> dict:
+    rows = conn.execute(
+        """SELECT l.id AS link_id, t.id AS transaction_id, t.date, t.label, t.amount,
+                  t.from_entity_id, t.to_entity_id,
+                  fe.name AS from_entity_name, te.name AS to_entity_name
+           FROM bank_transaction_links l
+           JOIN transactions t ON t.id = l.transaction_id
+           LEFT JOIN entities fe ON fe.id = t.from_entity_id
+           LEFT JOIN entities te ON te.id = t.to_entity_id
+           WHERE l.bank_transaction_id = ?
+           ORDER BY t.date, t.id""",
+        (bank_transaction_id,),
+    ).fetchall()
+    links = [row_to_dict(r) for r in rows]
+    linked = sum(l["amount"] for l in links)
+    target = abs(bt["amount"])
+    return {
+        "bank_transaction_id": bank_transaction_id,
+        "amount": bt["amount"],
+        "linked_cents": linked,
+        "pending_cents": target - linked,
+        "reconciled": bool(bt.get("reconciled_manual")) or (linked == target),
+        "reconciled_manual": bool(bt.get("reconciled_manual")),
+        "links": links,
+    }
+
+
+class LinkPayload(BaseModel):
+    transaction_id: int
+
+
+@router.get("/transactions/{bank_transaction_id}/links")
+def list_links(bank_transaction_id: int):
+    conn = get_conn()
+    try:
+        bt = _bank_or_404(conn, bank_transaction_id)
+        return _links_payload(conn, bank_transaction_id, bt)
+    finally:
+        conn.close()
+
+
+@router.post("/transactions/{bank_transaction_id}/links", status_code=201)
+def add_link(bank_transaction_id: int, payload: LinkPayload):
+    """Associe une écriture à la ligne bancaire. Pas d'exclusivité : une même
+    écriture peut être répartie sur plusieurs lignes bancaires (division), et
+    une ligne bancaire peut regrouper plusieurs écritures (regroupement)."""
+    conn = get_conn()
+    try:
+        bt = _bank_or_404(conn, bank_transaction_id)
+        tx = conn.execute(
+            "SELECT id FROM transactions WHERE id = ?", (payload.transaction_id,)
+        ).fetchone()
+        if tx is None:
+            raise HTTPException(status_code=404, detail="Écriture introuvable")
+        try:
+            conn.execute(
+                """INSERT INTO bank_transaction_links
+                   (bank_transaction_id, transaction_id, created_at) VALUES (?, ?, ?)""",
+                (bank_transaction_id, payload.transaction_id, _now()),
+            )
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Cette écriture est déjà associée à cette ligne bancaire")
+        _refresh_transaction_reconciled(conn, payload.transaction_id)
+        conn.commit()
+        return _links_payload(conn, bank_transaction_id, bt)
+    finally:
+        conn.close()
+
+
+@router.delete("/transactions/{bank_transaction_id}/links/{transaction_id}")
+def remove_link(bank_transaction_id: int, transaction_id: int):
+    conn = get_conn()
+    try:
+        bt = _bank_or_404(conn, bank_transaction_id)
+        cur = conn.execute(
+            "DELETE FROM bank_transaction_links WHERE bank_transaction_id = ? AND transaction_id = ?",
+            (bank_transaction_id, transaction_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Association introuvable")
+        _refresh_transaction_reconciled(conn, transaction_id)
+        conn.commit()
+        return _links_payload(conn, bank_transaction_id, bt)
+    finally:
+        conn.close()
+
+
+class MarkPayload(BaseModel):
+    reconciled: bool
+
+
+@router.post("/transactions/{bank_transaction_id}/mark")
+def mark_reconciled(bank_transaction_id: int, payload: MarkPayload):
+    """Force ou annule le marquage manuel « rapprochée » (cas où les montants
+    ne collent pas exactement mais où le trésorier valide le rapprochement)."""
+    conn = get_conn()
+    try:
+        _bank_or_404(conn, bank_transaction_id)
+        conn.execute(
+            "UPDATE bank_transactions SET reconciled_manual = ? WHERE id = ?",
+            (1 if payload.reconciled else 0, bank_transaction_id),
+        )
+        conn.commit()
+        bt = _bank_or_404(conn, bank_transaction_id)
+        return _links_payload(conn, bank_transaction_id, bt)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Suggestions d'écritures à associer
+# ---------------------------------------------------------------------------
+
+@router.get("/transactions/{bank_transaction_id}/suggestions")
+def suggestions(bank_transaction_id: int, limit: int = Query(default=20, ge=1, le=200)):
+    """Propose les écritures non encore liées à CETTE ligne, du même sens
+    (crédit → recette externe→interne ; débit → dépense interne→externe),
+    triées « au plus proche inférieurement » du montant restant à couvrir."""
+    conn = get_conn()
+    try:
+        bt = _bank_or_404(conn, bank_transaction_id)
+        linked = _linked_map(conn, [bank_transaction_id]).get(bank_transaction_id, 0)
+        reste = abs(bt["amount"]) - linked
+
+        internal_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM entities WHERE type = 'internal'"
+        ).fetchall()]
+        results = []
+        if internal_ids:
+            ph = ",".join("?" * len(internal_ids))
+            if bt["amount"] >= 0:
+                # Crédit bancaire → recette : entité externe -> interne.
+                direction = f"t.to_entity_id IN ({ph}) AND (t.from_entity_id IS NULL OR t.from_entity_id NOT IN ({ph}))"
+            else:
+                # Débit bancaire → dépense : entité interne -> externe.
+                direction = f"t.from_entity_id IN ({ph}) AND (t.to_entity_id IS NULL OR t.to_entity_id NOT IN ({ph}))"
+            rows = conn.execute(
+                f"""SELECT t.id AS transaction_id, t.date, t.label, t.amount,
+                           t.from_entity_id, t.to_entity_id,
+                           fe.name AS from_entity_name, te.name AS to_entity_name
+                    FROM transactions t
+                    LEFT JOIN entities fe ON fe.id = t.from_entity_id
+                    LEFT JOIN entities te ON te.id = t.to_entity_id
+                    WHERE {direction}
+                      AND t.id NOT IN (
+                          SELECT transaction_id FROM bank_transaction_links
+                          WHERE bank_transaction_id = ?)
+                    ORDER BY (t.amount > ?) ASC, ABS(t.amount - ?) ASC, t.date DESC
+                    LIMIT ?""",
+                internal_ids + internal_ids + [bank_transaction_id, reste, reste, limit],
+            ).fetchall()
+            results = [row_to_dict(r) for r in rows]
+
+        return {
+            "bank_transaction_id": bank_transaction_id,
+            "amount": bt["amount"],
+            "linked_cents": linked,
+            "pending_cents": reste,
+            "suggestions": results,
+        }
+    finally:
+        conn.close()
