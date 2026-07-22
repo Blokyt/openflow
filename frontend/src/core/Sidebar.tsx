@@ -60,6 +60,7 @@ const MODULE_PATH_MAP: Record<string, string> = {
   system: "/system",
   helloasso: "/helloasso",
   bank_reconciliation: "/bank-reconciliation",
+  treasury: "/treasury",
   submissions: "/submissions",
 };
 
@@ -72,7 +73,7 @@ const SETTINGS_ONLY = new Set(["system", "backup", "users"]);
 // Regroupement visuel des modules optionnels dans la barre. Les ids non listés
 // ici restent à plat (au-dessus des groupes).
 const SIDEBAR_GROUPS: { label: string; ids: string[] }[] = [
-  { label: "Banque & collectes", ids: ["helloasso", "bank_reconciliation"] },
+  { label: "Banque & collectes", ids: ["treasury", "helloasso", "bank_reconciliation"] },
   { label: "Comptes & rapports", ids: ["budget", "reports", "direns"] },
 ];
 

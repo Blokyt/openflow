@@ -14,6 +14,7 @@ const ReimbursementManager = lazy(() => import("./modules/reimbursements/Reimbur
 const Reports = lazy(() => import("./modules/reports/index"));
 const HelloAssoPage = lazy(() => import("./modules/helloasso/HelloAssoPage"));
 const BankReconciliationPage = lazy(() => import("./modules/bank_reconciliation/BankReconciliationPage"));
+const TreasuryPage = lazy(() => import("./modules/treasury/TreasuryPage"));
 const DirensPage = lazy(() => import("./modules/direns/index"));
 const UsersAdmin = lazy(() => import("./modules/users/UsersAdmin"));
 const SubmissionsPage = lazy(() => import("./modules/submissions/index"));
@@ -47,6 +48,7 @@ export const MODULE_ROUTES: Record<string, ModuleRoute> = {
   system: { path: "/system", element: <Page><SystemPage /></Page> },
   helloasso: { path: "/helloasso", element: <Page><HelloAssoPage /></Page> },
   bank_reconciliation: { path: "/bank-reconciliation", element: <Page><BankReconciliationPage /></Page> },
+  treasury: { path: "/treasury", element: <Page><TreasuryPage /></Page> },
   users: { path: "/users", element: <Page><UsersAdmin /></Page> },
   submissions: { path: "/submissions", element: <Page><SubmissionsPage /></Page> },
 };

@@ -382,6 +382,18 @@ export const api = {
     request<{ configured: boolean }>("/bank_reconciliation/config", { method: "PUT", body: JSON.stringify(cfg) }),
   generateBankKey: () =>
     request<{ certificate: string; redirect_url: string }>("/bank_reconciliation/config/generate-key", { method: "POST" }),
+  // Trésorerie (poches)
+  getPockets: () => request<{ pockets: any[]; total_cents: number }>("/treasury/pockets"),
+  createPocket: (name: string) =>
+    request<any>("/treasury/pockets", { method: "POST", body: JSON.stringify({ name }) }),
+  updatePocket: (id: number, body: { name?: string; reference_cents?: number; reference_date?: string; bank_account_id?: number }) =>
+    request<any>(`/treasury/pockets/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deletePocket: (id: number) => request<any>(`/treasury/pockets/${id}`, { method: "DELETE" }),
+  alignPocketBank: (id: number) => request<any>(`/treasury/pockets/${id}/align-bank`, { method: "POST" }),
+  getPocketTransfers: () => request<any[]>("/treasury/transfers"),
+  createPocketTransfer: (body: { from_pocket_id: number; to_pocket_id: number; amount_cents: number; date: string; label: string }) =>
+    request<any>("/treasury/transfers", { method: "POST", body: JSON.stringify(body) }),
+  deletePocketTransfer: (id: number) => request<any>(`/treasury/transfers/${id}`, { method: "DELETE" }),
   listBanks: (country = "FR") =>
     request<{ name: string; country: string; logo: string | null }[]>(`/bank_reconciliation/banks?country=${country}`),
   connectBank: (accountId: number, aspsp_name: string, aspsp_country = "FR") =>

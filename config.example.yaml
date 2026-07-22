@@ -29,6 +29,7 @@ modules:
   system: true
   tiers: false
   transactions: true
+  treasury: false
   users: true
 server:
   host: 0.0.0.0
