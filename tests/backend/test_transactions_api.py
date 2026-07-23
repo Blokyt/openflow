@@ -23,6 +23,16 @@ def test_create_transaction(client, entity_pair):
     assert response.json()["label"] == "Achat"
     assert "id" in response.json()
 
+
+def test_create_transaction_invalid_date_rejected(client, entity_pair):
+    """Une date non ISO est refusée (422) : sinon regroupement/filtres corrompus."""
+    src, dst = entity_pair
+    for bad in ("31/12/2026", "pas une date"):
+        r = client.post("/api/transactions/", json={
+            "date": bad, "label": "x", "amount": 100, "from_entity_id": src, "to_entity_id": dst})
+        assert r.status_code == 422, (bad, r.status_code)
+
+
 def test_get_transaction(client, entity_pair):
     src, dst = entity_pair
     # 100,00 € = 10000 centimes

@@ -5,7 +5,20 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+def _ensure_iso_date(v):
+    """Valide un AAAA-MM-JJ. Une date libre corromprait silencieusement le
+    regroupement mensuel (substr(date,1,7)) et les filtres de période."""
+    if v is None:
+        return v
+    from datetime import date as _date
+    try:
+        _date.fromisoformat(v)
+    except (ValueError, TypeError):
+        raise ValueError("date invalide : format attendu AAAA-MM-JJ")
+    return v
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_admin, require_entity_access
 from backend.core.balance import compute_legacy_balance
@@ -67,6 +80,11 @@ class TransactionCreate(BaseModel):
     to_entity_id: int
     payer_contact_id: Optional[int] = None
 
+    @field_validator("date")
+    @classmethod
+    def _v_date(cls, v):
+        return _ensure_iso_date(v)
+
 
 class TransactionUpdate(BaseModel):
     date: Optional[str] = None
@@ -83,6 +101,11 @@ class TransactionUpdate(BaseModel):
     justified: Optional[bool] = None
     # Rapprochement forcé à la main (ex : espèces jamais passées en banque).
     reconciled_manual: Optional[bool] = None
+
+    @field_validator("date")
+    @classmethod
+    def _v_date(cls, v):
+        return _ensure_iso_date(v)
 
 
 # Champs de pur suivi : leur bascule seule ne passe pas par le verrou de clôture

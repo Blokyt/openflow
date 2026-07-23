@@ -78,6 +78,22 @@ def test_run_generates_and_is_idempotent(client_and_db):
     assert _count_tx(db_path) == n
 
 
+def test_run_skips_recurrence_with_deleted_entity(client_and_db):
+    """Une récurrence dont l'entité a été supprimée est sautée (pas de
+    transaction fantôme), et signalée dans `skipped`."""
+    client, db_path = client_and_db
+    interne, externe = _entities(client)
+    start = (datetime.now(timezone.utc).date() - timedelta(days=70)).replace(day=1).isoformat()
+    _make_rec(client, interne, externe, start)
+    assert client.delete(f"/api/entities/{interne}").status_code == 200
+
+    r = client.post("/api/recurrences/run")
+    assert r.status_code == 200
+    assert r.json()["generated"] == 0
+    assert r.json()["skipped"] == 1
+    assert _count_tx(db_path) == 0
+
+
 def test_inactive_recurrence_not_generated(client_and_db):
     client, db_path = client_and_db
     interne, externe = _entities(client)

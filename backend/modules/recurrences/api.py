@@ -188,8 +188,21 @@ def run_due():
         now = _now()
         recs = conn.execute("SELECT * FROM recurrences WHERE active = 1").fetchall()
         generated = 0
+        skipped = 0
         for row in recs:
             r = row_to_dict(row)
+            # L'entité a pu être supprimée depuis la création de la récurrence, ou
+            # être agrégée : on saute plutôt que d'insérer une transaction pointant
+            # une entité fantôme/regroupement (noms NULL partout, incohérence).
+            bad = False
+            for eid in (r["from_entity_id"], r["to_entity_id"]):
+                m = conn.execute("SELECT balance_mode FROM entities WHERE id = ?", (eid,)).fetchone()
+                if m is None or m["balance_mode"] == "aggregate":
+                    bad = True
+                    break
+            if bad:
+                skipped += 1
+                continue
             start = _parse(r["start_date"])
             last = _parse(r["last_run_date"]) if r["last_run_date"] else None
             end = _parse(r["end_date"]) if r["end_date"] else None
@@ -212,6 +225,6 @@ def run_due():
                 (dates[-1].isoformat(), r["id"]),
             )
         conn.commit()
-        return {"generated": generated}
+        return {"generated": generated, "skipped": skipped}
     finally:
         conn.close()
