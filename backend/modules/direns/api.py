@@ -33,7 +33,7 @@ import re
 import sqlite3
 import zipfile
 from copy import copy
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 

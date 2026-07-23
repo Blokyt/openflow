@@ -441,7 +441,7 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
             )
 
         # reference_date null (ou vide) = effacement explicite de la référence côté
-        # UI (BalanceRefsSection.tsx envoie reference_date: null). La colonne
+        # UI (EntityTree.tsx / Paramètres envoient reference_date: null). La colonne
         # reference_date de entity_balance_refs est NOT NULL : un INSERT avec None
         # y provoquerait un sqlite3.IntegrityError. On traduit donc "date effacée"
         # en suppression de la ligne, ce qui redonne le même résultat que

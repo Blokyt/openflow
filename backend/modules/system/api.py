@@ -12,14 +12,13 @@ Endpoints:
 """
 import hashlib
 import json
-import os
 import shutil
 import sqlite3
 import subprocess
 import sys
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -27,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.core.auth import require_admin
-from backend.core.database import get_conn, get_db_path
+from backend.core.database import get_db_path
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 

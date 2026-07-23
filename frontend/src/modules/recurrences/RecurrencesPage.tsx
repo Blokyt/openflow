@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Repeat, Plus, Trash2, Pencil, X, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { api } from "../../api";
-import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
+import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
 import { inputClass, labelClass } from "../../core/formStyles";
 import EmptyState from "../../core/EmptyState";
 import PageLoader from "../../core/PageLoader";

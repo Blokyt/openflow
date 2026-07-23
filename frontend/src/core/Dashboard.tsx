@@ -10,7 +10,7 @@ import ModuleDiscoveryHint from "./ModuleDiscoveryHint";
 import OnboardingChecklist from "./OnboardingChecklist";
 import BudgetOverview from "../modules/budget/widgets/BudgetOverview";
 import { findGroupNode } from "../modules/budget/utils";
-import { formatEuros, formatDate, txTone, COLOR_EXPENSE, COLOR_INCOME, budgetColor } from "../utils/format";
+import { formatEuros, formatDate, txTone, COLOR_INCOME, budgetColor } from "../utils/format";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";

@@ -101,7 +101,6 @@ export const api = {
   getAllModules: () => request<any[]>("/modules/all"),
   getConfig: () => request<any>("/config"),
   updateEntity: (entity: any) => request<any>("/config/entity", { method: "PUT", body: JSON.stringify(entity) }),
-  updateBalance: (balance: any) => request<any>("/config/balance", { method: "PUT", body: JSON.stringify(balance) }),
   toggleModule: (id: string, active: boolean) => request<any>(`/config/modules/${id}?active=${active}`, { method: "PUT" }),
   getTransactions: (params?: Record<string, string>) => {
     const query = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -132,18 +131,8 @@ export const api = {
     request<{ transactions: number; allocations: number; children: number; accruals: number }>(
       `/categories/${id}/usage`
     ),
-  getBudgets: (period?: string) => {
-    const query = period ? `?period=${encodeURIComponent(period)}` : "";
-    return request<any[]>(`/budget/${query}`);
-  },
-  createBudget: (b: any) => request<any>("/budget/", { method: "POST", body: JSON.stringify(b) }),
-  getBudgetStatus: () => request<any[]>("/budget/status"),
-  getBudget: (id: number) => request<any>(`/budget/${id}`),
-  updateBudget: (id: number, b: any) => request<any>(`/budget/${id}`, { method: "PUT", body: JSON.stringify(b) }),
-  deleteBudget: (id: number) => request<any>(`/budget/${id}`, { method: "DELETE" }),
   // Budget & Exercices
   listFiscalYears: () => request<any[]>("/budget/fiscal-years"),
-  getCurrentFiscalYear: () => request<any>("/budget/fiscal-years/current"),
   createFiscalYear: (fy: { name: string; start_date: string; notes?: string; president_name?: string; tresorier_name?: string }) =>
     request<any>("/budget/fiscal-years", { method: "POST", body: JSON.stringify(fy) }),
   closeFiscalYear: (id: number, end_date?: string) =>
@@ -224,10 +213,6 @@ export const api = {
   updateBalanceRef: (id: number, ref: any) => request<any>(`/entities/${id}/balance-ref`, { method: "PUT", body: JSON.stringify(ref) }),
   setResidualEntity: (id: number) => request<any>(`/entities/${id}/residual`, { method: "PUT" }),
   // Tiers / Contacts
-  getTiers: (params?: Record<string, string | number>) => {
-    const q = params ? "?" + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : "";
-    return request<{ total: number; items: any[] }>(`/tiers/${q}`);
-  },
   // Recherche paginée côté serveur (combobox) : évite de charger tout le carnet.
   searchContacts: (search: string, limit = 30) => {
     const q = new URLSearchParams();
@@ -261,7 +246,6 @@ export const api = {
     }
     return response.json();
   },
-  deleteAttachment: (id: number) => request<any>(`/attachments/${id}`, { method: "DELETE" }),
   // Backup
   getBackupPreview: () => request<any>("/backup/preview"),
   exportBackup: async () => {
@@ -315,8 +299,6 @@ export const api = {
     fiscal_year_id: number; kind: string; amount: number; label: string;
     category_id?: number | null; entity_id?: number | null; description?: string;
   }) => request<any>("/reports/accruals", { method: "POST", body: JSON.stringify(body) }),
-  updateAccrual: (id: number, body: any) =>
-    request<any>(`/reports/accruals/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteAccrual: (id: number) =>
     request<any>(`/reports/accruals/${id}`, { method: "DELETE" }),
   // HelloAsso

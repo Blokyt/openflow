@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import { Download, Upload, Archive, AlertTriangle, CheckCircle } from "lucide-react";
+import { Download, Upload, AlertTriangle, CheckCircle } from "lucide-react";
 
 interface BackupPreview {
   tables: Record<string, number>;

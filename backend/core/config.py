@@ -1,6 +1,5 @@
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import Any
 
 import yaml
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Activity, HardDrive, Database, FileUp, Archive, AlertTriangle,
+  HardDrive, Database, FileUp, Archive, AlertTriangle,
   Check, X, RefreshCw, Trash2, Wrench, Shield, Settings as SettingsIcon,
 } from "lucide-react";
 import ConfirmDialog from "../../core/ConfirmDialog";

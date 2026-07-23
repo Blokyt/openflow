@@ -11,7 +11,6 @@ toujours d'identifiant de ligne.
 """
 import csv
 import hashlib
-import io
 import re
 from datetime import datetime
 
