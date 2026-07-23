@@ -11,11 +11,11 @@ from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance, compute_consolidated_balance
 
 try:
-    # Solde propre déduit d'une entité agrégée. Import protégé : le module
-    # entités reste fonctionnel si la Trésorerie est désinstallée.
-    from backend.modules.treasury.service import local_own_cents, treasury_total_cents
+    # Solde déduit d'une feuille résiduelle (BDA local). Import protégé : le
+    # module entités reste fonctionnel si la Trésorerie est désinstallée.
+    from backend.modules.treasury.service import residual_balance_cents, treasury_total_cents
 except Exception:  # pragma: no cover - module Trésorerie absent
-    local_own_cents = None
+    residual_balance_cents = None
     treasury_total_cents = None
 
 router = APIRouter()
@@ -320,15 +320,25 @@ def get_entity_balance(entity_id: int, request: Request, as_of_date: Optional[st
         if not entity:
             raise HTTPException(404, "Entité interne introuvable")
         result = compute_entity_balance(conn, entity_id, as_of_date)
-        # Entité agrégée (BDA) : le solde propre affiché est DÉDUIT de la
-        # Trésorerie (total des poches − Σ clubs), et non d'une référence saisie.
-        # On expose ces champs pour que l'onglet Entités montre la déduction.
-        if result.get("mode") == "aggregate" and local_own_cents is not None:
-            deduced = local_own_cents(conn, entity_id)
-            if deduced is not None:
-                result["deduced_local_cents"] = deduced
-                result["treasury_total_cents"] = treasury_total_cents(conn)
-                result["balance"] = deduced
+        # Ancrage Trésorerie pour l'onglet Entités :
+        # - feuille résiduelle (BDA local) : solde DÉDUIT = Trésorerie − Σ sœurs,
+        #   pas une référence saisie ;
+        # - ombrelle agrégée (BDA global) : on expose le total Trésorerie pour
+        #   afficher le consolidé = toute l'asso.
+        try:
+            is_resid = entity["is_residual"]
+        except (IndexError, KeyError):
+            is_resid = 0
+        if treasury_total_cents is not None:
+            tt = treasury_total_cents(conn)
+            if is_resid and residual_balance_cents is not None:
+                deduced = residual_balance_cents(conn, entity_id)
+                if deduced is not None:
+                    result["deduced_local_cents"] = deduced
+                    result["treasury_total_cents"] = tt
+                    result["balance"] = deduced
+            elif result.get("mode") == "aggregate" and tt is not None:
+                result["treasury_total_cents"] = tt
         return result
     finally:
         conn.close()
@@ -343,7 +353,31 @@ def get_consolidated_balance(entity_id: int, request: Request, as_of_date: Optio
         entity = conn.execute("SELECT * FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
             raise HTTPException(404, "Entité interne introuvable")
-        return compute_consolidated_balance(conn, entity_id, as_of_date)
+        result = compute_consolidated_balance(conn, entity_id, as_of_date)
+        # Ancrage Trésorerie (uniquement pour la vue courante, sans as_of) :
+        # l'ombrelle agrégée affiche le total réel des poches, et l'enfant
+        # résiduel (BDA local) sa valeur déduite, pour que la ventilation
+        # « total = BDA local + clubs » tombe juste.
+        if as_of_date is None and treasury_total_cents is not None and residual_balance_cents is not None:
+            tt = treasury_total_cents(conn)
+            if tt is not None:
+                for child in result.get("children", []):
+                    is_resid = conn.execute(
+                        "SELECT is_residual FROM entities WHERE id = ?", (child.get("entity_id"),)
+                    ).fetchone()
+                    if is_resid and (is_resid[0] or 0):
+                        deduced = residual_balance_cents(conn, child["entity_id"])
+                        if deduced is not None:
+                            child["balance"] = deduced
+                            child["consolidated_balance"] = deduced
+                try:
+                    mode = entity["balance_mode"]
+                except (IndexError, KeyError):
+                    mode = "own"
+                if mode == "aggregate":
+                    result["consolidated_balance"] = tt
+                    result["balance"] = tt
+        return result
     finally:
         conn.close()
 
@@ -367,17 +401,19 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
     conn = get_conn()
     try:
         entity = conn.execute(
-            "SELECT id, balance_mode FROM entities WHERE id = ? AND type = 'internal'",
+            "SELECT id, balance_mode, is_residual FROM entities WHERE id = ? AND type = 'internal'",
             (entity_id,),
         ).fetchone()
         if not entity:
             raise HTTPException(404, "Entité interne introuvable")
 
-        # Une entité agrégée (BDA) ne définit PAS son solde : il est déduit de la
-        # Trésorerie (total des poches) moins la somme des soldes des clubs. On
-        # refuse toute saisie de référence pour garder une seule source de vérité.
+        # Ni l'ombrelle agrégée (BDA global) ni la feuille résiduelle (BDA local)
+        # ne définissent leur solde à la main : le global vient de la Trésorerie,
+        # le local en est déduit (Trésorerie − Σ clubs). On refuse la saisie pour
+        # garder une seule source de vérité.
         mode = entity["balance_mode"] if hasattr(entity, "keys") else entity[1]
-        if mode == "aggregate":
+        is_resid = (entity["is_residual"] if hasattr(entity, "keys") else entity[2]) or 0
+        if mode == "aggregate" or is_resid:
             raise HTTPException(
                 status_code=400,
                 detail="Le solde de cette entité est déduit de la Trésorerie (total des poches moins les clubs) : il ne se définit pas à la main.",

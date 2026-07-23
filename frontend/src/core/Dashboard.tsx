@@ -399,8 +399,10 @@ export default function Dashboard() {
           {selectedEntity && (
             <p className="mt-3 text-sm text-[#8a8a8a]">
               Périmètre : <span className="text-accent-sand font-medium">{selectedEntity.name}</span>
-              {selectedEntity.balance_mode === "aggregate" ? (
+              {selectedEntity.is_residual ? (
                 " seul (solde propre, hors clubs)"
+              ) : selectedEntity.balance_mode === "aggregate" ? (
+                " (toute l'asso)"
               ) : (
                 <>
                   {selectedEntity.children && selectedEntity.children.length > 0 && " et sous-entités"}

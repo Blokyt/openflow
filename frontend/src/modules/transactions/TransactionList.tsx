@@ -304,7 +304,8 @@ export default function TransactionList() {
           </h1>
           {selectedEntity && (
             <p className="text-sm text-[#8a8a8a] mt-1">
-              Filtrées pour <span className="text-accent-sand font-medium">{selectedEntity.name}</span> et sous-entités
+              Filtrées pour <span className="text-accent-sand font-medium">{selectedEntity.name}</span>
+              {selectedEntity.children && selectedEntity.children.length > 0 && " et sous-entités"}
             </p>
           )}
         </div>

@@ -111,6 +111,8 @@ export interface Entity {
   parent_id: number | null;
   is_default: number;
   is_divers: number;
+  /** Feuille "résiduelle" (BDA local) : solde déduit = Trésorerie − Σ sœurs. */
+  is_residual?: number;
   color: string;
   position: number;
   balance_mode?: "own" | "aggregate";

@@ -20,47 +20,56 @@ from backend.core.database import get_conn, row_to_dict
 try:
     # Source de vérité du solde courant. Import protégé : le dashboard doit
     # rester fonctionnel si le module Trésorerie est désinstallé.
-    from backend.modules.treasury.service import local_own_cents, treasury_total_cents
+    from backend.modules.treasury.service import residual_balance_cents, treasury_total_cents
 except Exception:  # pragma: no cover - module Trésorerie absent
     treasury_total_cents = None
-    local_own_cents = None
+    residual_balance_cents = None
 
 router = APIRouter()
 
 
-def _root_entity_id(conn) -> Optional[int]:
-    row = conn.execute(
-        "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
-    ).fetchone()
-    return row["id"] if row else None
+def _entity_flags(conn, entity_id: int):
+    """(balance_mode, is_residual) d'une entité, defaults sûrs si colonnes absentes."""
+    try:
+        row = conn.execute(
+            "SELECT balance_mode, is_residual FROM entities WHERE id = ?", (entity_id,)
+        ).fetchone()
+    except Exception:
+        return "own", 0
+    if not row:
+        return "own", 0
+    mode = (row["balance_mode"] if hasattr(row, "keys") else row[0]) or "own"
+    resid = (row["is_residual"] if hasattr(row, "keys") else row[1]) or 0
+    return mode, resid
 
 
 def _resolve_balance(conn, entity_id: Optional[int]):
     """Résout le solde affiché selon le périmètre, ancré sur la Trésorerie.
 
-    Trois cas, source de vérité unique = Trésorerie :
-    - Global (aucune entité) : total Trésorerie (BDA + tous les clubs).
-    - Racine BDA sélectionnée : solde PROPRE déduit = Trésorerie − Σ clubs ;
-      BDA est traité comme un club (périmètre = lui seul, hors descendants).
+    Source de vérité unique = Trésorerie :
+    - Global (aucune entité) ou ombrelle agrégée « BDA global » : total
+      Trésorerie (toute l'asso = BDA local + clubs).
+    - Feuille résiduelle « BDA local » : solde DÉDUIT = Trésorerie − Σ sœurs
+      (les clubs) ; périmètre propre (c'est une feuille, elle n'a pas d'enfants).
     - Un club : None ici, on reste sur le calcul compta par référence + flux.
 
     Renvoie (balance|None, source, own_scope) :
     - balance None quand la Trésorerie n'est pas configurée (repli compta),
     - source "treasury"|"reference" pour l'affichage,
-    - own_scope True quand il faut restreindre recettes/dépenses à la racine
-      seule (BDA-en-tant-que-club), et non à tout le sous-arbre.
+    - own_scope True pour la feuille résiduelle (recettes/dépenses = elle seule).
     """
-    root_id = _root_entity_id(conn)
-    is_root = entity_id is not None and root_id is not None and entity_id == root_id
-    own_scope = is_root
     if treasury_total_cents is None:
-        return None, "reference", own_scope
+        return None, "reference", False
     if entity_id is None:
         total = treasury_total_cents(conn)
         return (total, "treasury", False) if total is not None else (None, "reference", False)
-    if is_root:
-        local = local_own_cents(conn, root_id)
-        return (local, "treasury", True) if local is not None else (None, "reference", True)
+    mode, resid = _entity_flags(conn, entity_id)
+    if resid:
+        deduced = residual_balance_cents(conn, entity_id)
+        return (deduced, "treasury", True) if deduced is not None else (None, "reference", True)
+    if mode == "aggregate":
+        total = treasury_total_cents(conn)
+        return (total, "treasury", False) if total is not None else (None, "reference", False)
     return None, "reference", False
 
 # Message constant pour la garde « entité obligatoire pour un non-admin »,
@@ -242,16 +251,19 @@ def get_summary(
             reference_date = own.get("reference_date")
             reference_amount = own.get("reference_amount")
             if own_scope:
-                # BDA (racine) traité comme un club : périmètre = lui seul, solde
-                # propre déduit de la Trésorerie (hors clubs), pas le consolidé.
+                # Feuille résiduelle (BDA local) : périmètre = elle seule, solde
+                # déduit de la Trésorerie (hors clubs), pas le consolidé.
                 scope = [entity_id]
                 balance = resolved if resolved is not None else own["balance"]
-            elif include_children:
-                scope = _scope_ids(conn, entity_id, include_children)
-                balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
             else:
-                scope = [entity_id]
-                balance = own["balance"]
+                if include_children:
+                    scope = _scope_ids(conn, entity_id, include_children)
+                    base = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
+                else:
+                    scope = [entity_id]
+                    base = own["balance"]
+                # Ombrelle agrégée : `resolved` = total Trésorerie (toute l'asso).
+                balance = resolved if resolved is not None else base
             ph = ",".join("?" * len(scope))
             conds, pp = _period_conds(date_from, date_to)
             income_where = " AND ".join([
@@ -364,16 +376,19 @@ def get_timeseries(
         resolved, _bsrc, own_scope = _resolve_balance(conn, entity_id)
         if entity_id is not None:
             if own_scope:
-                # BDA (racine) traité comme un club : lui seul, solde propre déduit.
+                # Feuille résiduelle (BDA local) : elle seule, solde déduit.
                 scope = [entity_id]
                 current_balance = resolved if resolved is not None \
                     else compute_entity_balance(conn, entity_id)["balance"]
-            elif include_children:
-                scope = _scope_ids(conn, entity_id, include_children)
-                current_balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
             else:
-                scope = [entity_id]
-                current_balance = compute_entity_balance(conn, entity_id)["balance"]
+                if include_children:
+                    scope = _scope_ids(conn, entity_id, include_children)
+                    base = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
+                else:
+                    scope = [entity_id]
+                    base = compute_entity_balance(conn, entity_id)["balance"]
+                # Ombrelle agrégée : `resolved` = total Trésorerie (toute l'asso).
+                current_balance = resolved if resolved is not None else base
             # Flux net mensuel du périmètre (frontière : virements internes neutres).
             case_sql, case_params = _frontier_case_sql(scope)
             ph = ",".join("?" * len(scope))

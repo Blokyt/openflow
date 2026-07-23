@@ -105,9 +105,6 @@ function EntitySelectorOption({
         <span className={`flex-1 truncate ${selectedId === entity.id ? "text-accent-sand" : "text-text-secondary"}`}>
           {entity.name}
         </span>
-        {entity.balance_mode === "aggregate" && (
-          <span className="text-[10px] uppercase tracking-wide text-[#666] flex-shrink-0" title="Solde propre (hors clubs), déduit de la Trésorerie">propre</span>
-        )}
         {selectedId === entity.id && <Check size={12} className="text-accent-sand flex-shrink-0" />}
       </button>
       {entity.children?.map((child) => (

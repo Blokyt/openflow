@@ -88,33 +88,41 @@ def treasury_total_cents(conn: sqlite3.Connection) -> int | None:
     return sum(pocket_balance_cents(conn, p, movements) for p in pockets)
 
 
-def clubs_total_cents(conn: sqlite3.Connection, root_id: int) -> int:
-    """Somme des soldes consolidés des clubs (enfants directs de la racine).
+def siblings_total_cents(conn: sqlite3.Connection, entity_id: int) -> int:
+    """Somme des soldes consolidés des entités SŒURS de `entity_id`.
 
-    Import local de compute_consolidated_balance pour éviter d'imposer une
-    dépendance au core à l'import du module (le service reste chargeable seul).
+    Sœurs = autres enfants internes du même parent (les clubs, quand entity_id
+    est la feuille résiduelle « BDA local »). Import local de
+    compute_consolidated_balance pour garder le service chargeable seul.
     """
     from backend.core.balance import compute_consolidated_balance
 
+    row = conn.execute("SELECT parent_id FROM entities WHERE id = ?", (entity_id,)).fetchone()
+    if not row:
+        return 0
+    parent_id = row["parent_id"] if hasattr(row, "keys") else row[0]
+    if parent_id is None:
+        return 0
     total = 0
-    children = conn.execute(
-        "SELECT id FROM entities WHERE parent_id = ? AND type = 'internal'",
-        (root_id,),
+    siblings = conn.execute(
+        "SELECT id FROM entities WHERE parent_id = ? AND type = 'internal' AND id != ?",
+        (parent_id, entity_id),
     ).fetchall()
-    for c in children:
-        cid = c["id"] if hasattr(c, "keys") else c[0]
-        total += compute_consolidated_balance(conn, cid)["consolidated_balance"]
+    for s in siblings:
+        sid = s["id"] if hasattr(s, "keys") else s[0]
+        total += compute_consolidated_balance(conn, sid)["consolidated_balance"]
     return total
 
 
-def local_own_cents(conn: sqlite3.Connection, root_id: int) -> int | None:
-    """Solde propre DÉDUIT de la racine (BDA) : Trésorerie − Σ soldes des clubs.
+def residual_balance_cents(conn: sqlite3.Connection, entity_id: int) -> int | None:
+    """Solde DÉDUIT d'une feuille résiduelle (ex : BDA local).
 
-    L'asso ne définit que les soldes des clubs ; l'argent propre de la racine
-    (hors clubs) se déduit du total réel en Trésorerie. Renvoie None si la
-    Trésorerie n'est pas configurée (repli sur le calcul par référence).
+    = total Trésorerie − Σ soldes des sœurs (les clubs). L'asso ne saisit que
+    les soldes des clubs ; l'argent propre de la feuille résiduelle se déduit du
+    total réel en Trésorerie. Renvoie None si la Trésorerie n'est pas configurée
+    (repli sur le calcul par référence).
     """
     total = treasury_total_cents(conn)
     if total is None:
         return None
-    return total - clubs_total_cents(conn, root_id)
+    return total - siblings_total_cents(conn, entity_id)

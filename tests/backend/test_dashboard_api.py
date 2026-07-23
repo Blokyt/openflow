@@ -237,89 +237,124 @@ def test_timeseries_last_point_follows_treasury(client):
     assert series[-1]["balance"] == 700000
 
 
-# ─── BDA (racine agrégée) : Global vs BDA-local déduit de la Trésorerie ───────
+# ─── Ombrelle « BDA global » + feuille résiduelle « BDA local » + clubs ──────
 
-def _make_root_bda(client, db_path):
-    """Crée BDA en racine agrégée et la marque is_default (non settable via API)."""
-    bda = client.post("/api/entities/", json={
-        "name": "BDA", "type": "internal", "balance_mode": "aggregate",
+def _make_umbrella(client, db_path):
+    """Crée l'ombrelle agrégée (is_default) + la feuille résiduelle BDA local.
+
+    is_default et is_residual ne sont pas settables via l'API : posés en DB,
+    comme la restructuration réelle le fait.
+    """
+    umbrella = client.post("/api/entities/", json={
+        "name": "BDA global", "type": "internal", "balance_mode": "aggregate",
+    }).json()
+    local = client.post("/api/entities/", json={
+        "name": "BDA local", "type": "internal", "parent_id": umbrella["id"],
     }).json()
     conn = sqlite3.connect(str(db_path))
-    conn.execute("UPDATE entities SET is_default = 1 WHERE id = ?", (bda["id"],))
+    conn.execute("UPDATE entities SET is_default = 1 WHERE id = ?", (umbrella["id"],))
+    conn.execute("UPDATE entities SET is_residual = 1 WHERE id = ?", (local["id"],))
     conn.commit()
     conn.close()
-    return bda
+    return umbrella, local
 
 
-def test_bda_local_deduced_and_global_coherent(client_and_db):
-    """Global = total Trésorerie ; BDA-local = Trésorerie − Σ clubs ; et
-    Global == BDA-local + Σ clubs (cohérence de la déduction)."""
+def test_global_umbrella_and_residual_local_coherent(client_and_db):
+    """Global/ombrelle = total Trésorerie ; BDA local = Trésorerie − Σ clubs ;
+    et Global == BDA local + Σ clubs (cohérence de la déduction)."""
     client, db_path = client_and_db
-    bda = _make_root_bda(client, db_path)
+    umbrella, local = _make_umbrella(client, db_path)
     gastro = client.post("/api/entities/", json={
-        "name": "Gastro", "type": "internal", "parent_id": bda["id"],
+        "name": "Gastro", "type": "internal", "parent_id": umbrella["id"],
     }).json()
     ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
-    # BDA reçoit 1000 de l'extérieur, en reverse 300 à Gastro.
+    # BDA local reçoit 1000 de l'extérieur, reverse 300 à Gastro.
     client.post("/api/transactions/", json={
         "date": "2026-06-10", "label": "Don", "amount": 100000,
-        "from_entity_id": ext["id"], "to_entity_id": bda["id"]})
+        "from_entity_id": ext["id"], "to_entity_id": local["id"]})
     client.post("/api/transactions/", json={
         "date": "2026-06-11", "label": "Dotation", "amount": 30000,
-        "from_entity_id": bda["id"], "to_entity_id": gastro["id"]})
+        "from_entity_id": local["id"], "to_entity_id": gastro["id"]})
     _set_pocket_ref(client, "Compte", 500000)
     _set_pocket_ref(client, "Livret", 200000)  # total Trésorerie = 700000
 
     club_bal = client.get(f"/api/entities/{gastro['id']}/consolidated").json()["consolidated_balance"]
-    assert club_bal == 30000  # 0 de référence + 300 reçus de BDA
+    assert club_bal == 30000  # 0 de référence + 300 reçus de BDA local
 
     glob = client.get("/api/dashboard/summary").json()
     assert glob["balance"] == 700000
     assert glob["balance_source"] == "treasury"
 
-    local = client.get("/api/dashboard/summary", params={"entity_id": bda["id"]}).json()
-    assert local["balance"] == 700000 - club_bal  # BDA propre = total − clubs
-    assert local["balance_source"] == "treasury"
-    assert local["reference_date"] is None
-    assert local["reference_amount"] is None
-    # BDA traité comme un club : ses recettes/dépenses sont son périmètre propre.
-    assert local["total_income"] == 100000    # reçu de l'extérieur
-    assert local["total_expenses"] == 30000   # reversé à Gastro (hors périmètre BDA)
+    # Sélectionner l'ombrelle = toute l'asso = total Trésorerie.
+    umb = client.get("/api/dashboard/summary", params={"entity_id": umbrella["id"]}).json()
+    assert umb["balance"] == 700000
+    assert umb["balance_source"] == "treasury"
 
-    # Cohérence : le global se répartit exactement entre BDA-local et les clubs.
-    assert glob["balance"] == local["balance"] + club_bal
+    # Sélectionner BDA local = solde déduit + périmètre propre.
+    loc = client.get("/api/dashboard/summary", params={"entity_id": local["id"]}).json()
+    assert loc["balance"] == 700000 - club_bal
+    assert loc["balance_source"] == "treasury"
+    assert loc["reference_date"] is None
+    assert loc["reference_amount"] is None
+    assert loc["total_income"] == 100000    # reçu de l'extérieur
+    assert loc["total_expenses"] == 30000   # reversé à Gastro (hors périmètre BDA local)
+
+    # Cohérence : le global se répartit exactement entre BDA local et les clubs.
+    assert glob["balance"] == loc["balance"] + club_bal
 
 
-def test_entity_balance_endpoint_deduces_aggregate_local(client_and_db):
-    """/entities/{bda}/balance expose le solde propre déduit de la Trésorerie."""
+def test_entity_balance_endpoint_deduces_residual_local(client_and_db):
+    """/entities/{bda_local}/balance expose le solde déduit de la Trésorerie."""
     client, db_path = client_and_db
-    bda = _make_root_bda(client, db_path)
+    umbrella, local = _make_umbrella(client, db_path)
     gastro = client.post("/api/entities/", json={
-        "name": "Gastro", "type": "internal", "parent_id": bda["id"]}).json()
+        "name": "Gastro", "type": "internal", "parent_id": umbrella["id"]}).json()
     ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
     client.post("/api/transactions/", json={
         "date": "2026-06-11", "label": "Dotation", "amount": 30000,
-        "from_entity_id": bda["id"], "to_entity_id": gastro["id"]})
+        "from_entity_id": local["id"], "to_entity_id": gastro["id"]})
     _set_pocket_ref(client, "Compte", 500000)
 
-    bal = client.get(f"/api/entities/{bda['id']}/balance").json()
+    bal = client.get(f"/api/entities/{local['id']}/balance").json()
     assert bal["deduced_local_cents"] == 500000 - 30000
     assert bal["treasury_total_cents"] == 500000
     assert bal["balance"] == bal["deduced_local_cents"]
 
 
-def test_balance_ref_rejected_on_aggregate_kept_for_clubs(client_and_db):
-    """On ne définit pas le solde de BDA (déduit) : PUT balance-ref → 400.
-    Les clubs gardent leur éditeur de référence (200)."""
+def test_consolidated_umbrella_uses_treasury_and_deduced_child(client_and_db):
+    """/consolidated de l'ombrelle = total Trésorerie, et l'enfant résiduel y
+    apparaît à sa valeur déduite (pour que total = BDA local + clubs)."""
     client, db_path = client_and_db
-    bda = _make_root_bda(client, db_path)
+    umbrella, local = _make_umbrella(client, db_path)
     gastro = client.post("/api/entities/", json={
-        "name": "Gastro", "type": "internal", "parent_id": bda["id"]}).json()
+        "name": "Gastro", "type": "internal", "parent_id": umbrella["id"]}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    client.post("/api/transactions/", json={
+        "date": "2026-06-11", "label": "Dotation", "amount": 30000,
+        "from_entity_id": ext["id"], "to_entity_id": gastro["id"]})
+    _set_pocket_ref(client, "Compte", 500000)
 
-    r_bda = client.put(f"/api/entities/{bda['id']}/balance-ref",
+    cons = client.get(f"/api/entities/{umbrella['id']}/consolidated").json()
+    assert cons["consolidated_balance"] == 500000
+    children = {c["entity_id"]: c["balance"] for c in cons["children"]}
+    assert children[local["id"]] == 500000 - 30000  # BDA local déduit
+    assert children[gastro["id"]] == 30000
+
+
+def test_balance_ref_rejected_on_umbrella_and_residual_kept_for_clubs(client_and_db):
+    """On ne définit ni le solde de l'ombrelle ni celui de BDA local (déduits) :
+    PUT balance-ref → 400. Les clubs gardent leur éditeur de référence (200)."""
+    client, db_path = client_and_db
+    umbrella, local = _make_umbrella(client, db_path)
+    gastro = client.post("/api/entities/", json={
+        "name": "Gastro", "type": "internal", "parent_id": umbrella["id"]}).json()
+
+    r_umb = client.put(f"/api/entities/{umbrella['id']}/balance-ref",
                        json={"reference_date": "2026-01-01", "reference_amount": 50000})
-    assert r_bda.status_code == 400
-
+    assert r_umb.status_code == 400
+    r_loc = client.put(f"/api/entities/{local['id']}/balance-ref",
+                       json={"reference_date": "2026-01-01", "reference_amount": 50000})
+    assert r_loc.status_code == 400
     r_club = client.put(f"/api/entities/{gastro['id']}/balance-ref",
                         json={"reference_date": "2026-01-01", "reference_amount": 50000})
     assert r_club.status_code == 200

@@ -306,6 +306,7 @@ function EntityBalancePanel({
 
   const entity = findEntity(entityTree, entityId);
   const isAggregate = entity?.balance_mode === "aggregate";
+  const isResidual = !!entity?.is_residual;
 
   async function loadBalances() {
     return Promise.all([
@@ -369,7 +370,12 @@ function EntityBalancePanel({
           <h3 className="text-sm font-semibold text-white">{entityName}</h3>
           {isAggregate && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-sand/10 text-accent-sand border border-accent-sand/30">
-              Agrégé
+              Global
+            </span>
+          )}
+          {isResidual && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-sand/10 text-accent-sand border border-accent-sand/30">
+              Déduit
             </span>
           )}
         </div>
@@ -393,13 +399,13 @@ function EntityBalancePanel({
         </div>
       ) : (
         <div className="space-y-3">
-          {balance && (
+          {balance && !isAggregate && (
             <div className="bg-bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-[#8a8a8a] uppercase tracking-wider">
-                  {isAggregate ? "Solde propre (déduit)" : "Solde propre"}
+                  {isResidual ? "Solde propre (déduit)" : "Solde propre"}
                 </p>
-                {isAdmin && !isAggregate && !editingRef && (
+                {isAdmin && !isResidual && !editingRef && (
                   <button
                     onClick={openEditForm}
                     className="text-[#8a8a8a] hover:text-accent-sand transition-colors"
@@ -408,7 +414,7 @@ function EntityBalancePanel({
                     <Pencil size={13} />
                   </button>
                 )}
-                {isAggregate && isAdmin && (
+                {isResidual && isAdmin && (
                   <Link
                     to="/treasury"
                     className="text-xs text-accent-sand hover:underline inline-flex items-center gap-0.5"
@@ -421,12 +427,12 @@ function EntityBalancePanel({
               <p className={`text-2xl font-bold ${balance.balance >= 0 ? "text-white" : "text-alert"}`}>
                 {formatEuros(balance.balance)}
               </p>
-              {isAggregate ? (
+              {isResidual ? (
                 <p className="text-xs text-[#555] mt-1">
                   Déduit : Trésorerie
                   {balance.treasury_total_cents != null ? ` ${formatEuros(balance.treasury_total_cents)}` : ""}
                   {" − clubs "}
-                  {formatEuros(sumChildren)}
+                  {formatEuros((balance.treasury_total_cents ?? balance.balance) - balance.balance)}
                 </p>
               ) : balance.reference_date ? (
                 <p className="text-xs text-[#555] mt-1">
@@ -434,7 +440,7 @@ function EntityBalancePanel({
                 </p>
               ) : null}
 
-              {!isAggregate && editingRef && (
+              {!isResidual && editingRef && (
                 <form onSubmit={handleSaveRef} className="mt-3 space-y-2">
                   <div className="flex gap-2">
                     <input
@@ -480,12 +486,14 @@ function EntityBalancePanel({
 
           {hasChildren && (
             <div className="bg-bg-card border border-border rounded-xl p-4">
-              <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Solde consolidé</p>
+              <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">
+                {isAggregate ? "Solde total (Trésorerie)" : "Solde consolidé"}
+              </p>
               <p className={`text-2xl font-bold ${consolidatedCents >= 0 ? "text-accent-sand" : "text-alert"}`}>
                 {formatEuros(consolidatedCents)}
               </p>
               {isAggregate && (
-                <p className="text-xs text-[#555] mt-1">= total en Trésorerie (BDA + clubs)</p>
+                <p className="text-xs text-[#555] mt-1">= total en Trésorerie (BDA local + clubs)</p>
               )}
               <div className="mt-3 space-y-1">
                 {consolidated!.children.map((child) => (

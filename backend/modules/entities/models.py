@@ -40,4 +40,10 @@ migrations = {
         "DROP TABLE entity_balance_refs",
         "ALTER TABLE entity_balance_refs_v2 RENAME TO entity_balance_refs",
     ],
+    "1.3.0": [
+        # Feuille "résiduelle" (ex : BDA local) sous une racine agrégée : son
+        # solde n'est pas saisi mais DÉDUIT = total Trésorerie − Σ des soldes de
+        # ses entités sœurs (les clubs). Un seul résiduel par racine attendu.
+        "ALTER TABLE entities ADD COLUMN is_residual INTEGER NOT NULL DEFAULT 0",
+    ],
 }
