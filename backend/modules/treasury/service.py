@@ -86,3 +86,35 @@ def treasury_total_cents(conn: sqlite3.Connection) -> int | None:
         "FROM pocket_movements"
     ).fetchall()
     return sum(pocket_balance_cents(conn, p, movements) for p in pockets)
+
+
+def clubs_total_cents(conn: sqlite3.Connection, root_id: int) -> int:
+    """Somme des soldes consolidés des clubs (enfants directs de la racine).
+
+    Import local de compute_consolidated_balance pour éviter d'imposer une
+    dépendance au core à l'import du module (le service reste chargeable seul).
+    """
+    from backend.core.balance import compute_consolidated_balance
+
+    total = 0
+    children = conn.execute(
+        "SELECT id FROM entities WHERE parent_id = ? AND type = 'internal'",
+        (root_id,),
+    ).fetchall()
+    for c in children:
+        cid = c["id"] if hasattr(c, "keys") else c[0]
+        total += compute_consolidated_balance(conn, cid)["consolidated_balance"]
+    return total
+
+
+def local_own_cents(conn: sqlite3.Connection, root_id: int) -> int | None:
+    """Solde propre DÉDUIT de la racine (BDA) : Trésorerie − Σ soldes des clubs.
+
+    L'asso ne définit que les soldes des clubs ; l'argent propre de la racine
+    (hors clubs) se déduit du total réel en Trésorerie. Renvoie None si la
+    Trésorerie n'est pas configurée (repli sur le calcul par référence).
+    """
+    total = treasury_total_cents(conn)
+    if total is None:
+        return None
+    return total - clubs_total_cents(conn, root_id)

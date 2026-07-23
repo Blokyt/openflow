@@ -282,9 +282,6 @@ function EntityBalancePanel({
   const [refSaving, setRefSaving] = useState(false);
   const [refError, setRefError] = useState<string | null>(null);
 
-  // Bank total calculator state
-  const [bankTotal, setBankTotal] = useState("");
-
   function findName(tree: typeof entityTree, id: number): string | null {
     for (const e of tree) {
       if (e.id === id) return e.name;
@@ -356,10 +353,14 @@ function EntityBalancePanel({
   const sumChildren = hasChildren
     ? consolidated!.children.reduce((acc, c) => acc + c.balance, 0)
     : 0;
-  // L'utilisateur saisit le total bancaire en euros ; on convertit en centimes pour comparer aux soldes
-  const bankTotalNum = bankTotal !== "" ? parseFloat(bankTotal) : null;
-  const bankTotalCents = bankTotalNum !== null ? Math.round(bankTotalNum * 100) : null;
-  const calculatedOwn = bankTotalCents !== null ? bankTotalCents - sumChildren : null;
+  // Pour une entité agrégée (BDA), le consolidé = total réel en Trésorerie
+  // (propre déduit + clubs), et non l'ancien solde consolidé par référence.
+  const consolidatedCents =
+    isAggregate && balance?.treasury_total_cents != null
+      ? balance.treasury_total_cents
+      : consolidated
+        ? consolidated.consolidated_balance
+        : 0;
 
   return (
     <div className="bg-[#0d0d0d] border border-border rounded-2xl p-5">
@@ -396,7 +397,7 @@ function EntityBalancePanel({
             <div className="bg-bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-[#8a8a8a] uppercase tracking-wider">
-                  {isAggregate ? "Solde propre (calculé)" : "Solde propre"}
+                  {isAggregate ? "Solde propre (déduit)" : "Solde propre"}
                 </p>
                 {isAdmin && !isAggregate && !editingRef && (
                   <button
@@ -409,10 +410,11 @@ function EntityBalancePanel({
                 )}
                 {isAggregate && isAdmin && (
                   <Link
-                    to="/settings#balances"
+                    to="/treasury"
                     className="text-xs text-accent-sand hover:underline inline-flex items-center gap-0.5"
+                    title="Le solde propre se déduit de la Trésorerie"
                   >
-                    Modifier dans Paramètres →
+                    Trésorerie →
                   </Link>
                 )}
               </div>
@@ -420,11 +422,12 @@ function EntityBalancePanel({
                 {formatEuros(balance.balance)}
               </p>
               {isAggregate ? (
-                balance.reference_date && (
-                  <p className="text-xs text-[#555] mt-1">
-                    Réf. {formatDate(balance.reference_date)} : {formatEuros(balance.reference_amount)} (bancaire)
-                  </p>
-                )
+                <p className="text-xs text-[#555] mt-1">
+                  Déduit : Trésorerie
+                  {balance.treasury_total_cents != null ? ` ${formatEuros(balance.treasury_total_cents)}` : ""}
+                  {" − clubs "}
+                  {formatEuros(sumChildren)}
+                </p>
               ) : balance.reference_date ? (
                 <p className="text-xs text-[#555] mt-1">
                   Réf. {formatDate(balance.reference_date)} : {formatEuros(balance.reference_amount)}
@@ -478,11 +481,11 @@ function EntityBalancePanel({
           {hasChildren && (
             <div className="bg-bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Solde consolidé</p>
-              <p className={`text-2xl font-bold ${consolidated!.consolidated_balance >= 0 ? "text-accent-sand" : "text-alert"}`}>
-                {formatEuros(consolidated!.consolidated_balance)}
+              <p className={`text-2xl font-bold ${consolidatedCents >= 0 ? "text-accent-sand" : "text-alert"}`}>
+                {formatEuros(consolidatedCents)}
               </p>
               {isAggregate && (
-                <p className="text-xs text-[#555] mt-1">= solde agrégé de référence + variations depuis</p>
+                <p className="text-xs text-[#555] mt-1">= total en Trésorerie (BDA + clubs)</p>
               )}
               <div className="mt-3 space-y-1">
                 {consolidated!.children.map((child) => (
@@ -494,50 +497,6 @@ function EntityBalancePanel({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {isAdmin && hasChildren && !isAggregate && (
-            <div className="bg-bg-card border border-border rounded-xl p-4">
-              <p className="text-xs text-[#8a8a8a] uppercase tracking-wider mb-2">Calculer le solde propre</p>
-              <p className="text-xs text-[#8a8a8a] mb-3 leading-relaxed">
-                Si tu connais le total du compte bancaire, le solde propre se déduit automatiquement.
-              </p>
-              <input
-                type="number"
-                step="0.01"
-                value={bankTotal}
-                onChange={(e) => setBankTotal(e.target.value)}
-                placeholder="Total compte bancaire"
-                className="w-full bg-[#1a1a1a] border border-border-hover rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] focus:outline-none focus:border-accent-sand/50"
-              />
-              {calculatedOwn !== null && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-[#8a8a8a]">
-                    Solde propre calculé ={" "}
-                    <span className="text-text-secondary">{formatEuros(bankTotalCents!)}</span>
-                    {" − "}
-                    <span className="text-text-secondary">{formatEuros(sumChildren)}</span>
-                    {" = "}
-                    <span className={`font-bold ${calculatedOwn >= 0 ? "text-white" : "text-alert"}`}>
-                      {formatEuros(calculatedOwn)}
-                    </span>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Le champ de référence attend des euros -> convertir les centimes
-                      setRefAmount(String(centsToEuros(calculatedOwn!)));
-                      setRefDate(balance?.reference_date ?? localToday());
-                      setRefError(null);
-                      setEditingRef(true);
-                    }}
-                    className="w-full px-3 py-1.5 rounded-lg border border-accent-sand/40 text-sm text-accent-sand hover:bg-accent-sand/5 hover:border-accent-sand/70 transition-colors"
-                  >
-                    Utiliser cette valeur
-                  </button>
-                </div>
-              )}
             </div>
           )}
 

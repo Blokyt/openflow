@@ -105,6 +105,9 @@ function EntitySelectorOption({
         <span className={`flex-1 truncate ${selectedId === entity.id ? "text-accent-sand" : "text-text-secondary"}`}>
           {entity.name}
         </span>
+        {entity.balance_mode === "aggregate" && (
+          <span className="text-[10px] uppercase tracking-wide text-[#666] flex-shrink-0" title="Solde propre (hors clubs), déduit de la Trésorerie">propre</span>
+        )}
         {selectedId === entity.id && <Check size={12} className="text-accent-sand flex-shrink-0" />}
       </button>
       {entity.children?.map((child) => (
@@ -155,7 +158,7 @@ function EntitySelector() {
       >
         <GitBranch size={13} className="text-accent-sand flex-shrink-0" strokeWidth={1.5} />
         <span className="flex-1 truncate text-left text-text-secondary">
-          {selectedEntity ? selectedEntity.name : "Toutes les entités"}
+          {selectedEntity ? selectedEntity.name : "Global (toute l'asso)"}
         </span>
         <ChevronDown
           size={13}
@@ -170,7 +173,7 @@ function EntitySelector() {
               className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors text-left border-b border-[#1a1a1a]"
               onClick={handleClear}
             >
-              <span className="flex-1 text-[#8a8a8a]">Toutes les entités</span>
+              <span className="flex-1 text-[#8a8a8a]">Global (toute l'asso)</span>
               {selectedEntityId === null && <Check size={12} className="text-accent-sand" />}
             </button>
           )}

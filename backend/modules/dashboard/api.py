@@ -20,9 +20,10 @@ from backend.core.database import get_conn, row_to_dict
 try:
     # Source de vérité du solde courant. Import protégé : le dashboard doit
     # rester fonctionnel si le module Trésorerie est désinstallé.
-    from backend.modules.treasury.service import treasury_total_cents
+    from backend.modules.treasury.service import local_own_cents, treasury_total_cents
 except Exception:  # pragma: no cover - module Trésorerie absent
     treasury_total_cents = None
+    local_own_cents = None
 
 router = APIRouter()
 
@@ -34,23 +35,33 @@ def _root_entity_id(conn) -> Optional[int]:
     return row["id"] if row else None
 
 
-def _treasury_anchor(conn, entity_id: Optional[int], include_children: bool):
-    """Total Trésorerie quand le périmètre couvre toute l'asso, sinon None.
+def _resolve_balance(conn, entity_id: Optional[int]):
+    """Résout le solde affiché selon le périmètre, ancré sur la Trésorerie.
 
-    Le solde courant de l'asso entière est ancré sur la Trésorerie (poches),
-    seule source de vérité, et non sur un solde de référence d'entité. Un
-    périmètre limité à un club (pas de poches propres) reste sur le calcul
-    compta par référence. Renvoie None si la Trésorerie n'est pas configurée.
+    Trois cas, source de vérité unique = Trésorerie :
+    - Global (aucune entité) : total Trésorerie (BDA + tous les clubs).
+    - Racine BDA sélectionnée : solde PROPRE déduit = Trésorerie − Σ clubs ;
+      BDA est traité comme un club (périmètre = lui seul, hors descendants).
+    - Un club : None ici, on reste sur le calcul compta par référence + flux.
+
+    Renvoie (balance|None, source, own_scope) :
+    - balance None quand la Trésorerie n'est pas configurée (repli compta),
+    - source "treasury"|"reference" pour l'affichage,
+    - own_scope True quand il faut restreindre recettes/dépenses à la racine
+      seule (BDA-en-tant-que-club), et non à tout le sous-arbre.
     """
-    if treasury_total_cents is None:
-        return None
     root_id = _root_entity_id(conn)
-    whole_asso = entity_id is None or (
-        root_id is not None and entity_id == root_id and include_children
-    )
-    if not whole_asso:
-        return None
-    return treasury_total_cents(conn)
+    is_root = entity_id is not None and root_id is not None and entity_id == root_id
+    own_scope = is_root
+    if treasury_total_cents is None:
+        return None, "reference", own_scope
+    if entity_id is None:
+        total = treasury_total_cents(conn)
+        return (total, "treasury", False) if total is not None else (None, "reference", False)
+    if is_root:
+        local = local_own_cents(conn, root_id)
+        return (local, "treasury", True) if local is not None else (None, "reference", True)
+    return None, "reference", False
 
 # Message constant pour la garde « entité obligatoire pour un non-admin »,
 # partagée par tous les endpoints de vue financière (dashboard et reports).
@@ -224,20 +235,23 @@ def get_summary(
                 "reference_date": None, "reference_amount": None,
             }
 
+        resolved, balance_source, own_scope = _resolve_balance(conn, entity_id)
+
         if entity_id is not None:
-            # Référence de l'entité elle-même : même sémantique qu'en mode
-            # 'aggregate' (compute_consolidated_balance y lit la référence de
-            # entity_id, jamais celle d'un descendant), donc on l'utilise aussi
-            # pour le solde consolidé en mode 'own' (qui n'expose pas de
-            # référence unique agrégée sur le sous-arbre).
             own = compute_entity_balance(conn, entity_id)
             reference_date = own.get("reference_date")
             reference_amount = own.get("reference_amount")
-            if include_children:
+            if own_scope:
+                # BDA (racine) traité comme un club : périmètre = lui seul, solde
+                # propre déduit de la Trésorerie (hors clubs), pas le consolidé.
+                scope = [entity_id]
+                balance = resolved if resolved is not None else own["balance"]
+            elif include_children:
+                scope = _scope_ids(conn, entity_id, include_children)
                 balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
             else:
+                scope = [entity_id]
                 balance = own["balance"]
-            scope = _scope_ids(conn, entity_id, include_children)
             ph = ",".join("?" * len(scope))
             conds, pp = _period_conds(date_from, date_to)
             income_where = " AND ".join([
@@ -264,21 +278,20 @@ def get_summary(
                 (*scope, *scope, *pp),
             ).fetchone()[0]
         else:
-            # "Toutes les entités" = consolidated balance of root entity
+            # "Global" = toute l'asso, ancré sur le total Trésorerie ; repli sur
+            # le solde consolidé de la racine si la Trésorerie n'est pas configurée.
             root = conn.execute(
                 "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
             ).fetchone()
             if root:
-                consolidated = compute_consolidated_balance(conn, root["id"])
-                balance = consolidated["consolidated_balance"]
-                # Référence de la racine elle-même (cf. remarque ci-dessus sur
-                # le mode 'own' : pas de référence unique agrégée sur le sous-arbre).
                 root_ref = compute_entity_balance(conn, root["id"])
                 reference_date = root_ref.get("reference_date")
                 reference_amount = root_ref.get("reference_amount")
+                balance = resolved if resolved is not None else \
+                    compute_consolidated_balance(conn, root["id"])["consolidated_balance"]
             else:
                 bal = compute_legacy_balance(conn, str(CONFIG_PATH))
-                balance = bal["balance"]
+                balance = resolved if resolved is not None else bal["balance"]
                 reference_date = bal.get("reference_date")
                 reference_amount = bal.get("reference_amount")
             conds, pp = _period_conds(date_from, date_to, "t.date")
@@ -305,15 +318,10 @@ def get_summary(
             )
             transaction_count = conn.execute(count_sql, tuple(cpp)).fetchone()[0]
 
-        # Ancrage sur la Trésorerie pour l'asso entière : le solde courant suit
-        # le total des poches et la référence d'entité disparaît de l'affichage.
-        anchor = _treasury_anchor(conn, entity_id, include_children)
-        balance_source = "reference"
-        if anchor is not None:
-            balance = anchor
+        # Source Trésorerie : la référence d'entité disparaît de l'affichage.
+        if balance_source == "treasury":
             reference_date = None
             reference_amount = None
-            balance_source = "treasury"
 
         return {
             "balance": balance,
@@ -352,16 +360,21 @@ def get_timeseries(
     conn = get_conn()
     try:
         _require_scope(conn, user, entity_id)
-        # Current balance
+        # Current balance (ancré Trésorerie : Global = total, BDA = propre déduit).
+        resolved, _bsrc, own_scope = _resolve_balance(conn, entity_id)
         if entity_id is not None:
-            if include_children:
+            if own_scope:
+                # BDA (racine) traité comme un club : lui seul, solde propre déduit.
+                scope = [entity_id]
+                current_balance = resolved if resolved is not None \
+                    else compute_entity_balance(conn, entity_id)["balance"]
+            elif include_children:
+                scope = _scope_ids(conn, entity_id, include_children)
                 current_balance = compute_consolidated_balance(conn, entity_id)["consolidated_balance"]
             else:
+                scope = [entity_id]
                 current_balance = compute_entity_balance(conn, entity_id)["balance"]
-            # Flux net mensuel du périmètre (frontière du sous-arbre : les
-            # virements internes au périmètre sont neutres). Même convention
-            # de signe que compute_entity_balance.
-            scope = _scope_ids(conn, entity_id, include_children)
+            # Flux net mensuel du périmètre (frontière : virements internes neutres).
             case_sql, case_params = _frontier_case_sql(scope)
             ph = ",".join("?" * len(scope))
             net_rows = conn.execute(
@@ -377,9 +390,11 @@ def get_timeseries(
                 "SELECT id FROM entities WHERE is_default = 1 AND parent_id IS NULL"
             ).fetchone()
             if root:
-                current_balance = compute_consolidated_balance(conn, root["id"])["consolidated_balance"]
+                current_balance = resolved if resolved is not None \
+                    else compute_consolidated_balance(conn, root["id"])["consolidated_balance"]
             else:
-                current_balance = compute_legacy_balance(conn, str(CONFIG_PATH))["balance"]
+                current_balance = resolved if resolved is not None \
+                    else compute_legacy_balance(conn, str(CONFIG_PATH))["balance"]
             net_rows = conn.execute(
                 """SELECT substr(date,1,7) AS month,
                           COALESCE(SUM(CASE
@@ -394,13 +409,6 @@ def get_timeseries(
                    FROM transactions t
                    GROUP BY month ORDER BY month"""
             ).fetchall()
-
-        # Même ancrage que /summary : pour l'asso entière, la série se cale sur le
-        # total Trésorerie courant (le dernier point = ce total), les variations
-        # mensuelles restant reconstituées depuis les flux compta.
-        anchor = _treasury_anchor(conn, entity_id, include_children)
-        if anchor is not None:
-            current_balance = anchor
 
         nets_by_month = {r["month"]: int(r["net"] or 0) for r in net_rows}
         # Generer la liste continue de tous les mois calendaires, du premier mois

@@ -127,6 +127,11 @@ export interface EntityBalance {
   reference_amount: number;
   reference_date: string | null;
   transactions_sum: number;
+  mode?: "own" | "aggregate";
+  /** Entité agrégée (BDA) : solde propre déduit = Trésorerie − Σ clubs (centimes). */
+  deduced_local_cents?: number;
+  /** Entité agrégée : total Trésorerie (toutes poches) en centimes. */
+  treasury_total_cents?: number | null;
 }
 
 export interface ConsolidatedBalance {

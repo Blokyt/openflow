@@ -1,5 +1,6 @@
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+import sqlite3
 import pytest
 
 def test_get_available_widgets(client):
@@ -234,6 +235,94 @@ def test_timeseries_last_point_follows_treasury(client):
 
     series = client.get("/api/dashboard/timeseries").json()
     assert series[-1]["balance"] == 700000
+
+
+# ─── BDA (racine agrégée) : Global vs BDA-local déduit de la Trésorerie ───────
+
+def _make_root_bda(client, db_path):
+    """Crée BDA en racine agrégée et la marque is_default (non settable via API)."""
+    bda = client.post("/api/entities/", json={
+        "name": "BDA", "type": "internal", "balance_mode": "aggregate",
+    }).json()
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("UPDATE entities SET is_default = 1 WHERE id = ?", (bda["id"],))
+    conn.commit()
+    conn.close()
+    return bda
+
+
+def test_bda_local_deduced_and_global_coherent(client_and_db):
+    """Global = total Trésorerie ; BDA-local = Trésorerie − Σ clubs ; et
+    Global == BDA-local + Σ clubs (cohérence de la déduction)."""
+    client, db_path = client_and_db
+    bda = _make_root_bda(client, db_path)
+    gastro = client.post("/api/entities/", json={
+        "name": "Gastro", "type": "internal", "parent_id": bda["id"],
+    }).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    # BDA reçoit 1000 de l'extérieur, en reverse 300 à Gastro.
+    client.post("/api/transactions/", json={
+        "date": "2026-06-10", "label": "Don", "amount": 100000,
+        "from_entity_id": ext["id"], "to_entity_id": bda["id"]})
+    client.post("/api/transactions/", json={
+        "date": "2026-06-11", "label": "Dotation", "amount": 30000,
+        "from_entity_id": bda["id"], "to_entity_id": gastro["id"]})
+    _set_pocket_ref(client, "Compte", 500000)
+    _set_pocket_ref(client, "Livret", 200000)  # total Trésorerie = 700000
+
+    club_bal = client.get(f"/api/entities/{gastro['id']}/consolidated").json()["consolidated_balance"]
+    assert club_bal == 30000  # 0 de référence + 300 reçus de BDA
+
+    glob = client.get("/api/dashboard/summary").json()
+    assert glob["balance"] == 700000
+    assert glob["balance_source"] == "treasury"
+
+    local = client.get("/api/dashboard/summary", params={"entity_id": bda["id"]}).json()
+    assert local["balance"] == 700000 - club_bal  # BDA propre = total − clubs
+    assert local["balance_source"] == "treasury"
+    assert local["reference_date"] is None
+    assert local["reference_amount"] is None
+    # BDA traité comme un club : ses recettes/dépenses sont son périmètre propre.
+    assert local["total_income"] == 100000    # reçu de l'extérieur
+    assert local["total_expenses"] == 30000   # reversé à Gastro (hors périmètre BDA)
+
+    # Cohérence : le global se répartit exactement entre BDA-local et les clubs.
+    assert glob["balance"] == local["balance"] + club_bal
+
+
+def test_entity_balance_endpoint_deduces_aggregate_local(client_and_db):
+    """/entities/{bda}/balance expose le solde propre déduit de la Trésorerie."""
+    client, db_path = client_and_db
+    bda = _make_root_bda(client, db_path)
+    gastro = client.post("/api/entities/", json={
+        "name": "Gastro", "type": "internal", "parent_id": bda["id"]}).json()
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    client.post("/api/transactions/", json={
+        "date": "2026-06-11", "label": "Dotation", "amount": 30000,
+        "from_entity_id": bda["id"], "to_entity_id": gastro["id"]})
+    _set_pocket_ref(client, "Compte", 500000)
+
+    bal = client.get(f"/api/entities/{bda['id']}/balance").json()
+    assert bal["deduced_local_cents"] == 500000 - 30000
+    assert bal["treasury_total_cents"] == 500000
+    assert bal["balance"] == bal["deduced_local_cents"]
+
+
+def test_balance_ref_rejected_on_aggregate_kept_for_clubs(client_and_db):
+    """On ne définit pas le solde de BDA (déduit) : PUT balance-ref → 400.
+    Les clubs gardent leur éditeur de référence (200)."""
+    client, db_path = client_and_db
+    bda = _make_root_bda(client, db_path)
+    gastro = client.post("/api/entities/", json={
+        "name": "Gastro", "type": "internal", "parent_id": bda["id"]}).json()
+
+    r_bda = client.put(f"/api/entities/{bda['id']}/balance-ref",
+                       json={"reference_date": "2026-01-01", "reference_amount": 50000})
+    assert r_bda.status_code == 400
+
+    r_club = client.put(f"/api/entities/{gastro['id']}/balance-ref",
+                        json={"reference_date": "2026-01-01", "reference_amount": 50000})
+    assert r_club.status_code == 200
 
 
 # ─── category_id sur /top-categories ──────────────────────────────────────────

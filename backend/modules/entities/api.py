@@ -10,6 +10,14 @@ from backend.core.auth import get_allowed_entity_ids, get_current_user, require_
 from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance, compute_consolidated_balance
 
+try:
+    # Solde propre déduit d'une entité agrégée. Import protégé : le module
+    # entités reste fonctionnel si la Trésorerie est désinstallée.
+    from backend.modules.treasury.service import local_own_cents, treasury_total_cents
+except Exception:  # pragma: no cover - module Trésorerie absent
+    local_own_cents = None
+    treasury_total_cents = None
+
 router = APIRouter()
 
 VALID_TYPES = {"internal", "external"}
@@ -311,7 +319,17 @@ def get_entity_balance(entity_id: int, request: Request, as_of_date: Optional[st
         entity = conn.execute("SELECT * FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
         if not entity:
             raise HTTPException(404, "Entité interne introuvable")
-        return compute_entity_balance(conn, entity_id, as_of_date)
+        result = compute_entity_balance(conn, entity_id, as_of_date)
+        # Entité agrégée (BDA) : le solde propre affiché est DÉDUIT de la
+        # Trésorerie (total des poches − Σ clubs), et non d'une référence saisie.
+        # On expose ces champs pour que l'onglet Entités montre la déduction.
+        if result.get("mode") == "aggregate" and local_own_cents is not None:
+            deduced = local_own_cents(conn, entity_id)
+            if deduced is not None:
+                result["deduced_local_cents"] = deduced
+                result["treasury_total_cents"] = treasury_total_cents(conn)
+                result["balance"] = deduced
+        return result
     finally:
         conn.close()
 
@@ -348,9 +366,22 @@ def get_balance_ref(entity_id: int, request: Request):
 def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
     conn = get_conn()
     try:
-        entity = conn.execute("SELECT id FROM entities WHERE id = ? AND type = 'internal'", (entity_id,)).fetchone()
+        entity = conn.execute(
+            "SELECT id, balance_mode FROM entities WHERE id = ? AND type = 'internal'",
+            (entity_id,),
+        ).fetchone()
         if not entity:
             raise HTTPException(404, "Entité interne introuvable")
+
+        # Une entité agrégée (BDA) ne définit PAS son solde : il est déduit de la
+        # Trésorerie (total des poches) moins la somme des soldes des clubs. On
+        # refuse toute saisie de référence pour garder une seule source de vérité.
+        mode = entity["balance_mode"] if hasattr(entity, "keys") else entity[1]
+        if mode == "aggregate":
+            raise HTTPException(
+                status_code=400,
+                detail="Le solde de cette entité est déduit de la Trésorerie (total des poches moins les clubs) : il ne se définit pas à la main.",
+            )
 
         # reference_date null (ou vide) = effacement explicite de la référence côté
         # UI (BalanceRefsSection.tsx envoie reference_date: null). La colonne
