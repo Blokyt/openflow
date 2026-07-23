@@ -179,7 +179,7 @@ function MyAccountSection() {
   );
 }
 
-// Category labels — modules are classified dynamically via manifest.category.
+// Category labels, modules are classified dynamically via manifest.category.
 const CATEGORY_LABELS: Record<string, string> = {
   core: "Noyau",
   standard: "Standard",

@@ -354,7 +354,7 @@ export default function ReimbursementManager() {
                 onChange={(e) => setForm({ ...form, transaction_id: e.target.value })}
                 className={inputClass}
               >
-                <option value="">— Aucune —</option>
+                <option value="">Aucune</option>
                 {txOptions.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label} · {formatDate(t.date)} · {formatEuros(t.amount)}

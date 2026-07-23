@@ -181,7 +181,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         <div>
           <label htmlFor="tx-from" className={labelClass}>Source (d'où part l'argent)</label>
           <select id="tx-from" value={fromEntityId} onChange={(e) => setFromEntityId(e.target.value)} required className={inputClass}>
-            <option value="">— Choisir —</option>
+            <option value="">Choisir…</option>
             <optgroup label="Mes comptes (internes)">
               {internalEntities.map((ent) => (
                 <option key={ent.id} value={ent.id}>{ent.name}</option>
@@ -197,7 +197,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
         <div>
           <label htmlFor="tx-to" className={labelClass}>Destination (où va l'argent)</label>
           <select id="tx-to" value={toEntityId} onChange={(e) => setToEntityId(e.target.value)} required className={inputClass}>
-            <option value="">— Choisir —</option>
+            <option value="">Choisir…</option>
             <optgroup label="Mes comptes (internes)">
               {internalEntities.map((ent) => (
                 <option key={ent.id} value={ent.id}>{ent.name}</option>
@@ -225,7 +225,7 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
       <div>
         <label htmlFor="tx-category" className={labelClass}>Catégorie</label>
         <select id="tx-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
-          <option value="">— Sans catégorie —</option>
+          <option value="">Sans catégorie</option>
           {categories.map((cat) => (
             <option key={cat.id} value={cat.id}>{cat.name}</option>
           ))}

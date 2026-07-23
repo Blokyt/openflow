@@ -201,7 +201,7 @@ function PocketCard({
               <p className="text-[11px] text-[#555] mt-1">Les mouvements postérieurs à cette date font évoluer le solde.</p>
             </div>
             <div>
-              <label className={labelClass}>Taux annuel (%) — pour un livret, facultatif</label>
+              <label className={labelClass}>Taux annuel (%), pour un livret, facultatif</label>
               <input className={inputClass} type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="ex : 3" />
             </div>
           </>
@@ -229,7 +229,7 @@ function PocketCard({
           {pocket.synced ? (
             <span className="inline-flex items-center gap-1.5 text-success"><Landmark size={11} /> Synchronisé avec la banque</span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-[#FF8A5B]"><Link2 size={11} /> Relié — synchronise dans « Rapprochement bancaire »</span>
+            <span className="inline-flex items-center gap-1.5 text-[#FF8A5B]"><Link2 size={11} /> Relié, synchronise dans « Rapprochement bancaire »</span>
           )}
         </div>
       ) : pocket.annual_rate != null ? (

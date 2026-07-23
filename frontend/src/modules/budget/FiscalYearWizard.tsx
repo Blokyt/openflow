@@ -86,7 +86,7 @@ export default function FiscalYearWizard({ previousYearId, onClose, onCreated }:
       >
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h2 className="text-base font-semibold text-white">
-            Nouvel exercice — étape {step}/2
+            Nouvel exercice, étape {step}/2
           </h2>
           <button onClick={onClose} className="text-[#8a8a8a] hover:text-white">
             <X size={18} />

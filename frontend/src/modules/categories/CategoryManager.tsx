@@ -163,7 +163,7 @@ function EditRow({
         onChange={(e) => setParentId(e.target.value)}
         className="bg-[#0a0a0a] border border-border rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
       >
-        <option value="">— Racine —</option>
+        <option value="">Racine (aucun parent)</option>
         {eligible.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -394,7 +394,7 @@ export default function CategoryManager() {
               onChange={(e) => setNewParentId(e.target.value)}
               className="bg-[#0a0a0a] border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-sand transition-colors"
             >
-              <option value="">— Racine —</option>
+              <option value="">Racine (aucun parent)</option>
               {flatList.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}

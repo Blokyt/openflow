@@ -275,7 +275,7 @@ export default function SystemPage() {
                     onClick={() => createPristine(true)}
                     disabled={action !== ""}
                     className="px-3 py-1.5 text-xs border border-border-hover text-[#999] hover:text-white rounded-lg transition-colors"
-                    title="Écraser le snapshot avec l'état actuel — réservé à l'admin"
+                    title="Écraser le snapshot avec l'état actuel, réservé à l'admin"
                   >
                     <RefreshCw size={12} className="inline mr-1" />
                     Mettre à jour

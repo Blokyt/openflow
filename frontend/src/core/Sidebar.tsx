@@ -45,7 +45,7 @@ const ICON_MAP: Record<string, any> = {
 };
 
 // Module ID → route path. Must match MODULE_ROUTES in ../routes.tsx.
-// Keep only modules that actually have a React component — the MODULE_IDS_WITH_ROUTE
+// Keep only modules that actually have a React component, the MODULE_IDS_WITH_ROUTE
 // filter in optionalModules hides any tab not listed here.
 const MODULE_PATH_MAP: Record<string, string> = {
   dashboard: "/dashboard",

@@ -568,8 +568,8 @@ export default function TransactionList() {
                             checked={tx.reimb_status === "reimbursed"}
                             onToggle={() => toggleReimbursed(tx)}
                             title={tx.reimb_status === "reimbursed"
-                              ? "Remboursé — cliquer pour repasser en attente"
-                              : "En attente — cliquer pour marquer remboursé"}
+                              ? "Remboursé, cliquer pour repasser en attente"
+                              : "En attente, cliquer pour marquer remboursé"}
                           />
                         )}
                         <span
@@ -595,8 +595,8 @@ export default function TransactionList() {
                         onToggle={() => toggleJustified(tx)}
                         disabled={!isAdmin}
                         title={tx.justified
-                          ? "Justifiée — cliquer pour repasser en non justifiée"
-                          : "Non justifiée — cliquer pour marquer justifiée"}
+                          ? "Justifiée, cliquer pour repasser en non justifiée"
+                          : "Non justifiée, cliquer pour marquer justifiée"}
                       />
                       {hasAttachments && (
                         <button
@@ -607,8 +607,8 @@ export default function TransactionList() {
                               : "text-[#555] hover:text-accent-sand hover:bg-[#222]"
                           }`}
                           title={tx.attachment_count
-                            ? `${tx.attachment_count} pièce${tx.attachment_count > 1 ? "s" : ""} jointe${tx.attachment_count > 1 ? "s" : ""} — voir / ajouter`
-                            : "Aucune pièce jointe — en ajouter"}
+                            ? `${tx.attachment_count} pièce${tx.attachment_count > 1 ? "s" : ""} jointe${tx.attachment_count > 1 ? "s" : ""}, voir / ajouter`
+                            : "Aucune pièce jointe, en ajouter"}
                         >
                           <Paperclip size={13} strokeWidth={1.5} />
                           {tx.attachment_count || 0}
@@ -624,8 +624,8 @@ export default function TransactionList() {
                       title={tx.reconciled
                         ? "Rapprochée automatiquement (liée à une ligne bancaire)"
                         : tx.reconciled_manual
-                          ? "Rapprochée manuellement — cliquer pour annuler"
-                          : "Non rapprochée — cliquer pour marquer rapprochée"}
+                          ? "Rapprochée manuellement, cliquer pour annuler"
+                          : "Non rapprochée, cliquer pour marquer rapprochée"}
                     />
                   </td>
                   <td className="px-4 py-3.5 text-right font-semibold whitespace-nowrap">
@@ -789,7 +789,7 @@ export default function TransactionList() {
                       : "bg-amber-500/10 text-amber-400 border-amber-500/30"
                   }`}>
                     ↩ Avance de {(detailTx as any).reimb_person_name}
-                    {(detailTx as any).reimb_status === "reimbursed" ? " — remboursé" : " — en attente"}
+                    {(detailTx as any).reimb_status === "reimbursed" ? ", remboursé" : ", en attente"}
                   </div>
                 )}
               </div>
@@ -821,8 +821,8 @@ export default function TransactionList() {
                         onToggle={() => toggleReimbursed(detailTx)}
                         disabled={!isAdmin}
                         title={(detailTx as any).reimb_status === "reimbursed"
-                          ? "Remboursé — cliquer pour repasser en attente"
-                          : "En attente — cliquer pour marquer remboursé"}
+                          ? "Remboursé, cliquer pour repasser en attente"
+                          : "En attente, cliquer pour marquer remboursé"}
                       />
                     </div>
                   )}
@@ -833,8 +833,8 @@ export default function TransactionList() {
                       onToggle={() => toggleJustified(detailTx)}
                       disabled={!isAdmin}
                       title={(detailTx as any).justified
-                        ? "Justifiée — cliquer pour repasser en non justifiée"
-                        : "Non justifiée — cliquer pour marquer justifiée"}
+                        ? "Justifiée, cliquer pour repasser en non justifiée"
+                        : "Non justifiée, cliquer pour marquer justifiée"}
                     />
                   </div>
                 </div>

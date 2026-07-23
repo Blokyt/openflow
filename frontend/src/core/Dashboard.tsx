@@ -152,7 +152,7 @@ const BalanceChart = memo(function BalanceChart({ series }: { series: TimePoint[
             dot={false}
             activeDot={{ r: 4, fill: accentColor, strokeWidth: 0 }}
             // Rendu immédiat : l'animation dépend de requestAnimationFrame, que le
-            // navigateur limite en arrière-plan — la courbe restait figée à vide.
+            // navigateur limite en arrière-plan, la courbe restait figée à vide.
             isAnimationActive={false}
           />
         </AreaChart>

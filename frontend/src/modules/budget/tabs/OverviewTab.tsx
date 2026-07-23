@@ -69,7 +69,7 @@ export default function OverviewTab({ year }: Props) {
   if (!data) return null;
 
   // Périmètre : le focus entité global limite la vue à son sous-arbre, avec des
-  // totaux recalculés — mêmes chiffres que le widget du dashboard.
+  // totaux recalculés, mêmes chiffres que le widget du dashboard.
   const scopedNode = selectedEntityId ? findGroupNode(data.groups ?? [], selectedEntityId) : null;
   const displayGroups: any[] = scopedNode ? [scopedNode] : data.groups;
 
@@ -391,7 +391,7 @@ function AddCategoryForm({
         onChange={(e) => setCatId(e.target.value)}
         className="bg-[#0a0a0a] border border-border-hover rounded-lg px-2 py-1 text-xs text-white"
       >
-        <option value="">— Catégorie —</option>
+        <option value="">Catégorie…</option>
         {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <select

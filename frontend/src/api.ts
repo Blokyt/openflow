@@ -165,7 +165,7 @@ export const api = {
   getBudgetCategoryView: (fyId: number, entityId?: number) =>
     request<any>(`/budget/view/categories?fiscal_year_id=${fyId}${entityId ? `&entity_id=${entityId}` : ""}`),
   // Focus entité : le dashboard couvre toujours l'entité ET ses sous-entités
-  // (include_children), comme la page Transactions — cohérence de périmètre.
+  // (include_children), comme la page Transactions, cohérence de périmètre.
   getTimeseries: (entityId?: number, months = 12, dateFrom?: string, dateTo?: string) => {
     const q = new URLSearchParams();
     q.set("months", String(months));
@@ -358,7 +358,7 @@ export const api = {
     }),
   getBankSuggestions: (bankTxId: number) =>
     request<any>(`/bank_reconciliation/transactions/${bankTxId}/suggestions`),
-  // Rapprochement bancaire — connecteur Enable Banking (Lot 2)
+  // Rapprochement bancaire, connecteur Enable Banking (Lot 2)
   getBankConfig: () =>
     request<{ configured: boolean; application_id: string; has_key: boolean; certificate: string; redirect_url: string; suggested_redirect_url: string }>("/bank_reconciliation/config"),
   putBankConfig: (cfg: { application_id: string; private_key: string; redirect_url: string }) =>
@@ -396,7 +396,7 @@ export const api = {
     }),
   syncBank: (accountId: number) =>
     request<{ imported: number; skipped: number; total: number }>(`/bank_reconciliation/accounts/${accountId}/sync`, { method: "POST" }),
-  // DirENS — export Excel officiel (lignes = catégories, aucun mapping)
+  // DirENS, export Excel officiel (lignes = catégories, aucun mapping)
   downloadDirens: async (params: {
     bilan_fiscal_year_id: number;
     budget_fiscal_year_id?: number;

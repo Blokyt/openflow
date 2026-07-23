@@ -80,7 +80,7 @@ export default function DirensPage() {
       ) : (
         <div className="space-y-5 max-w-2xl">
           <div className="rounded-2xl border border-border bg-bg-card p-5 space-y-4">
-            <Field label="Onglet 1 — Bilan financier (exercice réalisé)">
+            <Field label="Onglet 1, Bilan financier (exercice réalisé)">
               <select
                 value={bilanId ?? ""}
                 onChange={(e) => setBilanId(parseInt(e.target.value, 10))}
@@ -94,7 +94,7 @@ export default function DirensPage() {
               </select>
             </Field>
 
-            <Field label="Onglet 2 — Budget prévisionnel (exercice à venir, optionnel)">
+            <Field label="Onglet 2, Budget prévisionnel (exercice à venir, optionnel)">
               <select
                 value={budgetId ?? ""}
                 onChange={(e) => setBudgetId(e.target.value ? parseInt(e.target.value, 10) : null)}
