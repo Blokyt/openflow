@@ -604,10 +604,12 @@ def _bilan_instantane(conn) -> dict:
         entity_own_current_cents is not None and treasury_total_cents(conn) is not None
     )
     if tresorerie_anchored:
-        # Ancré Trésorerie : disponibilités propres par entité (ombrelle = 0,
-        # feuille résiduelle = déduit, clubs = référence + flux). Total = Trésorerie.
+        # Ancré Trésorerie : disponibilités propres par entité (feuille résiduelle
+        # = déduit, clubs = référence + flux). Total = Trésorerie. On exclut les
+        # entités agrégées (contenants, argent propre nul) de la ventilation.
         rows = conn.execute(
-            "SELECT id, name FROM entities WHERE type = 'internal' ORDER BY name"
+            "SELECT id, name FROM entities WHERE type = 'internal' "
+            "AND (balance_mode IS NULL OR balance_mode != 'aggregate') ORDER BY name"
         ).fetchall()
         tresorerie = []
         total_actif = 0
@@ -617,8 +619,8 @@ def _bilan_instantane(conn) -> dict:
             total_actif += solde
         hypotheses = (
             "Actif = disponibilités réelles issues de la Trésorerie (total des poches), "
-            "ventilées par entité (l'ombrelle n'a pas d'argent propre, la feuille "
-            "résiduelle se déduit du total moins les clubs). Montants en centimes."
+            "ventilées par entité (la feuille résiduelle se déduit du total moins les "
+            "clubs). Montants en centimes."
         )
     else:
         # Repli (Trésorerie non configurée) : soldes consolidés des racines.
@@ -669,8 +671,14 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
         internal = []
     else:
         ph = ",".join("?" * len(perimeter))
+        # On exclut les entités AGRÉGÉES (ex: BDA global) de la ventilation : ce
+        # sont des contenants (le périmètre lui-même), pas des membres qui
+        # détiennent de l'argent propre. Leur solde propre est toujours 0 ; les
+        # lister ajoute une ligne « 0 » trompeuse. Leur contenu (BDA local +
+        # clubs) reste, lui, ventilé.
         internal = conn.execute(
-            f"SELECT id, name FROM entities WHERE type = 'internal' AND id IN ({ph}) ORDER BY name",
+            f"SELECT id, name FROM entities WHERE type = 'internal' AND id IN ({ph}) "
+            f"AND (balance_mode IS NULL OR balance_mode != 'aggregate') ORDER BY name",
             perimeter,
         ).fetchall()
 
