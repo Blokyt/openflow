@@ -37,6 +37,14 @@ from backend.core.balance import (
     compute_entity_balance_for_period,
     get_subtree_ids,
 )
+
+try:
+    # Disponibilités ancrées sur la Trésorerie (source de vérité). Import protégé :
+    # les rapports restent fonctionnels si le module Trésorerie est désinstallé.
+    from backend.modules.treasury.service import entity_own_current_cents, treasury_total_cents
+except Exception:  # pragma: no cover - module Trésorerie absent
+    entity_own_current_cents = None
+    treasury_total_cents = None
 from backend.core.database import get_conn
 from backend.core.formatting import format_date_fr
 
@@ -591,26 +599,47 @@ def _opening_balance(conn, fiscal_year_id: int, entity_id: int, start: str) -> i
 
 
 def _bilan_instantane(conn) -> dict:
-    """Bilan de trésorerie instantané (comportement historique sans exercice)."""
-    rows = conn.execute(
-        "SELECT id, name FROM entities WHERE type = 'internal' AND parent_id IS NULL"
-    ).fetchall()
-    tresorerie = []
-    total_actif = 0
-    for row in rows:
-        eid = row["id"]
-        ename = row["name"]
-        bal = compute_consolidated_balance(conn, eid)
-        solde = bal.get("consolidated_balance", bal.get("balance", 0))
-        tresorerie.append({"entity_id": eid, "name": ename, "solde": solde})
-        total_actif += solde
+    """Bilan de trésorerie instantané (sans exercice)."""
+    tresorerie_anchored = (
+        entity_own_current_cents is not None and treasury_total_cents(conn) is not None
+    )
+    if tresorerie_anchored:
+        # Ancré Trésorerie : disponibilités propres par entité (ombrelle = 0,
+        # feuille résiduelle = déduit, clubs = référence + flux). Total = Trésorerie.
+        rows = conn.execute(
+            "SELECT id, name FROM entities WHERE type = 'internal' ORDER BY name"
+        ).fetchall()
+        tresorerie = []
+        total_actif = 0
+        for row in rows:
+            solde = entity_own_current_cents(conn, row["id"])
+            tresorerie.append({"entity_id": row["id"], "name": row["name"], "solde": solde})
+            total_actif += solde
+        hypotheses = (
+            "Actif = disponibilités réelles issues de la Trésorerie (total des poches), "
+            "ventilées par entité (l'ombrelle n'a pas d'argent propre, la feuille "
+            "résiduelle se déduit du total moins les clubs). Montants en centimes."
+        )
+    else:
+        # Repli (Trésorerie non configurée) : soldes consolidés des racines.
+        rows = conn.execute(
+            "SELECT id, name FROM entities WHERE type = 'internal' AND parent_id IS NULL"
+        ).fetchall()
+        tresorerie = []
+        total_actif = 0
+        for row in rows:
+            bal = compute_consolidated_balance(conn, row["id"])
+            solde = bal.get("consolidated_balance", bal.get("balance", 0))
+            tresorerie.append({"entity_id": row["id"], "name": row["name"], "solde": solde})
+            total_actif += solde
+        hypotheses = (
+            "Actif = somme des soldes consolidés des entités internes racines (découverts inclus, comptés négativement). "
+            "Montants en centimes. Virements internes neutralisés dans le consolidé."
+        )
     return {
         "tresorerie_par_entite": tresorerie,
         "total_actif": total_actif,
-        "hypotheses": (
-            "Actif = somme des soldes consolidés des entités internes racines (découverts inclus, comptés négativement). "
-            "Montants en centimes. Virements internes neutralisés dans le consolidé."
-        ),
+        "hypotheses": hypotheses,
     }
 
 
@@ -645,14 +674,24 @@ def _bilan_exercice(conn, fiscal_year_id: int, entity_id: Optional[int] = None) 
             perimeter,
         ).fetchall()
 
+    tresorerie_anchored = (
+        entity_own_current_cents is not None and treasury_total_cents(conn) is not None
+    )
     disponibilites = []
     total_disponibilites = 0
     tresorerie_ouverture = 0
     for e in internal:
         eid = e["id"]
-        opening = _opening_balance(conn, fiscal_year_id, eid, start)
-        per = compute_entity_balance_for_period(conn, eid, start, end, opening=opening)
-        closing = per["closing"]
+        realized = compute_entity_balance_for_period(conn, eid, start, end, opening=0)["realized"]
+        if tresorerie_anchored:
+            # Disponibilités = solde propre courant ANCRÉ sur la Trésorerie (source
+            # de vérité) ; l'ouverture s'en déduit (ouverture = clôture − réalisé),
+            # sans dépendre d'un solde de référence legacy.
+            closing = entity_own_current_cents(conn, eid)
+        else:
+            # Repli (Trésorerie non configurée) : ancien calcul par référence.
+            closing = _opening_balance(conn, fiscal_year_id, eid, start) + realized
+        opening = closing - realized
         disponibilites.append({"entity_id": eid, "name": e["name"], "montant": closing})
         total_disponibilites += closing
         tresorerie_ouverture += opening

@@ -290,6 +290,140 @@ function EditableField({
   );
 }
 
+type RefEdit = { date: string; amount: string };
+
+function StructureSoldesSection() {
+  const [tree, setTree] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refs, setRefs] = useState<Record<number, RefEdit>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [savedId, setSavedId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const t = await api.getEntityTree();
+      setTree(t);
+      const root = t.find((e: any) => e.balance_mode === "aggregate") ?? t[0];
+      const children = (root?.children ?? []) as any[];
+      const clubs = children.filter((c) => !c.is_residual);
+      const entries = await Promise.all(
+        clubs.map(async (c) => {
+          const r = await api.getBalanceRef(c.id).catch(() => null);
+          return [c.id, {
+            date: r?.reference_date ?? "",
+            amount: r?.reference_amount != null && r.reference_amount !== 0 ? String(r.reference_amount / 100) : "",
+          }] as [number, RefEdit];
+        })
+      );
+      setRefs(Object.fromEntries(entries));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  const root = tree.find((e: any) => e.balance_mode === "aggregate") ?? tree[0];
+  const children = (root?.children ?? []) as any[];
+  const residual = children.find((c) => c.is_residual);
+  const clubs = children.filter((c) => !c.is_residual);
+
+  async function saveRef(id: number) {
+    setSavingId(id); setError(null);
+    try {
+      const v = refs[id];
+      await api.updateBalanceRef(id, {
+        reference_date: v.date || null,
+        reference_amount: v.amount === "" ? 0 : Math.round(parseFloat(v.amount) * 100),
+      });
+      setSavedId(id); setTimeout(() => setSavedId(null), 1500);
+    } catch (e: any) {
+      setError(e.message || "Erreur lors de l'enregistrement");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function changeResidual(id: number) {
+    setError(null);
+    try { await api.setResidualEntity(id); await load(); }
+    catch (e: any) { setError(e.message || "Erreur"); }
+  }
+
+  if (loading || !root || children.length === 0) return null;
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-white mb-3">Soldes &amp; structure</h2>
+      <div className="bg-bg-card border border-border rounded-2xl p-5 space-y-6">
+        <p className="text-sm text-text-secondary leading-relaxed">
+          Le solde global vient de la{" "}
+          <Link to="/treasury" className="text-accent-sand hover:underline">Trésorerie</Link>{" "}
+          (source de vérité). Tu saisis ici le solde des clubs ; l'entité «&nbsp;déduite&nbsp;»
+          se calcule automatiquement = Trésorerie − la somme des clubs.
+        </p>
+
+        <div>
+          <label className="block text-xs uppercase tracking-wider text-[#8a8a8a] mb-2">
+            Entité déduite (calculée automatiquement)
+          </label>
+          <select
+            value={residual?.id ?? ""}
+            onChange={(e) => changeResidual(Number(e.target.value))}
+            className={accountInputClass}
+          >
+            {children.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-[#555] mt-1">
+            Son solde = Trésorerie − les autres clubs. Elle ne se saisit pas à la main.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-wider text-[#8a8a8a]">Soldes de référence des clubs</p>
+          {clubs.length === 0 && (
+            <p className="text-sm text-[#555]">Aucun club à saisir (tous déduits ?).</p>
+          )}
+          {clubs.map((c) => (
+            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="sm:w-40 truncate text-sm text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c.color || "#6B7280" }} />
+                {c.name}
+              </span>
+              <input
+                type="date"
+                value={refs[c.id]?.date ?? ""}
+                onChange={(e) => setRefs((r) => ({ ...r, [c.id]: { ...r[c.id], date: e.target.value } }))}
+                className={`${accountInputClass} sm:flex-1`}
+              />
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Montant €"
+                value={refs[c.id]?.amount ?? ""}
+                onChange={(e) => setRefs((r) => ({ ...r, [c.id]: { ...r[c.id], amount: e.target.value } }))}
+                className={`${accountInputClass} sm:w-40`}
+              />
+              <button
+                onClick={() => saveRef(c.id)}
+                disabled={savingId === c.id}
+                className="px-4 py-2.5 rounded-xl bg-accent-sand text-black text-sm font-medium hover:bg-[#e5b57e] disabled:opacity-50 transition-colors flex-shrink-0"
+              >
+                {savingId === c.id ? "..." : savedId === c.id ? "✓" : "Enregistrer"}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {error && <p className="text-xs text-alert">{error}</p>}
+      </div>
+    </section>
+  );
+}
+
 export default function Settings() {
   const { isAdmin } = useAuth();
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -449,6 +583,8 @@ export default function Settings() {
       </h1>
 
       <MyAccountSection />
+
+      {isAdmin && <StructureSoldesSection />}
 
       {isAdmin && (
         <>

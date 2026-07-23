@@ -447,3 +447,36 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
         return new_data
     finally:
         conn.close()
+
+
+@router.put("/{entity_id}/residual")
+def set_residual(entity_id: int):
+    """Désigne l'entité DÉDUITE (résiduelle) parmi les sous-clubs d'une racine.
+
+    Son solde n'est plus saisi : il vaut Trésorerie − Σ des soldes de ses sœurs.
+    Une seule résiduelle par parent : on retire le drapeau des sœurs et on
+    supprime la référence de la nouvelle résiduelle (elle est déduite).
+    """
+    conn = get_conn()
+    try:
+        e = conn.execute(
+            "SELECT id, parent_id FROM entities WHERE id = ? AND type = 'internal'",
+            (entity_id,),
+        ).fetchone()
+        if not e:
+            raise HTTPException(404, "Entité interne introuvable")
+        parent_id = e["parent_id"] if hasattr(e, "keys") else e[1]
+        if parent_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="L'entité racine (agrégée) ne peut pas être l'entité déduite : choisis un de ses sous-clubs.",
+            )
+        # Une seule résiduelle par parent.
+        conn.execute("UPDATE entities SET is_residual = 0 WHERE parent_id = ?", (parent_id,))
+        conn.execute("UPDATE entities SET is_residual = 1 WHERE id = ?", (entity_id,))
+        # La résiduelle est déduite : aucune référence saisie.
+        conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
+        conn.commit()
+        return {"entity_id": entity_id, "is_residual": 1}
+    finally:
+        conn.close()

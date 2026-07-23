@@ -360,6 +360,38 @@ def test_balance_ref_rejected_on_umbrella_and_residual_kept_for_clubs(client_and
     assert r_club.status_code == 200
 
 
+def test_set_residual_entity_switches_deduction(client_and_db):
+    """On peut changer quelle entité est déduite : la nouvelle refuse la saisie
+    de référence, l'ancienne la retrouve, et la racine ne peut pas l'être."""
+    client, db_path = client_and_db
+    umbrella, local = _make_umbrella(client, db_path)
+    gastro = client.post("/api/entities/", json={
+        "name": "Gastro", "type": "internal", "parent_id": umbrella["id"]}).json()
+
+    # Bascule le résiduel vers Gastro.
+    r = client.put(f"/api/entities/{gastro['id']}/residual")
+    assert r.status_code == 200
+
+    def _resid(tree, name):
+        for e in tree:
+            for c in e.get("children", []):
+                if c["name"] == name:
+                    return c.get("is_residual")
+        return None
+    tree = client.get("/api/entities/tree").json()
+    assert _resid(tree, "Gastro") == 1
+    assert _resid(tree, "BDA local") == 0  # n'est plus déduit
+
+    # Gastro (désormais déduit) refuse la saisie ; BDA local (redevenu club) l'accepte.
+    assert client.put(f"/api/entities/{gastro['id']}/balance-ref",
+                      json={"reference_date": "2026-01-01", "reference_amount": 1000}).status_code == 400
+    assert client.put(f"/api/entities/{local['id']}/balance-ref",
+                      json={"reference_date": "2026-01-01", "reference_amount": 1000}).status_code == 200
+
+    # La racine agrégée ne peut pas être l'entité déduite.
+    assert client.put(f"/api/entities/{umbrella['id']}/residual").status_code == 400
+
+
 # ─── category_id sur /top-categories ──────────────────────────────────────────
 
 def test_top_categories_exposes_category_id(client):

@@ -126,3 +126,43 @@ def residual_balance_cents(conn: sqlite3.Connection, entity_id: int) -> int | No
     if total is None:
         return None
     return total - siblings_total_cents(conn, entity_id)
+
+
+def _entity_flags(conn: sqlite3.Connection, entity_id: int):
+    """(balance_mode, is_residual) d'une entité, defaults sûrs si colonne absente."""
+    try:
+        row = conn.execute(
+            "SELECT balance_mode, is_residual FROM entities WHERE id = ?", (entity_id,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return "own", 0
+    if not row:
+        return "own", 0
+    mode = (row["balance_mode"] if hasattr(row, "keys") else row[0]) or "own"
+    resid = (row["is_residual"] if hasattr(row, "keys") else row[1]) or 0
+    return mode, resid
+
+
+def entity_own_current_cents(conn: sqlite3.Connection, entity_id: int) -> int:
+    """Solde PROPRE courant d'une entité, ancré Trésorerie (source de vérité).
+
+    - ombrelle agrégée (BDA global) : 0 — elle n'a pas d'argent propre, tout est
+      réparti entre la feuille résiduelle et les clubs ;
+    - feuille résiduelle (BDA local) : Trésorerie − Σ clubs (déduit) ;
+    - club : référence manuelle + flux (compute_entity_balance).
+
+    Utilisé par les rapports/budget pour que les disponibilités = Trésorerie,
+    sans dépendre d'un solde de référence legacy. Repli sur compute_entity_balance
+    si la Trésorerie n'est pas configurée.
+    """
+    from backend.core.balance import compute_entity_balance
+
+    mode, resid = _entity_flags(conn, entity_id)
+    if treasury_total_cents(conn) is not None:
+        if resid:
+            d = residual_balance_cents(conn, entity_id)
+            if d is not None:
+                return d
+        elif mode == "aggregate":
+            return 0
+    return compute_entity_balance(conn, entity_id)["balance"]

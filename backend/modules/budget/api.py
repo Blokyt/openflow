@@ -8,8 +8,15 @@ from pydantic import BaseModel
 
 from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
 from backend.core.database import get_conn, row_to_dict
-from backend.core.balance import compute_entity_balance
+from backend.core.balance import compute_entity_balance, compute_entity_balance_for_period
 from backend.core.formatting import format_date_fr
+
+try:
+    # Ouverture ancrée sur la Trésorerie (source de vérité). Import protégé.
+    from backend.modules.treasury.service import entity_own_current_cents, treasury_total_cents
+except Exception:  # pragma: no cover - module Trésorerie absent
+    entity_own_current_cents = None
+    treasury_total_cents = None
 
 router = APIRouter()
 
@@ -763,6 +770,13 @@ def get_budget_view(request: Request, fiscal_year_id: int):
             ).fetchone()
             if ob is not None:
                 return ob["amount"]
+            if entity_own_current_cents is not None and treasury_total_cents(conn) is not None:
+                # Ancré Trésorerie : ouverture = solde courant − réalisé de la période
+                # (pas de dépendance à un solde de référence legacy).
+                realized = compute_entity_balance_for_period(
+                    conn, eid, fy["start_date"], end_date, opening=0
+                )["realized"]
+                return int(entity_own_current_cents(conn, eid) - realized)
             # Solde en centimes entiers : pas de round(..., 2) qui le passerait en float.
             return int(compute_entity_balance(conn, eid, as_of_date=as_of)["balance"])
 
