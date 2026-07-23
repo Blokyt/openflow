@@ -19,11 +19,14 @@ SESSION_COOKIE = "openflow_session"
 SESSION_TTL_DAYS = 30
 MIN_PASSWORD_LENGTH = 10
 
-# Paramètres scrypt : n=2^15, r=8, p=1 (coût mémoire ~32 Mo par hachage).
-_SCRYPT_N = 2 ** 15
+# Paramètres scrypt : n=2^17, r=8, p=1 (coût mémoire ~128 Mo par hachage, aligné
+# sur la reco OWASP). Le hash encode N/R/P : les anciens hachages (2^15) restent
+# vérifiables tels quels, et sont ré-hachés au prochain login réussi
+# (password_needs_rehash). maxmem couvre 2^17 (128 Mo) + marge.
+_SCRYPT_N = 2 ** 17
 _SCRYPT_R = 8
 _SCRYPT_P = 1
-_SCRYPT_MAXMEM = 64 * 1024 * 1024
+_SCRYPT_MAXMEM = 256 * 1024 * 1024
 _SCRYPT_DKLEN = 64
 
 
@@ -53,6 +56,16 @@ def verify_password(password: str, stored: str) -> bool:
             maxmem=_SCRYPT_MAXMEM, dklen=len(expected),
         )
         return hmac.compare_digest(dk, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+def password_needs_rehash(stored: str) -> bool:
+    """True si le hash utilise des paramètres plus faibles que la cible courante
+    (à ré-hacher au prochain login réussi pour renforcer progressivement)."""
+    try:
+        algo, n, r, p, _salt, _hash = stored.split("$")
+        return algo != "scrypt" or int(n) < _SCRYPT_N or int(r) < _SCRYPT_R or int(p) < _SCRYPT_P
     except (ValueError, TypeError):
         return False
 

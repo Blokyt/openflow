@@ -18,6 +18,7 @@ from backend.core.auth import (
     get_current_user,
     hash_password,
     hash_token,
+    password_needs_rehash,
     require_admin,
     verify_password,
 )
@@ -132,6 +133,11 @@ def login(request: Request, payload: LoginPayload, response: Response):
             raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
         token = create_session(conn, row["id"], user_agent)
         conn.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (_now_iso(), row["id"]))
+        # Renforcement progressif : ré-hache si le hash utilise des paramètres
+        # scrypt plus faibles que la cible courante (on a le mot de passe en clair ici).
+        if password_needs_rehash(stored):
+            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                         (hash_password(payload.password), row["id"]))
         record_login_event(conn, email, ip, success=True, user_agent=user_agent)
         conn.commit()
         _set_session_cookie(response, request, token)

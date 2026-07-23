@@ -75,13 +75,18 @@ def main():
     print(f"  Local  : {scheme}://localhost:{port}")
     if scheme == "https":
         print(f"  (HTTPS local : certificat auto-signé, accepte l'avertissement du navigateur une fois)")
-    if host == "0.0.0.0":
+    loopback = host in ("127.0.0.1", "localhost", "::1")
+    if not loopback:
         print(f"  Réseau : {scheme}://{local_ip}:{port}")
-        if scheme == "http":
-            print(f"  (écoute LAN : HTTP non chiffré, réservez ce mode au réseau de l'école)")
-    elif scheme == "http":
-        print(f"  (écoute locale uniquement ; passez server.host à 0.0.0.0 dans config.yaml pour le LAN)")
     print(f"{'=' * 50}\n")
+    # Avertissement sécurité : écoute réseau (non-loopback) SANS HTTPS => les
+    # cookies de session et les mots de passe transitent en clair, interceptables
+    # sur le réseau (WiFi partagé...). On le signale fort au démarrage.
+    if not loopback and scheme == "http":
+        print("  ⚠  SÉCURITÉ : écoute réseau en HTTP non chiffré.")
+        print("     Les mots de passe et sessions circulent EN CLAIR sur le réseau.")
+        print("     Passez server.https à true dans config.yaml (certificat auto-signé)")
+        print("     avant toute mise en production / usage sur un WiFi partagé.\n")
 
     import threading
     def open_browser():

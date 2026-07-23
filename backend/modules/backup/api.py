@@ -43,11 +43,30 @@ def _data_tables(conn) -> list[str]:
     return [r[0] for r in rows]
 
 
+# Colonnes secrètes JAMAIS exportées en clair dans la sauvegarde (clé privée RSA
+# du connecteur bancaire, secret OAuth HelloAsso). On les vide à l'export : après
+# une restauration il faudra les ressaisir, cohérent avec le modèle « collé une
+# fois, jamais réaffiché » des endpoints de config.
+_REDACTED_COLUMNS = {
+    "bank_reconciliation_config": {"private_key"},
+    "helloasso_config": {"client_secret"},
+}
+
+
 def _export_table(conn, table_name, existing: set[str]):
     if table_name not in existing:
         return []
     rows = conn.execute(f"SELECT * FROM {table_name}").fetchall()
-    return [row_to_dict(r) for r in rows]
+    redact = _REDACTED_COLUMNS.get(table_name)
+    out = []
+    for r in rows:
+        d = row_to_dict(r)
+        if redact:
+            for col in redact:
+                if d.get(col):
+                    d[col] = ""
+        out.append(d)
+    return out
 
 
 def _restore_table(conn, table_name: str, rows: list[dict], existing: set[str]):

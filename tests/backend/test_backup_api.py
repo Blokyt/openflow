@@ -41,6 +41,28 @@ def _export_zip(client):
     return zipfile.ZipFile(io.BytesIO(r.content))
 
 
+def test_export_redacts_bank_and_helloasso_secrets(client_and_db):
+    """La sauvegarde ne doit jamais contenir la clé privée banque ni le secret
+    HelloAsso en clair (colonnes vidées à l'export)."""
+    import sqlite3
+    client, db_path = client_and_db
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("INSERT OR REPLACE INTO bank_reconciliation_config (id, application_id, private_key) VALUES (1, 'app', 'SECRET_RSA_PRIVATE_KEY')")
+    conn.execute("INSERT OR REPLACE INTO helloasso_config (id, client_secret) VALUES (1, 'SECRET_OAUTH')")
+    conn.commit()
+    conn.close()
+
+    zf = _export_zip(client)
+    raw = zf.read("data.json").decode("utf-8")
+    assert "SECRET_RSA_PRIVATE_KEY" not in raw
+    assert "SECRET_OAUTH" not in raw
+    data = json.loads(raw)
+    for row in data.get("bank_reconciliation_config", []):
+        assert not row.get("private_key")
+    for row in data.get("helloasso_config", []):
+        assert not row.get("client_secret")
+
+
 def _build_import_zip(metadata_bytes: bytes, data: dict) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
