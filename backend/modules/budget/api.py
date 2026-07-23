@@ -4,9 +4,21 @@ from datetime import datetime, timezone, date as _date, timedelta as _timedelta
 from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
-from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
+
+def _ensure_iso_date(v):
+    """Valide un AAAA-MM-JJ (ou None/'' = non fourni). Sinon 422 propre plutôt
+    qu'un 500 plus tard dans date.fromisoformat côté rapports/budget."""
+    if v is None or v == "":
+        return v
+    try:
+        _date.fromisoformat(v)
+    except (ValueError, TypeError):
+        raise ValueError("date invalide : format attendu AAAA-MM-JJ")
+    return v
+
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_scope
 from backend.core.database import get_conn, row_to_dict
 from backend.core.balance import compute_entity_balance, compute_entity_balance_for_period
 from backend.core.formatting import format_date_fr
@@ -20,20 +32,6 @@ except Exception:  # pragma: no cover - module Trésorerie absent
 
 router = APIRouter()
 
-# Message constant pour la garde « entité obligatoire pour un non-admin »,
-# partagée avec dashboard/api.py et reports/api.py (même formulation exacte).
-ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
-
-
-def _require_scope(conn, user: dict, entity_id):
-    """Non-admin : entity_id obligatoire (400 si absent) + dans le périmètre (403 sinon).
-    Admin (`allowed is None`) : inchangé, aucune contrainte."""
-    allowed = get_allowed_entity_ids(conn, user)
-    if allowed is None:
-        return
-    if entity_id is None:
-        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
-    require_entity_access(conn, user, entity_id)
 
 
 def _now() -> str:
@@ -58,6 +56,13 @@ class FiscalYearCreate(BaseModel):
     president_name: str = ""
     tresorier_name: str = ""
 
+    @field_validator("start_date")
+    @classmethod
+    def _v_start(cls, v):
+        if not v:
+            raise ValueError("start_date requis (AAAA-MM-JJ)")
+        return _ensure_iso_date(v)
+
 
 class FiscalYearUpdate(BaseModel):
     name: Optional[str] = None
@@ -67,9 +72,19 @@ class FiscalYearUpdate(BaseModel):
     president_name: Optional[str] = None
     tresorier_name: Optional[str] = None
 
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def _v_dates(cls, v):
+        return _ensure_iso_date(v)
+
 
 class FiscalYearClose(BaseModel):
     end_date: Optional[str] = None  # defaults to today
+
+    @field_validator("end_date")
+    @classmethod
+    def _v_end(cls, v):
+        return _ensure_iso_date(v)
 
 
 class OpeningBalanceUpsert(BaseModel):
@@ -1046,7 +1061,7 @@ def get_budget_category_view(request: Request, fiscal_year_id: int, entity_id: O
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         fy = conn.execute("SELECT * FROM fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
         if fy is None:
             raise HTTPException(404, f"Exercice {fiscal_year_id} introuvable")

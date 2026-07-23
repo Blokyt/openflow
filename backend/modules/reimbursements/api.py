@@ -299,6 +299,18 @@ def update_reimbursement(reimbursement_id: int, reimbursement: ReimbursementUpda
                 )
             updates["status"] = new_status.value
 
+        # Mêmes garde-fous qu'à la création : montant strictement positif et
+        # contact/transaction existants (sinon get_summary peut sommer un total
+        # négatif ou pointer un contact/transaction fantôme).
+        if "amount" in updates and updates["amount"] is not None and updates["amount"] <= 0:
+            raise HTTPException(400, "Le montant doit être strictement positif (en centimes).")
+        if updates.get("transaction_id") is not None:
+            if conn.execute("SELECT 1 FROM transactions WHERE id = ?", (updates["transaction_id"],)).fetchone() is None:
+                raise HTTPException(400, f"La transaction {updates['transaction_id']} n'existe pas.")
+        if updates.get("contact_id") is not None:
+            if conn.execute("SELECT 1 FROM contacts WHERE id = ?", (updates["contact_id"],)).fetchone() is None:
+                raise HTTPException(400, f"Le contact {updates['contact_id']} n'existe pas.")
+
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         set_clauses += ", updated_at = ?"
         values = list(updates.values()) + [now, reimbursement_id]

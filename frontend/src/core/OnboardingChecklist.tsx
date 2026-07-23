@@ -13,9 +13,9 @@ const STEPS = [
   },
   {
     n: 2,
-    to: "/settings",
-    title: "Renseigne ton solde de référence",
-    desc: "Le point de départ à partir duquel le solde se calcule automatiquement.",
+    to: "/treasury",
+    title: "Renseigne ta trésorerie",
+    desc: "Le solde de tes poches (compte, livret, caisse) : le point de départ à partir duquel tout se calcule.",
   },
   {
     n: 3,

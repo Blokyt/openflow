@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 from backend.core.config import load_config
 
-from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
+from backend.core.auth import get_allowed_entity_ids, get_current_user, require_scope
 from backend.core.balance import (
     compute_consolidated_balance,
     compute_entity_balance,
@@ -52,17 +52,7 @@ router = APIRouter()
 
 # Endpoints de vue financière globale : entity_id devient obligatoire pour un
 # non-admin (même règle que le dashboard), et vérifié contre son périmètre.
-ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
 FISCAL_YEAR_REQUIRED_MESSAGE = "Un exercice est requis pour ce rôle"
-
-
-def _require_scope(conn, user: dict, entity_id):
-    allowed = get_allowed_entity_ids(conn, user)
-    if allowed is None:
-        return
-    if entity_id is None:
-        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
-    require_entity_access(conn, user, entity_id)
 
 
 # ───────────────────────── Période & entités ──────────────────────────────
@@ -574,7 +564,7 @@ def get_compte_resultat(
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         return _resolve_cr_data(conn, fiscal_year_id, start_date, end_date, entity_id)
     finally:
         conn.close()
@@ -775,7 +765,7 @@ def get_bilan(request: Request, fiscal_year_id: Optional[int] = None, entity_id:
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         allowed = get_allowed_entity_ids(conn, user)
         if allowed is not None and fiscal_year_id is None:
             raise HTTPException(status_code=400, detail=FISCAL_YEAR_REQUIRED_MESSAGE)
@@ -845,7 +835,7 @@ def list_accruals(request: Request, fiscal_year_id: int, entity_id: Optional[int
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         allowed = get_allowed_entity_ids(conn, user)
         sql = """SELECT a.*, c.name AS category_name, e.name AS entity_name
                  FROM report_accruals a
@@ -1034,7 +1024,7 @@ def get_compte_resultat_pdf(
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         data = _resolve_cr_data(conn, fiscal_year_id, start_date, end_date, entity_id)
         start = data["periode"]["start"]
         end = data["periode"]["end"]
@@ -1139,7 +1129,7 @@ def get_bilan_pdf(request: Request, fiscal_year_id: Optional[int] = None, entity
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         data = _bilan_exercice(conn, fiscal_year_id, entity_id=entity_id)
         entity_name = None
         if entity_id:

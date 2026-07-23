@@ -18,6 +18,15 @@ def test_create_reimbursement(client):
     assert data["status"] == "pending"
     assert "id" in data
 
+
+def test_update_reimbursement_negative_amount_rejected(client):
+    """La mise à jour valide le montant comme la création (pas de total négatif)."""
+    rid = client.post("/api/reimbursements/", json={"person_name": "Bob", "amount": 5000}).json()["id"]
+    assert client.put(f"/api/reimbursements/{rid}", json={"amount": -100}).status_code == 400
+    assert client.put(f"/api/reimbursements/{rid}", json={"amount": 0}).status_code == 400
+    # contact/transaction fantômes refusés
+    assert client.put(f"/api/reimbursements/{rid}", json={"transaction_id": 999999}).status_code == 400
+
 def test_create_reimbursement_with_notes(client):
     payload = {"person_name": "Bob Martin", "amount": 15.0, "notes": "repas équipe"}
     response = client.post("/api/reimbursements/", json=payload)

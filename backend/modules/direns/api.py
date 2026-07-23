@@ -42,6 +42,12 @@ from fastapi.responses import Response
 
 from backend.core.auth import require_admin
 from backend.core.balance import compute_entity_balance
+
+try:
+    # Solde ancré Trésorerie (source de vérité), comme reports/budget/dashboard.
+    from backend.modules.treasury.service import entity_own_current_cents
+except Exception:  # pragma: no cover - module Trésorerie absent
+    entity_own_current_cents = None
 from backend.core.config import load_config
 from backend.core.database import get_conn
 
@@ -269,8 +275,11 @@ def _opening_explicit(conn, fy_id: int, club_ids: list) -> Optional[float]:
 
 
 def _get_current_total(conn, club_ids: list) -> float:
-    """Trésorerie courante estimée = somme des soldes consolidés des clubs (euros)."""
-    total = sum(compute_entity_balance(conn, eid)["balance"] for eid in club_ids)
+    """Trésorerie courante = somme des soldes propres des clubs (euros), ancrée
+    sur la Trésorerie (source de vérité) comme les rapports/budget/dashboard."""
+    _balance = entity_own_current_cents if entity_own_current_cents is not None \
+        else (lambda c, eid: compute_entity_balance(c, eid)["balance"])
+    total = sum(_balance(conn, eid) for eid in club_ids)
     return round(total / 100, 2)
 
 

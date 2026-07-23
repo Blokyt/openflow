@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.auth import get_allowed_entity_ids, get_current_user, require_entity_access
+from backend.core.auth import get_current_user, require_scope
 from backend.core.balance import (
     compute_consolidated_balance,
     compute_entity_balance,
@@ -19,28 +19,19 @@ from backend.core.database import get_conn, row_to_dict
 
 try:
     # Source de vérité du solde courant. Import protégé : le dashboard doit
-    # rester fonctionnel si le module Trésorerie est désinstallé.
-    from backend.modules.treasury.service import residual_balance_cents, treasury_total_cents
+    # rester fonctionnel si le module Trésorerie est désinstallé. `_entity_flags`
+    # est factorisé dans le service (canonique), plus de copie locale.
+    from backend.modules.treasury.service import (
+        _entity_flags,
+        residual_balance_cents,
+        treasury_total_cents,
+    )
 except Exception:  # pragma: no cover - module Trésorerie absent
     treasury_total_cents = None
     residual_balance_cents = None
+    _entity_flags = None
 
 router = APIRouter()
-
-
-def _entity_flags(conn, entity_id: int):
-    """(balance_mode, is_residual) d'une entité, defaults sûrs si colonnes absentes."""
-    try:
-        row = conn.execute(
-            "SELECT balance_mode, is_residual FROM entities WHERE id = ?", (entity_id,)
-        ).fetchone()
-    except Exception:
-        return "own", 0
-    if not row:
-        return "own", 0
-    mode = (row["balance_mode"] if hasattr(row, "keys") else row[0]) or "own"
-    resid = (row["is_residual"] if hasattr(row, "keys") else row[1]) or 0
-    return mode, resid
 
 
 def _resolve_balance(conn, entity_id: Optional[int]):
@@ -71,21 +62,6 @@ def _resolve_balance(conn, entity_id: Optional[int]):
         total = treasury_total_cents(conn)
         return (total, "treasury", False) if total is not None else (None, "reference", False)
     return None, "reference", False
-
-# Message constant pour la garde « entité obligatoire pour un non-admin »,
-# partagée par tous les endpoints de vue financière (dashboard et reports).
-ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
-
-
-def _require_scope(conn, user: dict, entity_id):
-    """Non-admin : entity_id obligatoire (400 si absent) + dans le périmètre (403 sinon).
-    Admin (`allowed is None`) : inchangé, aucune contrainte."""
-    allowed = get_allowed_entity_ids(conn, user)
-    if allowed is None:
-        return
-    if entity_id is None:
-        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
-    require_entity_access(conn, user, entity_id)
 
 # Project root is 3 levels up from this file: backend/modules/dashboard/api.py
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -236,7 +212,7 @@ def get_summary(
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'")
         if cur.fetchone() is None:
             return {
@@ -371,7 +347,7 @@ def get_timeseries(
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         # Current balance (ancré Trésorerie : Global = total, BDA = propre déduit).
         resolved, _bsrc, own_scope = _resolve_balance(conn, entity_id)
         if entity_id is not None:
@@ -482,7 +458,7 @@ def top_categories(
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         conds, pp = _period_conds(date_from, date_to, "t.date")
         if entity_id is not None:
             scope = _scope_ids(conn, entity_id, include_children)
@@ -536,7 +512,7 @@ def recent_transactions(
     user = get_current_user(request)
     conn = get_conn()
     try:
-        _require_scope(conn, user, entity_id)
+        require_scope(conn, user, entity_id)
         query = """SELECT t.id, t.date, t.label, t.amount,
                           ef.name AS from_entity_name, et.name AS to_entity_name,
                           ef.type AS from_entity_type, et.type AS to_entity_type,

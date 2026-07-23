@@ -237,6 +237,27 @@ def update_entity(entity_id: int, update: EntityUpdate):
                     )
                 current = row["parent_id"]
 
+        # Une entité résiduelle (déduite) qui change de parent perd ce statut :
+        # l'invariant « une seule résiduelle par parent » ne doit pas voyager
+        # vers un parent qui a déjà la sienne, ni laisser l'ancien parent sans
+        # résiduelle. On fige d'abord son solde déduit courant en référence pour
+        # qu'elle reste continue (comme dans set_residual).
+        moving_parent = "parent_id" in fields and fields["parent_id"] != existing["parent_id"]
+        if moving_parent and existing["is_residual"]:
+            frozen = residual_balance_cents(conn, entity_id) if residual_balance_cents is not None else None
+            if frozen is not None:
+                _now = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(entity_id) DO UPDATE SET
+                           reference_date = excluded.reference_date,
+                           reference_amount = excluded.reference_amount,
+                           updated_at = excluded.updated_at""",
+                    (entity_id, _now[:10], frozen, _now),
+                )
+            fields["is_residual"] = 0
+
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE entities SET {set_clause} WHERE id = ?", list(fields.values()) + [entity_id])
@@ -450,15 +471,18 @@ def update_balance_ref(entity_id: int, ref: BalanceRefUpdate):
 
 
 @router.put("/{entity_id}/residual")
-def set_residual(entity_id: int):
+def set_residual(entity_id: int, request: Request):
     """Désigne l'entité DÉDUITE (résiduelle) parmi les sous-clubs d'une racine.
 
     Son solde n'est plus saisi : il vaut Trésorerie − Σ des soldes de ses sœurs.
-    Une seule résiduelle par parent : on retire le drapeau des sœurs et on
-    supprime la référence de la nouvelle résiduelle (elle est déduite).
+    Une seule résiduelle par parent. L'ancienne résiduelle redevient un club :
+    on FIGE son solde déduit courant en référence pour qu'il reste continu
+    (sinon il retomberait à « flux seuls », souvent négatif).
     """
+    user = get_current_user(request)
     conn = get_conn()
     try:
+        require_entity_access(conn, user, entity_id)  # défense en profondeur
         e = conn.execute(
             "SELECT id, parent_id FROM entities WHERE id = ? AND type = 'internal'",
             (entity_id,),
@@ -471,10 +495,30 @@ def set_residual(entity_id: int):
                 status_code=400,
                 detail="L'entité racine (agrégée) ne peut pas être l'entité déduite : choisis un de ses sous-clubs.",
             )
+        now = datetime.now(timezone.utc).isoformat()
+        # Continuité : chaque ancienne résiduelle (≠ la nouvelle) voit son solde
+        # déduit actuel gelé en référence avant d'être rétrogradée en club.
+        outgoing = conn.execute(
+            "SELECT id FROM entities WHERE parent_id = ? AND is_residual = 1 AND id != ?",
+            (parent_id, entity_id),
+        ).fetchall()
+        for row in outgoing:
+            oid = row["id"] if hasattr(row, "keys") else row[0]
+            frozen = residual_balance_cents(conn, oid) if residual_balance_cents is not None else None
+            if frozen is not None:
+                conn.execute(
+                    """INSERT INTO entity_balance_refs (entity_id, reference_date, reference_amount, updated_at)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(entity_id) DO UPDATE SET
+                           reference_date = excluded.reference_date,
+                           reference_amount = excluded.reference_amount,
+                           updated_at = excluded.updated_at""",
+                    (oid, now[:10], frozen, now),
+                )
         # Une seule résiduelle par parent.
         conn.execute("UPDATE entities SET is_residual = 0 WHERE parent_id = ?", (parent_id,))
         conn.execute("UPDATE entities SET is_residual = 1 WHERE id = ?", (entity_id,))
-        # La résiduelle est déduite : aucune référence saisie.
+        # La nouvelle résiduelle est déduite : aucune référence saisie.
         conn.execute("DELETE FROM entity_balance_refs WHERE entity_id = ?", (entity_id,))
         conn.commit()
         return {"entity_id": entity_id, "is_residual": 1}

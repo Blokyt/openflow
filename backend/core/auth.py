@@ -223,3 +223,18 @@ def require_entity_access(conn, user: dict, entity_id: int) -> None:
         return
     if entity_id not in allowed:
         raise HTTPException(status_code=403, detail="Accès refusé à cette entité")
+
+
+# Message partagé par les vues financières (dashboard, budget, reports).
+ENTITY_REQUIRED_MESSAGE = "Une entité est requise pour ce rôle"
+
+
+def require_scope(conn, user: dict, entity_id) -> None:
+    """Non-admin : entity_id obligatoire (400 si absent) + dans le périmètre
+    (403 sinon). Admin (`allowed is None`) : aucune contrainte."""
+    allowed = get_allowed_entity_ids(conn, user)
+    if allowed is None:
+        return
+    if entity_id is None:
+        raise HTTPException(status_code=400, detail=ENTITY_REQUIRED_MESSAGE)
+    require_entity_access(conn, user, entity_id)

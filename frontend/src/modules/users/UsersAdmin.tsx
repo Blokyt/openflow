@@ -199,6 +199,7 @@ export default function UsersAdmin() {
 
   async function loadAll() {
     setLoading(true);
+    setError(null);
     try {
       const [u, inv, events] = await Promise.all([
         api.listUsers(), api.listInvitations(), api.listLoginEvents(100),
@@ -207,6 +208,9 @@ export default function UsersAdmin() {
       setInvitations(inv);
       setLoginEvents(events);
     } catch (e: any) {
+      // Sans ceci, un échec de chargement afficherait le faux état vide
+      // « Aucun compte pour l'instant », indistinguable d'une vraie liste vide.
+      setError(e.message);
       toast.error(e.message);
     } finally {
       setLoading(false);
@@ -407,7 +411,7 @@ export default function UsersAdmin() {
         <div className="flex items-center justify-center py-12">
           <PageLoader fullScreen={false} />
         </div>
-      ) : users.length === 0 ? (
+      ) : users.length === 0 && !error ? (
         <EmptyState
           icon={Users}
           title="Aucun compte pour l'instant"

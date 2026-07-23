@@ -110,7 +110,12 @@ export default function TransactionForm({ initial, onSave, onCancel }: Transacti
     }
   }
 
-  const internalEntities = entities.filter((e) => e.type === "internal");
+  // On exclut les entités agrégées (ex : « BDA global ») : ce sont des
+  // regroupements, pas des contreparties qui détiennent l'argent (le backend
+  // refuse aussi ce cas). On cible la feuille locale ou un club.
+  const internalEntities = entities.filter(
+    (e) => e.type === "internal" && e.balance_mode !== "aggregate",
+  );
   const externalEntities = entities.filter((e) => e.type === "external");
   const fromEnt = entities.find((e) => String(e.id) === fromEntityId);
   const toEnt = entities.find((e) => String(e.id) === toEntityId);

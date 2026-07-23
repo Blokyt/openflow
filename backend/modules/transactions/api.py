@@ -254,6 +254,24 @@ def list_transactions(
         conn.close()
 
 
+def _assert_entity_ref(conn, field: str, value) -> None:
+    """L'entité doit exister ET ne pas être agrégée.
+
+    Une entité agrégée (ex : « BDA global ») est un regroupement/ombrelle, pas
+    une contrepartie qui détient l'argent : la cibler créerait un solde propre
+    fantôme incohérent avec le bilan/les rapports (qui l'excluent).
+    """
+    row = conn.execute("SELECT balance_mode FROM entities WHERE id = ?", (value,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=400, detail=f"{field}={value} does not reference an existing entity")
+    mode = row["balance_mode"] if hasattr(row, "keys") else row[0]
+    if mode == "aggregate":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field} : une entité agrégée (regroupement) ne peut pas être une contrepartie ; choisis l'entité qui détient l'argent (feuille locale ou club).",
+        )
+
+
 @router.post("/", status_code=201)
 def create_transaction(tx: TransactionCreate, force: bool = False):
     # Convention : montant strictement positif, sens porté par from/to distincts.
@@ -272,9 +290,7 @@ def create_transaction(tx: TransactionCreate, force: bool = False):
                 detail="Exercice clôturé : modifier quand même ?",
             )
         for field, value in (("from_entity_id", tx.from_entity_id), ("to_entity_id", tx.to_entity_id)):
-            exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (value,)).fetchone()
-            if exists is None:
-                raise HTTPException(status_code=400, detail=f"{field}={value} does not reference an existing entity")
+            _assert_entity_ref(conn, field, value)
         cur = conn.execute(
             """INSERT INTO transactions
                (date, label, description, amount, category_id, contact_id, created_by,
@@ -381,9 +397,7 @@ def update_transaction(tx_id: int, tx: TransactionUpdate, force: bool = False):
             if field in updates:
                 if updates[field] is None:
                     raise HTTPException(status_code=400, detail=f"{field} cannot be null")
-                exists = conn.execute("SELECT 1 FROM entities WHERE id = ?", (updates[field],)).fetchone()
-                if exists is None:
-                    raise HTTPException(status_code=400, detail=f"{field}={updates[field]} does not reference an existing entity")
+                _assert_entity_ref(conn, field, updates[field])
 
         if "amount" in updates and updates["amount"] is not None and updates["amount"] <= 0:
             raise HTTPException(status_code=400, detail="Le montant doit être strictement positif")

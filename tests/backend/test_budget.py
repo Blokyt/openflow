@@ -95,6 +95,14 @@ def test_compute_entity_balance_for_period_expense(client_and_db):
         conn.close()
 
 
+def test_fiscal_year_invalid_date_rejected(client):
+    """Une date d'exercice non ISO est refusée en 422 (pas un 500 plus tard)."""
+    for bad in ("22/07/2026", "pas une date", ""):
+        r = client.post("/api/budget/fiscal-years",
+                        json={"name": f"X-{bad or 'vide'}", "start_date": bad})
+        assert r.status_code == 422, (bad, r.status_code)
+
+
 def test_fiscal_year_crud(client):
     r = client.get("/api/budget/fiscal-years")
     assert r.status_code == 200 and r.json() == []

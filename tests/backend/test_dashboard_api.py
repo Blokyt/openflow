@@ -392,6 +392,63 @@ def test_set_residual_entity_switches_deduction(client_and_db):
     assert client.put(f"/api/entities/{umbrella['id']}/residual").status_code == 400
 
 
+def test_set_residual_preserves_outgoing_balance(client_and_db):
+    """Basculer le résiduel FIGE la valeur déduite de l'ancienne en référence
+    (continuité) : elle ne retombe pas à « flux seuls » / zéro."""
+    client, db_path = client_and_db
+    umbrella, local = _make_umbrella(client, db_path)
+    gastro = client.post("/api/entities/", json={
+        "name": "Gastro", "type": "internal", "parent_id": umbrella["id"]}).json()
+    _set_pocket_ref(client, "Compte", 500000)
+    client.put(f"/api/entities/{gastro['id']}/balance-ref",
+               json={"reference_date": "2026-06-01", "reference_amount": 30000})
+    before = client.get("/api/dashboard/summary", params={"entity_id": local["id"]}).json()["balance"]
+    assert before == 500000 - 30000  # BDA local déduit = Trésorerie − clubs
+
+    assert client.put(f"/api/entities/{gastro['id']}/residual").status_code == 200
+    ref = client.get(f"/api/entities/{local['id']}/balance-ref").json()
+    assert ref["reference_amount"] == before  # valeur figée, pas 0
+
+
+def test_reparent_residual_clears_flag(client_and_db):
+    """Reparenter une entité résiduelle lui retire le statut déduit (l'invariant
+    « une résiduelle par parent » ne voyage pas)."""
+    client, db_path = client_and_db
+    umbrella, local = _make_umbrella(client, db_path)
+    _set_pocket_ref(client, "Compte", 500000)
+    umbrella2 = client.post("/api/entities/", json={
+        "name": "BDA2", "type": "internal", "balance_mode": "aggregate"}).json()
+    assert client.put(f"/api/entities/{local['id']}",
+                      json={"parent_id": umbrella2["id"]}).status_code == 200
+
+    def find(t, name):
+        for e in t:
+            if e["name"] == name:
+                return e
+            f = find(e.get("children", []), name)
+            if f:
+                return f
+        return None
+    assert find(client.get("/api/entities/tree").json(), "BDA local")["is_residual"] == 0
+
+
+def test_transaction_targeting_aggregate_entity_rejected(client_and_db):
+    """Une transaction ne peut pas cibler une entité agrégée (regroupement)."""
+    client, db_path = client_and_db
+    umbrella, local = _make_umbrella(client, db_path)
+    ext = client.post("/api/entities/", json={"name": "Ext", "type": "external"}).json()
+    r = client.post("/api/transactions/", json={
+        "date": "2026-06-10", "label": "x", "amount": 1000,
+        "from_entity_id": ext["id"], "to_entity_id": umbrella["id"]})
+    assert r.status_code == 400
+    r2 = client.post("/api/transactions/", json={
+        "date": "2026-06-10", "label": "y", "amount": 1000,
+        "from_entity_id": ext["id"], "to_entity_id": local["id"]})
+    assert r2.status_code == 201
+    assert client.put(f"/api/transactions/{r2.json()['id']}",
+                      json={"to_entity_id": umbrella["id"]}).status_code == 400
+
+
 # ─── category_id sur /top-categories ──────────────────────────────────────────
 
 def test_top_categories_exposes_category_id(client):

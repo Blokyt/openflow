@@ -20,21 +20,22 @@ const COLOR_OK = "#00C853";
 const COLOR_KO = "#FF5252";
 
 /** Charge des données dépendant de l'exercice (et de deps additionnelles), avec annulation à la sortie. */
-function useYearData<T>(year: any, fetcher: (id: number) => Promise<T>, deps: any[] = []): { data: T | null; loading: boolean } {
+function useYearData<T>(year: any, fetcher: (id: number) => Promise<T>, deps: any[] = []): { data: T | null; loading: boolean; error: string | null } {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (!year) { setData(null); return; }
+    if (!year) { setData(null); setError(null); return; }
     let cancelled = false;
-    setLoading(true);
+    setLoading(true); setError(null);
     fetcher(year.id)
       .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData(null); })
+      .catch((e) => { if (!cancelled) { setData(null); setError(e?.message || "erreur inconnue"); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year?.id, ...deps]);
-  return { data, loading };
+  return { data, loading, error };
 }
 
 export default function Reports() {
@@ -135,6 +136,14 @@ function Loading() {
   return <div className="text-sm text-[#777] py-8">Chargement…</div>;
 }
 
+function ErrorNote({ message }: { message: string }) {
+  return (
+    <div className="bg-[#1a0a0a] border border-alert/30 text-alert rounded-2xl p-4 text-sm my-4">
+      Impossible de charger le rapport : {message}
+    </div>
+  );
+}
+
 function PdfButton({ onClick }: { onClick: () => void }) {
   const [busy, setBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -170,13 +179,14 @@ function PdfButton({ onClick }: { onClick: () => void }) {
 // ─── Compte de résultat ─────────────────────────────────────────────────────
 
 function CompteResultatTab({ year, entityId }: { year: any; entityId: number | null }) {
-  const { data, loading } = useYearData(
+  const { data, loading, error } = useYearData(
     year,
     (id) => api.getCompteResultat({ fiscal_year_id: id, entity_id: entityId ?? undefined }),
     [entityId],
   );
 
   if (!year) return <EmptyYear />;
+  if (error) return <ErrorNote message={error} />;
   if (loading || !data) return <Loading />;
 
   const resultat: number = data.resultat;
@@ -271,13 +281,14 @@ function ResultatSection({
 // ─── Bilan ──────────────────────────────────────────────────────────────────
 
 function BilanTab({ year, entityId }: { year: any; entityId: number | null }) {
-  const { data, loading } = useYearData(
+  const { data, loading, error } = useYearData(
     year,
     (id) => api.getBilan({ fiscal_year_id: id, entity_id: entityId ?? undefined }),
     [entityId],
   );
 
   if (!year) return <EmptyYear />;
+  if (error) return <ErrorNote message={error} />;
   if (loading || !data || !data.actif) return <Loading />;
 
   const { actif, passif, equilibre } = data;
