@@ -330,12 +330,14 @@ function StructureSoldesSection() {
   const clubs = children.filter((c) => !c.is_residual);
 
   async function saveRef(id: number) {
+    const v = refs[id];
+    const parsed = v.amount === "" ? 0 : parseFloat(v.amount.replace(",", "."));
+    if (isNaN(parsed)) { setError("Montant invalide."); return; }
     setSavingId(id); setError(null);
     try {
-      const v = refs[id];
       await api.updateBalanceRef(id, {
         reference_date: v.date || null,
-        reference_amount: v.amount === "" ? 0 : Math.round(parseFloat(v.amount) * 100),
+        reference_amount: Math.round(parsed * 100),
       });
       setSavedId(id); setTimeout(() => setSavedId(null), 1500);
     } catch (e: any) {
