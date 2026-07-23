@@ -9,6 +9,7 @@ import { formatEuros, formatDate, COLOR_INCOME, COLOR_EXPENSE } from "../../util
 import EmptyState from "../../core/EmptyState";
 import { inputClass, labelClass } from "../../core/formStyles";
 import PageLoader from "../../core/PageLoader";
+import ConfirmDialog from "../../core/ConfirmDialog";
 
 type Account = {
   id: number;
@@ -457,8 +458,14 @@ function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 
   useEffect(() => { load(); }, [load]);
 
-  const generate = async () => {
-    if (certificate && !confirm("Générer une nouvelle clé remplacera l'actuelle : tu devras réenregistrer l'application dans Enable Banking. Continuer ?")) return;
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const generate = () => {
+    // Régénérer écrase la clé existante : on confirme d'abord si une clé est là.
+    if (certificate) { setConfirmRegen(true); return; }
+    doGenerate();
+  };
+  const doGenerate = async () => {
+    setConfirmRegen(false);
     setGenerating(true);
     setError(null);
     try {
@@ -489,6 +496,16 @@ function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const showConnected = configured && !reconfigure;
 
   return (
+    <>
+    <ConfirmDialog
+      open={confirmRegen}
+      danger
+      title="Générer une nouvelle clé"
+      message="Générer une nouvelle clé remplacera l'actuelle : tu devras réenregistrer l'application dans Enable Banking. Continuer ?"
+      confirmLabel="Générer"
+      onConfirm={doGenerate}
+      onCancel={() => setConfirmRegen(false)}
+    />
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-start justify-between gap-4 z-10">
@@ -583,6 +600,7 @@ function EbConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -748,15 +766,26 @@ function AccountBar({
 }) {
   const [adding, setAdding] = useState(false);
   const selected = accounts.find((a) => a.id === selectedId) || null;
+  const [confirmDel, setConfirmDel] = useState(false);
 
-  const deleteAccount = async () => {
+  const doDelete = async () => {
     if (!selected) return;
-    if (!confirm(`Supprimer le compte « ${selected.label || selected.entity_name} » et toutes ses lignes importées ? Les écritures compta ne sont pas supprimées.`)) return;
     await api.deleteBankAccount(selected.id);
+    setConfirmDel(false);
     onDeleted();
   };
 
   return (
+    <>
+    <ConfirmDialog
+      open={confirmDel}
+      danger
+      title="Supprimer le compte bancaire"
+      message={selected ? `Supprimer le compte « ${selected.label || selected.entity_name} » et toutes ses lignes importées ? Les écritures compta ne sont pas supprimées.` : ""}
+      confirmLabel="Supprimer"
+      onConfirm={doDelete}
+      onCancel={() => setConfirmDel(false)}
+    />
     <div className="flex flex-wrap items-center gap-2 mb-2">
       {accounts.map((a) => (
         <button
@@ -785,7 +814,8 @@ function AccountBar({
       </button>
       {selected && (
         <button
-          onClick={deleteAccount}
+          type="button"
+          onClick={() => setConfirmDel(true)}
           className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-full text-xs text-[#8a8a8a] hover:text-alert transition-colors"
           title="Supprimer ce compte"
         >
@@ -801,6 +831,7 @@ function AccountBar({
         </div>
       )}
     </div>
+    </>
   );
 }
 

@@ -5,6 +5,7 @@ import { formatEuros, eurosToCents, centsToEuros } from "../../utils/format";
 import { inputClass, labelClass } from "../../core/formStyles";
 import EmptyState from "../../core/EmptyState";
 import PageLoader from "../../core/PageLoader";
+import ConfirmDialog from "../../core/ConfirmDialog";
 
 type Rec = {
   id: number;
@@ -200,6 +201,7 @@ function RecurrenceForm({
   const [endDate, setEndDate] = useState(rec?.end_date ?? "");
   const [active, setActive] = useState(rec ? rec.active === 1 : true);
   const [busy, setBusy] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const save = async () => {
     if (!label.trim()) { onError("Libellé requis."); return; }
@@ -219,13 +221,24 @@ function RecurrenceForm({
     } catch (e: any) { onError(e.message); setBusy(false); }
   };
 
-  const remove = async () => {
-    if (!rec || !confirm(`Supprimer la récurrence « ${rec.label} » ? (les transactions déjà générées sont conservées)`)) return;
+  const doRemove = async () => {
+    if (!rec) return;
     try { onDeleted(await api.deleteRecurrence(rec.id)); }
     catch (e: any) { onError(e.message); }
+    finally { setConfirmDel(false); }
   };
 
   return (
+    <>
+    <ConfirmDialog
+      open={confirmDel}
+      danger
+      title="Supprimer la récurrence"
+      message={rec ? `Supprimer « ${rec.label} » ? Les transactions déjà générées sont conservées.` : ""}
+      confirmLabel="Supprimer"
+      onConfirm={doRemove}
+      onCancel={() => setConfirmDel(false)}
+    />
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto bg-bg-card border border-border rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-bg-card border-b border-[#1a1a1a] px-6 py-4 flex items-center justify-between">
@@ -292,10 +305,11 @@ function RecurrenceForm({
             <button onClick={save} disabled={busy} className="px-5 py-2.5 text-sm font-semibold text-black bg-accent-sand rounded-full hover:bg-accent-sand disabled:opacity-40 transition-colors">
               {busy ? "Enregistrement…" : "Enregistrer"}
             </button>
-            {rec && <button onClick={remove} className="ml-auto inline-flex items-center gap-1.5 text-sm text-[#8a8a8a] hover:text-alert transition-colors"><Trash2 size={14} /> Supprimer</button>}
+            {rec && <button type="button" onClick={() => setConfirmDel(true)} className="ml-auto inline-flex items-center gap-1.5 text-sm text-[#8a8a8a] hover:text-alert transition-colors"><Trash2 size={14} /> Supprimer</button>}
           </div>
         </div>
       </div>
     </div>
+    </>
   );
 }

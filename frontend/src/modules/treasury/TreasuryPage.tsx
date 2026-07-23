@@ -6,6 +6,7 @@ import { api } from "../../api";
 import { formatEuros, formatDate, eurosToCents, centsToEuros } from "../../utils/format";
 import { inputClass, labelClass } from "../../core/formStyles";
 import PageLoader from "../../core/PageLoader";
+import ConfirmDialog from "../../core/ConfirmDialog";
 
 type Pocket = {
   id: number;
@@ -138,6 +139,7 @@ function PocketCard({
   const [linkId, setLinkId] = useState(pocket.bank_account_id ?? 0);
   const [rate, setRate] = useState(pocket.annual_rate != null ? String(pocket.annual_rate) : "");
   const [busy, setBusy] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const save = async () => {
     setBusy(true);
@@ -154,9 +156,9 @@ function PocketCard({
     } catch (e: any) { onError(e.message); } finally { setBusy(false); }
   };
 
-  const remove = async () => {
-    if (!confirm(`Supprimer la poche « ${pocket.name} » ?`)) return;
+  const doRemove = async () => {
     try { onChanged(await api.deletePocket(pocket.id)); } catch (e: any) { onError(e.message); }
+    finally { setConfirmDel(false); }
   };
 
   const payInterest = () => {
@@ -210,8 +212,17 @@ function PocketCard({
         <div className="flex items-center gap-2 pt-1">
           <button onClick={save} disabled={busy} className="px-4 py-2 text-sm font-semibold text-black bg-accent-sand rounded-full disabled:opacity-40">Enregistrer</button>
           <button onClick={() => setEditing(false)} className="text-sm text-[#8a8a8a] hover:text-white">Annuler</button>
-          <button onClick={remove} className="ml-auto text-[#8a8a8a] hover:text-alert" title="Supprimer la poche"><Trash2 size={15} /></button>
+          <button type="button" onClick={() => setConfirmDel(true)} className="ml-auto text-[#8a8a8a] hover:text-alert" title="Supprimer la poche"><Trash2 size={15} /></button>
         </div>
+        <ConfirmDialog
+          open={confirmDel}
+          danger
+          title="Supprimer la poche"
+          message={`Supprimer la poche « ${pocket.name} » ?`}
+          confirmLabel="Supprimer"
+          onConfirm={doRemove}
+          onCancel={() => setConfirmDel(false)}
+        />
       </div>
     );
   }
